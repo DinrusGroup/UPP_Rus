@@ -1,0 +1,3 @@
+UPP = "d:\\dinrus\\upp\\tutorial;d:\\dinrus\\upp\\uppsrc";
+COMMON = "d:\\dinrus\\upp\\common";
+OUTPUT = "d:\\dinrus\\upp\\out";

@@ -1,0 +1,9 @@
+uses
+	Core;
+
+file
+	Core04.cpp;
+
+mainconfig
+	"" = "";
+
