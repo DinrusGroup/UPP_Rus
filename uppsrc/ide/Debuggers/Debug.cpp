@@ -284,7 +284,7 @@ bool Pdb::RunToException()
 				}
 				TopWindow *w = GetTopWindow();
 				if(w && !w->IsForeground()) {
-					LLOG("Setting theide as foreground");
+					LLOG("Setting RusIDE as foreground");
 					GetTopWindow()->SetForeground();
 				}
 				if(disasfocus)

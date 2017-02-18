@@ -41,7 +41,7 @@ void Uninstall()
 		":Repeat\r\n"
 		"del \"" + path + "\"\r\n"
 		"if exist \"" + path + "\" goto Repeat\r\n"
-		"del \"" + GetExeDirFile("theide.log") + "\"\r\n"
+		"del \"" + GetExeDirFile("RusIDE.log") + "\"\r\n"
 		"del \"" + GetExeDirFile("dbghelp.dll") + "\"\r\n"
 		"rmdir \"" + dir + "\"\r\n"
 		"del \"" + bat + "\"\r\n"
@@ -227,7 +227,7 @@ bool Install()
 		DeleteFile(ipp);
 	}
 	AutoSetup();
-	PromptOK("Ultimate`+`+ setup was finished.&Press OK to launch TheIDE.&"
+	PromptOK("Ultimate`+`+ setup was finished.&Press OK to launch RusIDE.&"
 	         "[* WARNING:] Do not put important files into the install directory as they "
 	         "would be [* deleted] during [* uninstall] or [* upgrade] process!");;
 	return true;
@@ -343,7 +343,7 @@ bool Install()
 	if(IsNull(LoadFile(ValgSupp)))
 		SaveFile(ValgSupp, LoadFile(AppendFileName(supp, "uppsrc/ide/valgrind.supp")));
 	// 2008/06/01 -- END
-	//PromptOK("Ultimate`+`+ user setup was finished.&Press OK to launch TheIDE.");
+	//PromptOK("Ultimate`+`+ user setup was finished.&Press OK to launch RusIDE.");
 	return true;
 }
 

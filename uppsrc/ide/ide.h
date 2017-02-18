@@ -331,7 +331,7 @@ struct AssistEditor : CodeEditor {
 	bool           inbody;
 	bool           thisback, thisbackn;
 	bool           include_assist;
-	Ide           *theide;
+	Ide           *RusIDE;
 	WString        cachedline;
 	int            cachedpos;
 	int            cachedln;

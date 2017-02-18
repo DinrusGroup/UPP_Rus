@@ -1,4 +1,4 @@
-description "TheIDE - отладчики\377B";
+description "RusIDE - отладчики\377B";
 
 uses
 	ide\Common,

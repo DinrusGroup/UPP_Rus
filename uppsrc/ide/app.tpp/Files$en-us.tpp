@@ -1,4 +1,4 @@
-topic "TheIDE and Ultimate++ File Types";
+topic "RusIDE and Ultimate++ File Types";
 [ $$0,0#00000000000000000000000000000000:Default]
 [l288;i704;a17;O9;~~~.992; $$1,0#10431211400427159095818037425705:param]
 [a83;*R6 $$2,5#31310162474203024125188417583966:caption]
@@ -19,15 +19,15 @@ topic "TheIDE and Ultimate++ File Types";
 [l321;b83;a83;*C$7 $$17,17#07531550463529505371228428965313:result`-line]
 [l160;t4167;*C+117 $$18,5#88603949442205825958800053222425:package`-title]
 [{_}%EN-US 
-[s0;= [*R6 TheIDE and Ultimate`+`+ File Types]&]
+[s0;= [*R6 RusIDE and Ultimate`+`+ File Types]&]
 [s0;2 &]
 [s0;2 &]
-[s0; [*2 File types recognized by TheIDE][2 :]&]
+[s0; [*2 File types recognized by RusIDE][2 :]&]
 [s0;2 &]
 [ {{2413:7587^ [s0; [*2 .cpp, .cc, .cxx, .c]&]
 [s0;*2 ]
 :: [s0; [2 Files with these extensions are recognized as source files 
-by TheIDE C`+`+ builders. ]]
+by RusIDE C`+`+ builders. ]]
 :: [s0; [*2 .h, .hpp]]
 :: [s0; [2 Header files. C`+`+ builders provide automatic header dependency 
 tests. U`+`+ packages tend to use ][*2 hpp][2  instead of ][*2 h][2  
@@ -82,7 +82,7 @@ directories]&]
 [s0;*2 &]
 [ {{2370:7630h1;^ [s0; [2 .][*2 upp]]
 ::= [s0; [2 Package definition file. Its name must be the same as name 
-of package folder. It is normally managed by TheIDE`'s package 
+of package folder. It is normally managed by RusIDE`'s package 
 organizer.]]
 ::^ [s0; [*2 .tpp]]
 ::= [s0; [2 Directories with this extension represent Topic`+`+ group. 
@@ -103,8 +103,8 @@ of the code.]]
 or copy your configuration settings by copying the files in the 
 installation folder.]&]
 [s0;*2 &]
-[ {{2370:7630h1;^ [s0; [*2 theide.cfg]]
-::= [s0; [2 This is a binary file file takes its name from theide.exe or 
+[ {{2370:7630h1;^ [s0; [*2 RusIDE.cfg]]
+::= [s0; [2 This is a binary file file takes its name from RusIDE.exe or 
 whatever the name of the executable is that runs the ide.  It 
 contains configuration settings which are a serialization of 
 the Setup`->Environment dialog.]]
@@ -115,7 +115,7 @@ in the Assembly setup dialog.]]
 ::= [s0; [2 A text file that contains the build settings associated with 
 a particular compiler/ linker.]]
 ::^ [s0; [*2 cfg folder]]
-::= [s0; [2 This folder holds cache files from theide (tdx,cache,pkg`_cache) 
+::= [s0; [2 This folder holds cache files from RusIDE (tdx,cache,pkg`_cache) 
 `+ cfg (per package settings `- opened files, cursor positions 
 etc.)]]}}&]
 [s0; ]

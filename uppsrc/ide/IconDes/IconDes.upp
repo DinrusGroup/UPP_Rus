@@ -1,4 +1,4 @@
-description "TheIDE - .iml дизайнер\377B";
+description "RusIDE - .iml дизайнер\377B";
 
 uses
 	IconDes,

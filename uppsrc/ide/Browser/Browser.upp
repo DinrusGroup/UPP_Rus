@@ -1,4 +1,4 @@
-description "TheIDE - браузер кода и Topic++\377B";
+description "RusIDE - браузер кода и Topic++\377B";
 
 uses
 	CppBase,

@@ -28,7 +28,7 @@ U`+`+ assembly/package/build method system.]&]
 [s0; [*C@(0.0.255)3 assembly][3  can be a predefined assembly (in .var 
 file) which is in Win32 in directory where is located umk.exe 
 or in POSIX systems in directories ][@3;3 `~][3 , ][@3;3 `~/.upp/umk][3 , 
-][@3;3 `~/.upp/theide][3  or ][@3;3 `~/.upp/theide][3 . Alternatively, 
+][@3;3 `~/.upp/RusIDE][3  or ][@3;3 `~/.upp/RusIDE][3 . Alternatively, 
 it is a direct set of directories that represent U`+`+ assembly.]&]
 [s0;3 &]
 [s0; [*C@(0.0.255)3 package][3  is the main package (a program to build)]&]
@@ -36,7 +36,7 @@ it is a direct set of directories that represent U`+`+ assembly.]&]
 [s0; [*C@(0.0.255)3 build`_method][3  is build method that is to be used 
 to build the resulting executable, specified either as name of 
 build method (which is then searched for in ][@3;3 `~][3 , ][@3;3 `~/.upp/umk][3 , 
-][@3;3 `~/.upp/theide][3  ][@3;3 `~/.upp/theide][3  directories) or it 
+][@3;3 `~/.upp/RusIDE][3  ][@3;3 `~/.upp/RusIDE][3  directories) or it 
 is a direct path to the .bm file.]&]
 [s0;*C@4;3 &]
 [s0; [*C@(0.0.255)3 FLAG][3  are compilation flags]&]

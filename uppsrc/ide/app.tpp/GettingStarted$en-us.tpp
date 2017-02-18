@@ -1,4 +1,4 @@
-topic "Getting started with TheIDE";
+topic "Getting started with RusIDE";
 [2 $$0,0#00000000000000000000000000000000:Default]
 [l288;i704;a17;O9;~~~.992;2 $$1,0#10431211400427159095818037425705:param]
 [a83;*R6 $$2,5#31310162474203024125188417583966:caption]
@@ -21,7 +21,7 @@ topic "Getting started with TheIDE";
 [l192;i150;O2;2 $$19,19#37291126451403010472971723210990:point]
 [i150;O9;2 $$20,20#33190467493505743255250994711132:step]
 [{_}%EN-US 
-[s2; Getting started with TheIDE&]
+[s2; Getting started with RusIDE&]
 [s3; 1. After installation, start the Ultimate`+`+ IDE.&]
 [s3; 2. Assembly and Packages&]
 [s0; &]
@@ -750,11 +750,11 @@ not see any text`-output).&]
 [s0; &]
 [s0; 3.2 You can now add files to you package, for this example, 
 add a new file `"main.cpp`" to the package&]
-[s19; Right click on the lower`-left part of TheIDE (or on `"File`" 
+[s19; Right click on the lower`-left part of RusIDE (or on `"File`" 
 in menu) and choose `"Insert package directory file(s)`", type 
 `"main.cpp`" and click `"Open`". If the file does not exist, 
 it will be created `- that is why you won`'t find `"New file`" 
-anywhere in TheIDE, it is just not needed.&]
+anywhere in RusIDE, it is just not needed.&]
 [s0; &]
 [s0;= 
 @@rawimage:3355&1962
@@ -1386,22 +1386,22 @@ did, either the installer instructed you how to do it or it was
 done automatically), you can you press Ctrl`+F5 to compile and 
 start the program (typing any letter followed by enter will end 
 the program)&]
-[s19; Now you know how to use TheIDE to compile basic C`+`+ program. 
+[s19; Now you know how to use RusIDE to compile basic C`+`+ program. 
 Looking at the rest of documentation will give you better idea 
-how to unleash the full power of TheIDE and U`+`+. The best parts 
+how to unleash the full power of RusIDE and U`+`+. The best parts 
 to continue would be probably [^topic`:`/`/ide`/app`/PackagesAssembliesAndNests`$en`-us^ P
 ackages, Assemblies and Nests], and [^topic`:`/`/ide`/app`/ConfiguringPackagesAssemblies`$en`-us^ t
 heir configuration], something about the key technologies utilized 
-in TheIDE: [^topic`:`/`/ide`/app`/Assist`$en`-us^ Assist`+`+], [^topic`:`/`/ide`/app`/Topic`$en`-us^ T
+in RusIDE: [^topic`:`/`/ide`/app`/Assist`$en`-us^ Assist`+`+], [^topic`:`/`/ide`/app`/Topic`$en`-us^ T
 opic`+`+], [^topic`:`/`/ide`/app`/Blitz`$en`-us^ Blitz] or even 
 one of the tutorials linked from Manual section, if you want 
 to learn more about how to use U`+`+.&]
 [s0; &]
 [s0;/ &]
-[s2; [4 Some explaining about the TheIDE:]&]
+[s2; [4 Some explaining about the RusIDE:]&]
 [s3; What is stored where ?&]
 [s0; &]
-[s6; When first using the TheIDE, it can be confusing to see that 
+[s6; When first using the RusIDE, it can be confusing to see that 
 settings like static/shared building, execute`-, include`- and 
 linker`- paths can be set in multiple places (for instance, in 
 Project`->Package organizer, in Setup`->Build methods and by 
@@ -2667,8 +2667,8 @@ files]]
 build methods &]
 [s6; for different compilers.&]
 [s6; Each method will store it`'s settings in a .bm file, the .bm 
-(bm stands for build method) files are stored in `~/.theide on 
-posix systems and in the exe`-path of TheIDE on windows.&]
+(bm stands for build method) files are stored in `~/.RusIDE on 
+posix systems and in the exe`-path of RusIDE on windows.&]
 [s6; &]
 [s6; The boxes at the top of the windows called `"Debug mode default`" 
 and `"Release mode default`" do [* NOT] contain the options actually 

@@ -1,4 +1,4 @@
-description "TheIDE - общая библиотека\377B";
+description "RusIDE - общая библиотека\377B";
 
 uses
 	Esc,

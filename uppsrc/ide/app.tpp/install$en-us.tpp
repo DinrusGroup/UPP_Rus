@@ -24,10 +24,10 @@ topic "Ultimate++ installation guide";
 [s0; U`+`+ does not contain Win32 SDK. You can use either [* Microsoft][*` Â® 
 ][* Windows SDK or Mingw compiler system.]&]
 [s0; &]
-[s0; If you want TheIDE to perform automatic setup of build methods 
+[s0; If you want RusIDE to perform automatic setup of build methods 
 for these compilers, you should install them before continuing 
 this dialog (if you press exit now, automatic setup will be performed 
-next time you launch TheIDE). If you do so later, you can still 
+next time you launch RusIDE). If you do so later, you can still 
 automate setup invoking Setup/Automated setup.&]
 [s0; &]
 [s0; &]
@@ -720,7 +720,7 @@ compiler too)&]
 úëÂúú¯ÎŸÿñëÛüß§Ñù‹ ˆ‚ ˆ’‰üÿû€â£
 &]
 [s0;= &]
-[s0; TheIDE should detect all necessary directories and setup appropriate 
+[s0; RusIDE should detect all necessary directories and setup appropriate 
 build methods. U`+`+ can also use compilers and SDK supplied 
 with Visual C`+`+ 2005 or Visual C`+`+ 2008 (any edition `- you 
 need to download separate Windows SDK for some flavors).&]

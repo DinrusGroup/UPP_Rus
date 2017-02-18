@@ -22,15 +22,15 @@ topic "Installation process on Linux";
 [C2 $$20,20#70211524482531209251820423858195:class`-nested]
 [b50;2 $$21,21#03324558446220344731010354752573:Par]
 [{_}%EN-US 
-[s2; Setting up TheIDE&]
+[s2; Setting up RusIDE&]
 [s2; [+150 on Linux and other POSIX systems]&]
 [s5; &]
-[s0; This document assumes that you have installed U`+`+ and TheIDE 
+[s0; This document assumes that you have installed U`+`+ and RusIDE 
 using your favorite package manager (packages are usually called 
-`"upp`" and `"theide`"). See a [^topic`:`/`/uppweb`/www`/download`$en`-us^ Download
+`"upp`" and `"RusIDE`"). See a [^topic`:`/`/uppweb`/www`/download`$en`-us^ Download
 ] page for detailed description of available packages. Alternatively, 
-you can get TheIDE by downloading the source tarball and compiling 
-it using the enclosed makefile. Once you have TheIDE executable 
+you can get RusIDE by downloading the source tarball and compiling 
+it using the enclosed makefile. Once you have RusIDE executable 
 available in your system, you are ready to configure it, which 
 is exactly what the following text is about.&]
 [s0; &]
@@ -43,9 +43,9 @@ into working installation. For overview of the wizard functionality
 and the motivations behind it see its [^topic`:`/`/ide`/SrcUpdater`/app`/InstallWizard`$en`-us^ o
 verview page].&]
 [s0; &]
-[s0; This process takes place upon the first run of TheIDE, but can 
+[s0; This process takes place upon the first run of RusIDE, but can 
 be invoked on request using command line parameter [/ `-install] 
-when starting TheIDE. It can be also invoked from running TheIDE 
+when starting RusIDE. It can be also invoked from running RusIDE 
 using the item [/ Source management..] in [/ Setup] menu.&]
 [s0; &]
 [ {{5800:4200f0;g0;^ [s0; 
@@ -480,7 +480,7 @@ using the item [/ Source management..] in [/ Setup] menu.&]
 ÕÆƒú›Å½‡Í¢Şæœ˜÷°»ƒ€€ØÁÀ€€€Œ£€ €€˜ÖëœÅ°Ñ£Æ«©©‡Ó¾ê‹€€Àù»ÔØ¸£Öïûœ„ÿó€ü€€Ğº¬êŸ
 èÎÁÁ¾æÏşÂèŸö†€€ ¦½ûÍï®‘¤—ËªñšÏœ€Ğ€€èÛ–¤ı¿Á¯ğ±´¦ƒ°º€€€€ÉÈÅÎÄ®Âà‚
 ]
-:: [s0; Upon the first run of your new TheIDE on your Linux machine, 
+:: [s0; Upon the first run of your new RusIDE on your Linux machine, 
 you will be presented with an `"Initial setting wizard`". This 
 is a simple tool that will ask you a couple of questions and 
 set up how your U`+`+ sources should be handled by automatic 
@@ -1738,7 +1738,7 @@ to use with head server). &]
 [s0; &]
 [s0; You can also chose whether the automatic updater should offer 
 you every new version available, or only those matching with 
-your current TheIDE version (e.g. when you want to use only stable 
+your current RusIDE version (e.g. when you want to use only stable 
 releases) or if you want to check only manually.]
 :: [s0; 
 @@rawimage:2246&1551
@@ -3131,7 +3131,7 @@ is also used to determine where the source files should be installed.]
 ]
 :: [s0; And that`'s it! It did not take too long, did it? After pressing 
 finish, the sources will be copied/downloaded from SVN as necessary, 
-assemblies will be set up and TheIDE will be started. No files 
+assemblies will be set up and RusIDE will be started. No files 
 will be deleted (with only exception of deleting assembly, which 
 asks for confirmation) in the installation process, but if there 
 are files with matching names (e.g. from older U`+`+ installation), 

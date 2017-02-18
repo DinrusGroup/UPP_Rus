@@ -22,7 +22,7 @@ void GatherLinks(Index<String>& link, const char *topic)
 			return;
 		link.Add(topic);
 		RichText txt = ParseQTF(p.text);
-		SyncTopicFile(txt, topic, ":ide:", p.title);
+		SyncTopicFile(txt, topic, ":RusIDE:", p.title);
 		GatherLinksIterator ti;
 		txt.Iterate(ti);
 		for(int i = 0; i < ti.link.GetCount(); i++)
@@ -92,7 +92,7 @@ void TopicCtrl::LoadMap()
 }
 
 static String sTopicHome = "\3topic://ide/app/index$en-us";
-static String s_idehelp = "Справка TheIDE";
+static String s_idehelp = "Справка RusIDE";
 static String s_usedpackages = "Используемые пакеты";
 static String s_otherpackages = "Прочие пакеты";
 static String s_documents = "Документы";

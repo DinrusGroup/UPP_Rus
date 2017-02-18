@@ -568,7 +568,7 @@ void AutoSetup()
 
 void AutoSetup() {
 	InstallWizard iw;
-	iw.Title("TheIDE - Настройки управления исходниками");
+	iw.Title("RusIDE - Настройки управления исходниками");
 	iw.Block(0);
 	iw.Block(4);
 	iw.SetStep(1);

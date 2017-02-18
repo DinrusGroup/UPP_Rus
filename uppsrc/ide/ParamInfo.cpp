@@ -11,7 +11,7 @@ void AssistEditor::SyncParamInfo()
 			ParamInfo& m = param[q];
 			int i = GetCursorLine();
 			if(m.line >= 0 && m.line < GetLineCount() && i >= m.line && i < m.line + 10
-			   && m.editfile == theide->editfile && GetWLine(m.line).StartsWith(m.test)) {
+			   && m.editfile == RusIDE->editfile && GetWLine(m.line).StartsWith(m.test)) {
 				int c = GetCursor();
 				i = GetPos(m.line) + m.test.GetCount();
 				if(c >= i) {
@@ -74,7 +74,7 @@ void AssistEditor::StartParamInfo(const CppItem& m, int pos)
 	f.line = GetLinePos(x);
 	f.test = GetWLine(f.line).Mid(0, x);
 	f.item = m;
-	f.editfile = theide->editfile;
+	f.editfile = RusIDE->editfile;
 	f.pos = pos;
 	SyncParamInfo();
 	parami = (parami + 1) % PARAMN;

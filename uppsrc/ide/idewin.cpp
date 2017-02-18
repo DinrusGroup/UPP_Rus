@@ -445,7 +445,7 @@ void Ide::SetupBars()
 
 Ide::Ide()
 {
-	editor.theide = this;
+	editor.RusIDE = this;
 
 	start_time = GetSysTime();
 	stat_build_time = 0;
@@ -860,7 +860,7 @@ void AppMain___()
 				}
 			if(!LoadVars(arg[0])) {
 				if(build)
-					Puts("TheIDE: Неверная сборка\n");
+					Puts("RusIDE: Неверная сборка\n");
 				else
 					Exclamation("Неверная сборка!");
 				SetExitCode(2);
@@ -868,7 +868,7 @@ void AppMain___()
 			}
 			if(!FileExists(SourcePath(arg[1], GetFileTitle(arg[1]) + ".upp"))) {
 				if(build)
-					Puts("TheIDE: Пакета не существует\n");
+					Puts("RusIDE: Пакета не существует\n");
 				else
 					Exclamation("Пакета не существует!");
 				SetExitCode(2);
@@ -887,7 +887,7 @@ void AppMain___()
 				String m = arg[2];
 				if(!FileExists(ConfigFile((String)m + ".bm"))) {
 					SilentMode = false;
-					Puts("TheIDE: Неверный метод постройки\n");
+					Puts("RusIDE: Неверный метод постройки\n");
 					SetExitCode(3);
 					return;
 				}
@@ -989,7 +989,7 @@ void AppMain___()
 					SetExitCode(0);
 				else {
 					if(stoponerror)
-						PromptOK("TheIDE: Ошибка при построении " + DeQtf(arg[1]) + "!");
+						PromptOK("RusIDE: Ошибка при построении " + DeQtf(arg[1]) + "!");
 					SetExitCode(1);
 				}
 				return;

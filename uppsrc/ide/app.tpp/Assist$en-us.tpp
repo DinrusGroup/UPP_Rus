@@ -1663,7 +1663,7 @@ default [*@(0.0.255) Ctrl`+Q]):&]
 şÌ¿¡×‹‰“Œø›°‚¶™ëäëÿÎÜ¸â§½¦Ã¿ü„ù“à€€€€ùÿƒ³ÿÚ®
 &]
 [s0; &]
-[s0; Query result is displayed at the bottom pane of TheIDE. By clicking 
+[s0; Query result is displayed at the bottom pane of RusIDE. By clicking 
 individual items you are moved to definitions/declarations of 
 symbols. You can also right`-click to get location is menu form.&]
 [s0; &]
@@ -3146,7 +3146,7 @@ GUI dialog and its widgets) to methods:&]
 &]
 [s5; Check the `"Insert`" column for Callbacks you want to process 
 by method, alternatively adjust the name of method. After clicking 
-`"OK`" button, TheIDE will insert THISBACK assignments to the 
+`"OK`" button, RusIDE will insert THISBACK assignments to the 
 actual position and places methods definitions and declarations 
 to the clipboard (you have to reselect declaration and move it 
 to the class).&]

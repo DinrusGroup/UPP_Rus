@@ -114,7 +114,7 @@ bool SourceUpdater::NeedsUpdate(bool verbose){
 					break;
 				}
 				case 1:{
-					//sync with the version of theide
+					//sync with the version of RusIDE
 					global=IDE_VERSION;
 					break;
 				}

@@ -1,4 +1,4 @@
-topic "TheIDE command-line & umk";
+topic "RusIDE command-line & umk";
 [2 $$0,0#00000000000000000000000000000000:Default]
 [l288;i1120;a17;O9;~~~.1408;2 $$1,0#10431211400427159095818037425705:param]
 [a83;*R6 $$2,5#31310162474203024125188417583966:caption]
@@ -22,13 +22,13 @@ topic "TheIDE command-line & umk";
 [t4167;C2 $$20,20#70211524482531209251820423858195:class`-nested]
 [b50;2 $$21,21#03324558446220344731010354752573:Par]
 [{_}%EN-US 
-[s2; [+184 TheIDE command`-line `& umk]&]
-[s0; [3 TheIDE can specify assembly and package in command`-line]&]
+[s2; [+184 RusIDE command`-line `& umk]&]
+[s0; [3 RusIDE can specify assembly and package in command`-line]&]
 [s0;3 &]
-[s0; [*C3 theide ][*C@4;3 assembly][*C@5;3  ][*C@4;3 package]&]
+[s0; [*C3 RusIDE ][*C@4;3 assembly][*C@5;3  ][*C@4;3 package]&]
 [s0;3 &]
 [s0; [3 To build some package using command`-line use `"umk`" utility 
-(in Posix systems, there is no umk and you call theide instead):]&]
+(in Posix systems, there is no umk and you call RusIDE instead):]&]
 [s0;3 &]
 [s0;i224;O9; [*C3 umk ][*C@4;3 assembly][*C@5;3  ][*C@4;3 package build`_method 
 `[`-`[a`]`[b`]`[e`]`[r`]`[s`]`[S`]`[v`]`] `[>FLAG`[,FLAG`]...`] 
@@ -72,7 +72,7 @@ used.]]
 :: [s0; [*C@4;3 xM]]
 :: [s0; [3 Export makefile (to directory ][*@4;3 out][3 ).]]}}&]
 [s0;3 &]
-[s0; [3 Note: umk in fact invokes TheIDE to perform actual build, it 
+[s0; [3 Note: umk in fact invokes RusIDE to perform actual build, it 
 is needed to resolve Win32 problems with invoking GUI application 
 in console mode. Also, without WinXP, it launches separate console.]&]
 [s0;3 &]

@@ -25,9 +25,9 @@ topic "Tutorial";
 [s2; Initial setup wizard (overview)&]
 [s0; [@6 (POSIX specific)]&]
 [s0; &]
-[s0; On the first start of TheIDE, user is presented with a wizard`-style 
+[s0; On the first start of RusIDE, user is presented with a wizard`-style 
 dialog, which goal is to help user easily set up everything necessary 
-to run TheIDE. This dialog can be also invoked later using command 
+to run RusIDE. This dialog can be also invoked later using command 
 line option [/ `-install] or from the [/ Setup] menu. For more detailed 
 and illustrated description see a [^topic`:`/`/ide`/SrcUpdater`/app`/LinuxInstallGuide`$en`-us^ s
 tep by step description of the wizard].&]
@@ -52,8 +52,8 @@ or custom setup. The custom setup allows to set up repository
 address, user and password. Also user can choose one of three 
 modes of synchronization:&]
 [s0;i150;O0; Always get the newest sources available.&]
-[s0;i150;O0; Synchronize the sources with the version of TheIDE (useful 
-for example when TheIDE is updated to stable release versions 
+[s0;i150;O0; Synchronize the sources with the version of RusIDE (useful 
+for example when RusIDE is updated to stable release versions 
 by package manager).&]
 [s0;i150;O0; Manual updates.&]
 [s0; &]
@@ -68,7 +68,7 @@ for newbies.&]
 restricted in any way.&]
 [s0; The author used all his imagination and common sense to meet 
 those goals. For the first one, newbie user can just hit Finish 
-and start exploring TheIDE right away. On the other hand, the 
+and start exploring RusIDE right away. On the other hand, the 
 dialog should be flexible enough to serve not only for managing 
 U`+`+ sources, but also any other project, no matter if it is 
 U`+`+ based or not.&]

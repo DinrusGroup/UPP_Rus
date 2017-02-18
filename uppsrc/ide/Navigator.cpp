@@ -19,7 +19,7 @@ void AssistEditor::SyncCursor()
 		String coderef;
 		while(ii >= 0 && IsNull(coderef))
 			coderef = GetAnnotation(ii--);
-		browser.Goto(coderef, theide->editfile);
+		browser.Goto(coderef, RusIDE->editfile);
 	}
 }
 
@@ -38,8 +38,8 @@ void AssistEditor::BrowserGotoNF()
 	int itemsc = browser.item.GetScroll();
 
 	String cref = browser.GetCodeRef();
-	if(theide && !theide->SwapSIf(cref))
-		theide->IdeGotoCodeRef(cref);
+	if(RusIDE && !RusIDE->SwapSIf(cref))
+		RusIDE->IdeGotoCodeRef(cref);
 
 	if(scope == browser.scope.GetKey()) {
 		browser.scope.ScrollTo(scopesc);
@@ -63,7 +63,7 @@ void AssistEditor::GotoBrowserScope()
 		Value x = browser.scope.Get(2);
 		if(IsNumber(x)) {
 			int file = (int)x;
-			theide->EditFile(GetCppFile(file));
+			RusIDE->EditFile(GetCppFile(file));
 			return;
 		}
 	}

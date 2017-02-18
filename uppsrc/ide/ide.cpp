@@ -12,7 +12,7 @@ void Ide::MakeTitle()
 		title << " - " << mainconfigname;
 		title << " ( " << mainconfigparam << " )";
 	}
-	title << " - TheIDE+D+Динрус";
+	title << " - RusIDE+Динрус";
 	if(designer) {
 		title << " - [" << designer->GetFileName();
 		int cs = designer->GetCharset();
@@ -160,10 +160,10 @@ bool Ide::OpenMainPackage()
 //	tt << " (IDE " << IDE_VER_MAJOR << "." << IDE_VER_MINOR << ".r" << IDE_VER_BUILD
 //	<< ", " << ::AsString(IDE_VER_DATE) << ")";
 #ifdef bmYEAR
-	tt << " (TheIDE " << IDE_VERSION
+	tt << " (RusIDE " << IDE_VERSION
 	   << Format(" %d-%02d-%02d %d:%02d)", bmYEAR , bmMONTH, bmDAY, bmHOUR, bmMINUTE);
 #else
-	tt << " (TheIDE " << IDE_VERSION << ')';
+	tt << " (RusIDE " << IDE_VERSION << ')';
 #endif
 	String p = SelectPackage(tt, main, true, true);
 	if(p.IsEmpty()) return false;

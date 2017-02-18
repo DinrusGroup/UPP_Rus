@@ -1,4 +1,4 @@
-description "Главный пакет TheIDE\377";
+description "Главный пакет RusIDE\377";
 
 uses
 	ide\Common,

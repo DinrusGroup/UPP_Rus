@@ -13,11 +13,11 @@ bool HasSvn(){
 }
 
 InstallWizard::InstallWizard(){
-	Title("TheIDE - Мастер начальной настройки");
+	Title("RusIDE - Мастер начальной настройки");
 	Sizeable();
 	Icon(IdeImg::Package(), IdeImg::PackageLarge());
 
-	s0.text<<="[ [ [/ Добро пожаловать в TheIDE !]&][ &][ [1 Этот краткий мастер-диалог поможет вам сделать необходимые настройки для Интегрированной Среды Разработки. Нажав ][/1 Финиш][1  в любой момент, Вы сохраните значения на жёсткий диск (для незаполненных полей будут использованы значения по умолчанию). А ][/1 Отмена][1 не позволит мастеру сделать никаких действий.]]";
+	s0.text<<="[ [ [/ Добро пожаловать в RusIDE !]&][ &][ [1 Этот краткий мастер-диалог поможет вам сделать необходимые настройки для Интегрированной Среды Разработки. Нажав ][/1 Финиш][1  в любой момент, Вы сохраните значения на жёсткий диск (для незаполненных полей будут использованы значения по умолчанию). А ][/1 Отмена][1 не позволит мастеру сделать никаких действий.]]";
 	s1.text<<="[ [ [/ Методы обработки исходного кода]&][ &][ [1 Есть несколько способов доступа к исходным кодам U`+`+. Выберите наиболее подходящий для вас. Позднее можно будет изменить эти настройки при необходимости.]]";
 	s1.src<<=THISBACK(SrcChange);
 	bool usrshare=!UpdaterCfg().globalsrc.IsEmpty();
@@ -87,7 +87,7 @@ InstallWizard::InstallWizard(){
 	s3.asmbls.WhenLeftDouble = THISBACK(OnAsmEdit);
 	s3.restore<<=THISBACK(RestoreAsm);
 	RestoreAsm();
-	s4.text<<="[ [/ Thank you ...]&&][ [1 That is all, thank you for your patience. Now just click ][/1 Finish][1  to save all the changes to your hard drive. TheIDE will now proceed to start up normaly.]&][> [/ &Happy coding with TheIDE!    ]";
+	s4.text<<="[ [/ Thank you ...]&&][ [1 That is all, thank you for your patience. Now just click ][/1 Finish][1  to save all the changes to your hard drive. RusIDE will now proceed to start up normaly.]&][> [/ &Happy coding with RusIDE!    ]";
 	WhenFinish=THISBACK(Perform);
 }
 

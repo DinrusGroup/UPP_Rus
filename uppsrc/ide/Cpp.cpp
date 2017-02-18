@@ -113,7 +113,7 @@ void AssistScanError(int line, const String& text)
 
 void AssistEditor::Context(Parser& parser, int pos)
 {
-	theide->ScanFile();
+	RusIDE->ScanFile();
 	String s = Get(0, pos);
 	StringStream ss(s);
 	parser.dobody = true;

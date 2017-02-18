@@ -90,7 +90,7 @@ struct AboutDlg : TopWindow {
 		about.NoLazy();
 		Background(PaintRect(ColorDisplay(), SColorPaper()));
 		Add(about);
-		Title("О TheIDE");
+		Title("О RusIDE");
 	}
 };
 

@@ -129,7 +129,7 @@ void SyncTopicFile(const String& link)
 	LLOG("SyncTopicFile " << link << " путь: " << path);
 	TopicInfo& ti = topic_info().GetPut(link);
 	Time tm = FileGetTime(path);
-	if(ti.path == ":ide:" || ti.path == path && ti.time == tm)
+	if(ti.path == ":RusIDE:" || ti.path == path && ti.time == tm)
 		return;
 	String fn = TopicCacheName(path);
 	if(FileGetTime(fn) > tm) {

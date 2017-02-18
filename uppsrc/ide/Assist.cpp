@@ -338,13 +338,13 @@ bool AssistEditor::IncludeAssist()
 	if(!p.Char('#') || !p.Id("include"))
 		return false;
 	if(p.Char('\"')) {
-		include.Add(GetFileFolder(theide->editfile));
+		include.Add(GetFileFolder(RusIDE->editfile));
 		include_local = true;
 	}
 	else {
 		p.Char('<');
-		theide->SetupDefaultMethod();
-		VectorMap<String, String> bm = GetMethodVars(theide->method);
+		RusIDE->SetupDefaultMethod();
+		VectorMap<String, String> bm = GetMethodVars(RusIDE->method);
 		include = SplitDirs(GetVar("UPP") + ';' + bm.Get("INCLUDE", "")
 #ifdef PLATFORM_POSIX
 			+ ";/usr/include;/usr/local/include"
@@ -565,7 +565,7 @@ void AssistEditor::Abbr()
 		--c;
 	}
 	int len = s.GetCount();
-	s = theide->abbr.Get(s, String());
+	s = RusIDE->abbr.Get(s, String());
 	if(IsNull(s))
 		return;
 	NextUndo();

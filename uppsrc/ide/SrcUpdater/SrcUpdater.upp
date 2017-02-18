@@ -1,4 +1,4 @@
-description "TheIDE - Управление исходным кодом\377B";
+description "RusIDE - Управление исходным кодом\377B";
 
 uses
 	CtrlLib,

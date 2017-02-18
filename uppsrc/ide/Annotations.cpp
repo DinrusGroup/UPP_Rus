@@ -63,7 +63,7 @@ bool AssistEditor::GetAnnotationRef(String& t, String& coderef, int q)
 		return false;
 	if(tl.GetCount() == 0)
 		return true;
-	String path = theide ? theide->editfile : Null;
+	String path = RusIDE ? RusIDE->editfile : Null;
 	int mi = 0;
 	int m = 0;
 	for(int i = 0; i < tl.GetCount(); i++) {
@@ -124,26 +124,26 @@ void AssistEditor::SyncAnnotationPopup()
 
 void AssistEditor::OpenTopic(String topic, String create, bool before)
 {
-	if(theide)
-		theide->OpenTopic(topic, create, before);
+	if(RusIDE)
+		RusIDE->OpenTopic(topic, create, before);
 }
 
 void AssistEditor::NewTopic(String group, String coderef)
 {
-	if(!theide)
+	if(!RusIDE)
 		return;
-	String ef = theide->editfile;
+	String ef = RusIDE->editfile;
 	String n = GetFileTitle(ef);
-	theide->EditFile(AppendFileName(PackageDirectory(theide->GetActivePackage()), group + ".tpp"));
-	if(!theide->designer)
+	RusIDE->EditFile(AppendFileName(PackageDirectory(RusIDE->GetActivePackage()), group + ".tpp"));
+	if(!RusIDE->designer)
 		return;
-	TopicEditor *te = dynamic_cast<TopicEditor *>(&theide->designer->DesignerCtrl());
+	TopicEditor *te = dynamic_cast<TopicEditor *>(&RusIDE->designer->DesignerCtrl());
 	if(!te)
 		return;
 	String scope, item;
 	SplitCodeRef(coderef, scope, item);
 	if(!te->NewTopicEx(IsNull(scope) ? n : Join(Split(scope, ':'), "_"), coderef))
-		theide->EditFile(ef);
+		RusIDE->EditFile(ef);
 }
 
 void AssistEditor::EditAnnotation(bool fastedit)

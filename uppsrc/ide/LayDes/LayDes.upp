@@ -1,4 +1,4 @@
-description "TheIDE - .lay дизайнер\377B";
+description "RusIDE - .lay дизайнер\377B";
 
 uses
 	ide\Common,
