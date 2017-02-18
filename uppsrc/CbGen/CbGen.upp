@@ -1,0 +1,13 @@
+description "Утилита для генерации (долгих, повторяющихся) обрвызовов файлов C++\377";
+
+uses
+	Core;
+
+file
+	CppGen.cpp,
+	Info readonly separator,
+	Copying;
+
+mainconfig
+	"Normal" = "";
+

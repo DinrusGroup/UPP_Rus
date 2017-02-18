@@ -1,0 +1,24 @@
+description "TheIDE -построители - процедуры для компиляции программ\377B";
+
+noblitz;
+
+uses
+	coff\binobj,
+	ide\Core;
+
+file
+	Builders.h charset "UTF-8",
+	CppBuilder.cpp,
+	DmcBuilder.icpp,
+	MakeFile.cpp,
+	GccBuilder.icpp,
+	MscBuilder.icpp,
+	OwcBuilder.icpp,
+	JavaBuilder.icpp,
+	ScriptBuilder.icpp,
+	"Инфо" readonly separator,
+	Build.h,
+	Build.cpp,
+	Copying,
+	src.tpp;
+

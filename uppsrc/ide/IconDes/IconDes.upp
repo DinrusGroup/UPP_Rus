@@ -1,0 +1,12 @@
+description "TheIDE - .iml дизайнер\377B";
+
+uses
+	IconDes,
+	ide\Common;
+
+file
+	IconDes.h,
+	IdeDes.cpp,
+	"Инфо" readonly separator,
+	Copying;
+

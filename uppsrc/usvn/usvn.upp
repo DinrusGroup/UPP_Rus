@@ -1,0 +1,21 @@
+description "Простой фронтэнд svn GUI : модуль, который может быть использован в других приложениях\377";
+
+uses
+	TextDiffCtrl;
+
+file
+	usvn.h,
+	Console.cpp,
+	SvnFs.cpp,
+	SvnWorks.cpp,
+	SvnSync.cpp,
+	Diff.cpp,
+	notes.txt,
+	usvn.iml,
+	usvn.lay,
+	"Инфо" readonly separator,
+	Copying;
+
+mainconfig
+	"" = "GUI";
+

@@ -1,0 +1,5 @@
+description "Заимствования из QT\377";
+
+uses
+	QTCore;
+

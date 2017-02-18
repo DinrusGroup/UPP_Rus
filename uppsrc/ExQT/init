@@ -1,0 +1,4 @@
+#ifndef _ExQT_icpp_init_stub
+#define _ExQT_icpp_init_stub
+#include "QTCore/init"
+#endif

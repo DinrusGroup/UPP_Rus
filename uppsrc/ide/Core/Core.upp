@@ -1,0 +1,18 @@
+description "TheIDE - общая библиотека\377B";
+
+uses
+	Esc,
+	Web;
+
+file
+	Core.h,
+	Core.cpp,
+	Hdepend.cpp optimize_speed,
+	Package.cpp,
+	Workspace.cpp,
+	usc.cpp,
+	Host.h,
+	Host.cpp,
+	"Инфо" readonly separator,
+	Copying;
+

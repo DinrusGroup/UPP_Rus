@@ -1,0 +1,11 @@
+description "Средство для построения всех примеров использования U++\377";
+
+uses
+	Core;
+
+file
+	BuildAll.cpp;
+
+mainconfig
+	"" = "";
+

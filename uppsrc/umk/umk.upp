@@ -1,0 +1,16 @@
+description "Построитель сборок/пакетов U++ из командной строки\377";
+
+uses
+	ide\Builders;
+
+file
+	umake.h,
+	Console.cpp,
+	IdeContext.cpp,
+	MakeBuild.cpp,
+	Export.cpp,
+	umake.cpp charset "UTF-8";
+
+mainconfig
+	"" = "";
+

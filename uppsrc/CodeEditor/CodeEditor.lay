@@ -1,0 +1,14 @@
+LAYOUT(IDEFindReplaceLayout, 380, 118)
+	ITEM(Label, dv___0, SetLabel(t_("Найти:")).LeftPosZ(8, 46).TopPosZ(4, 19))
+	ITEM(WithDropChoice<EditString>, find, HSizePosZ(64, 2).TopPosZ(4, 19))
+	ITEM(Label, replace_lbl, SetLabel(t_("Заменить:")).LeftPosZ(8, 56).TopPosZ(28, 19))
+	ITEM(WithDropChoice<EditString>, replace, HSizePosZ(64, 2).TopPosZ(28, 19))
+	ITEM(Option, wholeword, SetLabel(t_("&Слово целиком")).LeftPosZ(8, 100).BottomPosZ(40, 18))
+	ITEM(Option, ignorecase, SetLabel(t_("&Игнорировать регистр")).LeftPosZ(120, 140).BottomPosZ(40, 18))
+	ITEM(Option, wildcards, SetLabel(t_("Шаблоны")).LeftPosZ(276, 84).BottomPosZ(40, 18))
+	ITEM(Button, amend, SetLabel(t_("З&аменить")).LeftPosZ(8, 68).BottomPosZ(6, 24))
+	ITEM(Button, findback, SetLabel(t_("Найти ранее")).LeftPosZ(100, 80).BottomPosZ(6, 24))
+	ITEM(Button, ok, SetLabel(t_("Найти далее")).RightPosZ(100, 76).BottomPosZ(6, 24))
+	ITEM(Button, cancel, SetLabel(t_("Отмена")).RightPosZ(12, 64).BottomPosZ(6, 24))
+END_LAYOUT
+

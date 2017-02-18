@@ -1,0 +1,14 @@
+description "Утилита для системы обновления производственных приложений U++\377";
+
+uses
+	CtrlLib;
+
+file
+	Updater.rc,
+	Updater.cpp,
+	Info readonly separator,
+	Copying;
+
+mainconfig
+	"" = "GUI";
+

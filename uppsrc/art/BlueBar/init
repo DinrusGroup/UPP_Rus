@@ -1,0 +1,4 @@
+#ifndef _art_BlueBar_icpp_init_stub
+#define _art_BlueBar_icpp_init_stub
+#include "CtrlLib/init"
+#endif
