@@ -1,0 +1,16 @@
+description "Демонстрация \"голубого\" скина для ToolBar иMenuBar\377";
+
+uses
+	CtrlLib,
+	RichEdit,
+	PdfDraw,
+	art\BlueBar;
+
+file
+	UWord.cpp,
+	UWord.iml;
+
+mainconfig
+	"" = "GUI",
+	"" = "GUI .NOGTK";
+

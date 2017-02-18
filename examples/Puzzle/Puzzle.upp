@@ -1,0 +1,14 @@
+description "Игра \"Пазл\"\377";
+
+uses
+	Color;
+
+file
+	Puzzle.cpp,
+	Puzzle.t charset "UTF-8",
+	Puzzle.iml,
+	Puzzle.lay;
+
+mainconfig
+	"" = "GUI";
+

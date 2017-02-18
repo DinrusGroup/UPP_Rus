@@ -1,0 +1,12 @@
+description "Преобразователь для метрических единиц и единиц США (метры / футы и т.д.)\377";
+
+uses
+	CtrlLib;
+
+file
+	main.cpp,
+	converter.lay;
+
+mainconfig
+	"" = "GUI";
+

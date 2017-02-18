@@ -1,0 +1,12 @@
+description "Раскраска текста в разные цвета\377";
+
+uses
+	CtrlLib;
+
+file
+	Color.h,
+	main.cpp;
+
+mainconfig
+	"" = "GUI";
+

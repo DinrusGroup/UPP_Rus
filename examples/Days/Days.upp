@@ -1,0 +1,13 @@
+description "Показывает количество дней между двумя датами\377";
+
+uses
+	CtrlLib;
+
+file
+	Days.h,
+	main.cpp,
+	Days.lay;
+
+mainconfig
+	"" = "GUI";
+

@@ -1,0 +1,14 @@
+description "Просмотрщик для XML\377";
+
+uses
+	CtrlLib;
+
+file
+	XmlView.h,
+	main.cpp,
+	XmlView.iml,
+	XmlView.rc;
+
+mainconfig
+	"" = "GUI";
+

@@ -1,0 +1,4 @@
+#ifndef _Days_icpp_init_stub
+#define _Days_icpp_init_stub
+#include "CtrlLib/init"
+#endif
