@@ -1,0 +1,36 @@
+#define _STD_BEGIN namespace std {
+#define _C_STD_BEGIN namespace std {
+#define _STDEXT_BEGIN namespace stdext {
+#define NAMESPACE_UPP namespace Upp {
+#define _STD_END };
+#define _STDEXT_END };
+#define _C_STD_END };
+#define END_UPP_NAMESPACE };
+#define __declspec(...)
+#define __cdecl
+#define __attribute__(...)
+#define __stdcall
+#define __forceinline
+#define __out
+#define __in
+#define __inout
+#define __deref_in
+#define __deref_inout
+#define __deref_out
+#define __pragma(...)
+#define __pascal
+#define _far
+#define _pascal
+#define _cdecl
+#define __AuToQuOtE
+#define __xin
+#define __xout
+#define __export
+#define __clrcall
+#define __alignof(...)
+#define __asm__(...)
+#define __asm(...)
+#define __restrict
+#define __inline
+#define __typeof
+#define NULL NULL
