@@ -1,4 +1,0 @@
-#ifndef _LIBRARY_icpp_init_stub
-#define _LIBRARY_icpp_init_stub
-#include "LIBRARY\Scintilla/init"
-#endif

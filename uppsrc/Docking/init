@@ -1,6 +1,0 @@
-#ifndef _Docking_icpp_init_stub
-#define _Docking_icpp_init_stub
-#include "CtrlLib/init"
-#include "TabBar/init"
-#include "Controls4U_Demo/init"
-#endif
