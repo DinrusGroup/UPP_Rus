@@ -46,6 +46,8 @@ struct DrawLabel {
 	int       rspc;
 
 	int       align, valign;
+	
+	bool      nowrap;
 
 	int       accesskey;
 	int       accesspos;
@@ -78,9 +80,16 @@ public:
 	LabelBase&  SetInk(Color color)                          { return SetInk(color, color); }
 	LabelBase&  SetRightImage(const Image& bmp2, int spc = 0, bool never_hide = false);
 	LabelBase&  SetAlign(int align);
+	LabelBase&  AlignLeft()                                  { return SetAlign(ALIGN_CENTER); }
+	LabelBase&  AlignCenter()                                { return SetAlign(ALIGN_CENTER); }
+	LabelBase&  AlignRight()                                 { return SetAlign(ALIGN_RIGHT); }
 	LabelBase&  SetVAlign(int align);
+	LabelBase&  AlignTop()                                   { return SetAlign(ALIGN_TOP); }
+	LabelBase&  AlignVCenter()                               { return SetAlign(ALIGN_CENTER); }
+	LabelBase&  AlignBottom()                                { return SetAlign(ALIGN_BOTTOM); }
 	LabelBase&  SetImage(const Image& bmp, int spc = 0, bool never_hide = false)
 	{ SetLeftImage(bmp, spc, never_hide); return *this; }
+	LabelBase&  NoWrap(bool b = true);
 
 	int         GetAlign() const                             { return lbl.align; }
 	int         GetVAlign() const                            { return lbl.valign; }
@@ -100,43 +109,4 @@ public:
 	Size        GetLabelSize() const;
 
 	virtual ~LabelBase();
-};
-
-class DisplayPopup : public Ctrl, public Link<DisplayPopup> {
-	virtual void  Paint(Draw& w);
-	virtual void  LeftDown(Point p, dword);
-	virtual void  LeftDrag(Point p, dword);
-	virtual void  LeftDouble(Point p, dword);
-	virtual void  RightDown(Point p, dword);
-	virtual void  LeftUp(Point p, dword);
-	virtual void  MouseWheel(Point p, int zdelta, dword keyflags);
-	virtual void  MouseLeave();
-	virtual void  MouseMove(Point p, dword);
-
-private:
-	Ptr<Ctrl>      ctrl;
-	Rect           item;
-	Rect           slim;
-
-	Value          value;
-	Color          paper, ink;
-	dword          style;
-	const Display *display;
-	int            margin;
-
-	Point   Op(Point p);
-	void    Sync();
-
-	static Link<DisplayPopup> all[1];
-	static bool StateHook(Ctrl *, int reason);
-
-public:
-	void Set(Ctrl *ctrl, const Rect& item, const Value& v, const Display *display,
-	         Color ink, Color paper, dword style, int margin = 0);
-	void Cancel();
-	bool IsOpen();
-	bool HasMouse();
-
-	DisplayPopup();
-	~DisplayPopup();
 };

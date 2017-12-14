@@ -7,6 +7,11 @@
 
 #include <shellapi.h>
 #include <wincon.h>
+
+#ifdef COMPILER_MINGW
+#undef CY
+#endif
+
 #include <shlobj.h>
 
 #undef Ptr
@@ -14,10 +19,23 @@
 #undef CY
 #endif
 
-NAMESPACE_UPP
+namespace Upp {
+
+static StaticCriticalSection sHlock;
+
+String& sHomeDir() {
+	static String s;
+	return s;
+}
+
+void    SetHomeDirectory(const char *dir)
+{
+	INTERLOCKED_(sHlock) {
+		sHomeDir() = dir;
+	}
+}
 
 #ifdef PLATFORM_WIN32
-
 
 String GetEnv(const char *id)
 {
@@ -30,7 +48,14 @@ String GetExeFilePath()
 }
 
 String  GetHomeDirectory() {
-	return GetEnv("HOMEDRIVE") + GetEnv("HOMEPATH");
+	String r;
+	INTERLOCKED_(sHlock) {
+		String& s = sHomeDir();
+		if(s.IsEmpty())
+			s = GetEnv("HOMEDRIVE") + GetEnv("HOMEPATH");
+		r = s;
+	}
+	return r;
 }
 
 #endif
@@ -103,6 +128,11 @@ String GetExeDirFile(const char *filename)
 	return AppendFileName(GetFileFolder(GetExeFilePath()), filename);
 }
 
+String GetExeFolder()
+{
+	return GetFileFolder(GetExeFilePath());
+}
+
 String GetExeTitle()
 {
 	return GetFileTitle(GetExeFilePath());
@@ -110,30 +140,15 @@ String GetExeTitle()
 
 #ifdef PLATFORM_POSIX
 
-static StaticCriticalSection sHlock;
-
-String& sHomeDir() {
-	static String s;
-	return s;
-}
-
 String  GetHomeDirectory() {
 	String r;
 	INTERLOCKED_(sHlock) {
 		String& s = sHomeDir();
-		if(s.IsEmpty()) {
+		if(s.IsEmpty())
 			s = Nvl(GetEnv("HOME"), "/root");
-		}
 		r = s;
 	}
 	return r;
-}
-
-void    SetHomeDirectory(const char *dir)
-{
-	INTERLOCKED_(sHlock) {
-		sHomeDir() = dir;
-	}
 }
 
 #endif//PLATFORM_POSIX
@@ -169,16 +184,25 @@ String  ConfigFile(const char *file) {
 #endif//PLATFORM
 }
 
+String GetConfigFolder()
+{
+	return GetFileFolder(ConfigFile("x"));
+}
+
 String  ConfigFile() {
 	return ConfigFile(GetExeTitle() + ".cfg");
 }
 
-GLOBAL_VAR(Vector<WString>, coreCmdLine__)
+Vector<WString>& coreCmdLine__()
+{
+	static Vector<WString> h;
+	return h;
+}
 
 const Vector<String>& CommandLine()
 {
 	Vector<String> *ptr;
-	INTERLOCKED { 
+	INTERLOCKED {
 		static ArrayMap< byte, Vector<String> > charset_cmd;
 		byte cs = GetDefaultCharset();
 		int f = charset_cmd.Find(cs);
@@ -305,6 +329,22 @@ void CommonInit()
 	sMainRunning = true;
 }
 
+void Exit(int code)
+{
+	SetExitCode(code);
+	throw ExitExc();
+}
+
+void AppExecute__(void (*app)())
+{
+	try {
+		(*app)();
+	}
+	catch(ExitExc) {
+		return;
+	}
+}
+
 #ifdef PLATFORM_POSIX
 
 void s_ill_handler(int)
@@ -385,33 +425,86 @@ void AppInit__(int argc, const char **argv)
 
 void AppExit__()
 {
+#ifdef _MULTITHREADED
+#ifndef COWORK2
+	Thread::ShutdownThreads();
+#endif
+#endif
 	sMainRunning = false;
 #ifdef PLATFORM_POSIX
 	MemoryIgnoreLeaksBegin(); // Qt leaks on app exit...
 #endif
 }
 
+#ifdef flagTURTLE
+
+void Turtle_PutLink(const String& link);
+
+void LaunchWebBrowser(const String& url)
+{
+	Turtle_PutLink(url);
+}
+
+#else
+
+#if defined(PLATFORM_WIN32) && !defined(PLATFORM_WINCE)
+static auxthread_t auxthread__ sShellExecuteOpen(void *str)
+{
+	ShellExecuteW(NULL, L"open", (wchar *)str, NULL, L".", SW_SHOWDEFAULT);
+	free(str);
+	return 0;
+}
+
+void LaunchWebBrowser(const String& url)
+{
+	WString wurl = ToSystemCharsetW(url);
+	if ((int64)(ShellExecuteW(NULL, L"open", wurl, NULL, L".", SW_SHOWDEFAULT)) <= 32) {
+		int l = sizeof(wchar) * wurl.GetLength() + 1;
+		char *curl = (char *)malloc(l);
+		memcpy(curl, wurl, l);
+		StartAuxThread(sShellExecuteOpen, curl);
+	}
+}
+#endif
+
+#ifdef PLATFORM_POSIX
 void    LaunchWebBrowser(const String& url)
 {
-#if defined(PLATFORM_WIN32) && !defined(PLATFORM_WINCE)
-	ShellExecute(NULL, "open", url, NULL, ".", SW_SHOWDEFAULT);
-#endif
-#ifdef PLATFORM_POSIX
 	const char * browser[] = {
 		"htmlview", "xdg-open", "x-www-browser", "firefox", "konqueror", "opera", "epiphany", "galeon", "netscape"
 	};
 	for(int i = 0; i < __countof(browser); i++)
 		if(system("which " + String(browser[i])) == 0) {
-			system(String(browser[i]) + " " + url + " &");
+			String u = url;
+			u.Replace("'", "'\\''");
+			IGNORE_RESULT(
+				system(String(browser[i]) + " '" + u + "' &")
+			);
 			break;
 		}
+}
 #endif
+
+#endif
+
+String sDataPath;
+
+void SetDataPath(const char *path)
+{
+	sDataPath = path;
 }
 
 String GetDataFile(const char *filename)
 {
+	if(sDataPath.GetCount())
+		return AppendFileName(sDataPath, filename);
 	String s = GetEnv("UPP_MAIN__");
 	return s.GetCount() ? AppendFileName(s, filename) : GetExeDirFile(filename);
+}
+
+String LoadDataFile(const char *filename)
+{
+	return LoadFile(GetDataFile(filename));
 }
 
 String GetComputerName()
@@ -464,14 +557,15 @@ String GetShellFolder(int clsid)
 	return Null;
 }
 
-String GetDesktopFolder()	{ return GetShellFolder(CSIDL_DESKTOP); }
-String GetProgramsFolder()	{ return GetShellFolder(CSIDL_PROGRAM_FILES); }
-String GetAppDataFolder()	{ return GetShellFolder(CSIDL_APPDATA);}
-String GetMusicFolder()		{ return GetShellFolder(CSIDL_MYMUSIC);}
-String GetPicturesFolder()	{ return GetShellFolder(CSIDL_MYPICTURES);}
-String GetVideoFolder()		{ return GetShellFolder(CSIDL_MYVIDEO);}
-String GetDocumentsFolder()	{ return GetShellFolder(/*CSIDL_MYDOCUMENTS*/0x0005);}
-String GetTemplatesFolder()	{ return GetShellFolder(CSIDL_TEMPLATES);}
+String GetDesktopFolder()	  { return GetShellFolder(CSIDL_DESKTOP); }
+String GetProgramsFolder()	  { return GetShellFolder(CSIDL_PROGRAM_FILES); }
+String GetProgramsFolderX86() { return GetShellFolder(0x2a); }
+String GetAppDataFolder()	  { return GetShellFolder(CSIDL_APPDATA);}
+String GetMusicFolder()		  { return GetShellFolder(CSIDL_MYMUSIC);}
+String GetPicturesFolder()	  { return GetShellFolder(CSIDL_MYPICTURES);}
+String GetVideoFolder()		  { return GetShellFolder(CSIDL_MYVIDEO);}
+String GetDocumentsFolder()	  { return GetShellFolder(/*CSIDL_MYDOCUMENTS*/0x0005);}
+String GetTemplatesFolder()	  { return GetShellFolder(CSIDL_TEMPLATES);}
 
 #define MY_DEFINE_KNOWN_FOLDER(name, l, w1, w2, b1, b2, b3, b4, b5, b6, b7, b8) \
 static const GUID name = { l, w1, w2, { b1, b2,  b3,  b4,  b5,  b6,  b7,  b8 } }
@@ -500,11 +594,14 @@ String GetDownloadFolder()
 
 String GetPathXdg(String xdgConfigHome, String xdgConfigDirs)
 {
-	String ret = "";
-	if (FileExists(ret = AppendFileName(xdgConfigHome, "user-dirs.dirs"))) ;
-  	else if (FileExists(ret = AppendFileName(xdgConfigDirs, "user-dirs.defaults"))) ;
-  	else if (FileExists(ret = AppendFileName(xdgConfigDirs, "user-dirs.dirs"))) ;
-  	return ret;
+	String ret;
+	if(FileExists(ret = AppendFileName(xdgConfigHome, "user-dirs.dirs")))
+		return ret;
+  	if(FileExists(ret = AppendFileName(xdgConfigDirs, "user-dirs.defaults")))
+  		return ret;
+  	if(FileExists(ret = AppendFileName(xdgConfigDirs, "user-dirs.dirs")))
+  		return ret;
+  	return Null;
 }
 
 String GetPathDataXdg(String fileConfig, const char *folder) 
@@ -575,4 +672,4 @@ String GetDownloadFolder()  { return GetShellFolder("XDG_DOWNLOAD_DIR", "XDG_DOW
 
 #endif
 
-END_UPP_NAMESPACE
+}

@@ -4,7 +4,6 @@ public:
 	virtual void FrameLayout(Rect& r);
 
 private:
-
 	struct Tab {
 		PaintRect             info;
 		int                   width;
@@ -72,7 +71,9 @@ private:
 public:
 	void operator=(const String& s)           { Set(s); }
 
-	operator Callback1<const String&>()       { return pteback(this, &StatusBar::SetText); }
+	operator Event<const String&>()       { return pteback(this, &StatusBar::SetText); }
+
+	Event<const String&> operator~()      { return pteback(this, &StatusBar::SetText); }
 
 	StatusBar&  Height(int _cy);
 	StatusBar&  NoSizeGrip()                  { RemoveFrame(grip); return *this; }
@@ -96,9 +97,12 @@ class ProgressInfo {
 	int       cx;
 	int       total;
 	int       pos;
+	
+	int       granularity;
+	dword     set_time;
 
 	void Refresh();
-	void Reset()                                { tabi = 0; cx = 200; total = 100; pos = 0; tw = 0; info = NULL; }
+	void Reset();
 
 public:
 	ProgressInfo& Text(const String& s)         { text = s; Refresh(); return *this; }
@@ -115,7 +119,7 @@ public:
 	int           GetTotal() const              { return total; }
 
 	void operator=(int p)                       { Set(p); }
-	void operator++()                           { pos++; Refresh(); }
+	void operator++()                           { Set(pos + 1, total); }
 	operator int()                              { return pos; }
 
 	ProgressInfo()                              { Reset(); }

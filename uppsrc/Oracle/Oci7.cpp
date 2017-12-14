@@ -1,6 +1,5 @@
 #include "Oracle7.h"
 #include "OciCommon.h"
-#pragma hdrstop
 
 /*
 extern "C" {
@@ -14,7 +13,7 @@ typedef byte text;
 };
 */
 
-NAMESPACE_UPP
+namespace Upp {
 
 #ifdef PLATFORM_WIN32
 	#define DLLFILENAME "ociw32.dll"
@@ -830,6 +829,7 @@ SqlConnection *Oracle7::CreateConnection() {
 }
 
 void Oracle7::Close() {
+	SessionClose();
 	while(!clink.IsEmpty()) {
 		clink.GetNext()->Clear();
 		clink.GetNext()->Unlink();
@@ -983,4 +983,4 @@ Vector<String> Oracle7::EnumReservedWords()
 	return OracleSchemaReservedWords();
 }
 
-END_UPP_NAMESPACE
+}

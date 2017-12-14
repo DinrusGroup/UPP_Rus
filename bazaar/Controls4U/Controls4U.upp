@@ -2,15 +2,16 @@ description "Some additional controls\377B255,170,0";
 
 uses
 	CtrlLib,
-	Functions4U;
+	Functions4U,
+	PolyXML;
 
 uses(!NOPAINTER) Painter;
 
 file
 	Controls4U.cpp,
 	Controls4U.h,
-	DrawingCanvas.cpp,
-	DrawingCanvas.h,
+	PainterCanvas.cpp,
+	PainterCanvas.h,
 	Controls4U.usc,
 	Controls4U.lay,
 	Controls4U.iml,
@@ -27,7 +28,6 @@ file
 	VLC readonly separator,
 	plugin\vlc\axvlc_idl.c,
 	plugin\vlc\axvlc_idl.h,
-	License.txt,
 	JBControls readonly separator,
 	SliderCtrlX.cpp,
 	SliderCtrlX.h,
@@ -36,5 +36,8 @@ file
 	StarIndicator.cpp,
 	StarIndicator.h,
 	StarIndicator.iml,
-	StarIndicator.usc;
+	StarIndicator.usc,
+	SplitterButton.cpp,
+	SplitterButton.h,
+	Copying;
 

@@ -10,7 +10,7 @@ class HashBase : Moveable<HashBase> {
 	Vector<unsigned> hash;
 	Vector<Link>     link;
 	int             *map;
-	int              mcount;
+	int              mask;
 	int              unlinked;
 
 	void  LinkBefore(int i, Link& l, int bi);
@@ -20,7 +20,7 @@ class HashBase : Moveable<HashBase> {
 	int&  Maph(unsigned _hash) const;
 	int&  Mapi(int i) const;
 	void  FinishIndex();
-	void  DoIndex();
+	void  Zero();
 	void  Free();
 
 public:
@@ -33,6 +33,8 @@ public:
 	void  SetUn(int i, unsigned hash);
 	unsigned operator [] (int i) const      { return hash[i]; }
 	int   Find(unsigned hash) const;
+	int   GetNext(int i) const              { return link[i].next; }
+	int   FindNext(int i, int first) const;
 	int   FindNext(int i) const;
 	int   FindLast(unsigned hash) const;
 	int   FindPrev(int i) const;
@@ -41,6 +43,7 @@ public:
 	bool  IsUnlinked(int i) const           { return hash[i] & UNSIGNED_HIBIT; }
 	void  Unlink(int i);
 	Vector<int> GetUnlinked() const;
+	bool  HasUnlinked() const				{ return unlinked >= 0; }
 
 	void  Remove(int i);
 	void  Remove(int i, int count);
@@ -62,12 +65,10 @@ public:
 	HashBase();
 	~HashBase();
 
-	HashBase(pick_ HashBase& b);
-	void operator=(pick_ HashBase& b);
+	HashBase(HashBase&& b);
+	void operator=(HashBase&& b);
 	HashBase(const HashBase& b, int);
 	void operator<<=(const HashBase& b);
-
-	bool  IsPicked() const                  { return hash.IsPicked(); }
 
 	const unsigned *Begin() const           { return hash.Begin(); }
 	const unsigned *End() const             { return hash.End(); }
@@ -76,18 +77,9 @@ public:
 };
 
 template <class T>
-struct StdHash {
-	unsigned operator()(const T& x) const { return GetHashValue(x); }
-};
-
-struct PtrHash {
-	unsigned operator()(const void *x) const { return GetHashValue((unsigned)(uintptr_t)x); }
-};
-
-template <class T, class V, class HashFn>
-class AIndex {
+class Index : MoveableAndDeepCopyOption<Index<T>> {
 protected:
-	V         key;
+	Vector<T> key;
 	HashBase  hash;
 
 	int      Find0(const T& x, int i) const {
@@ -101,13 +93,14 @@ protected:
 	void     Hash();
 
 public:
-	HashFn   hashfn;
+	unsigned hashfn(const T& x) const       { return GetHashValue(x); }
 
 	T&       Add(const T& x, unsigned _hash);
 	T&       Add(const T& x);
+	Index&   operator<<(const T& x)         { Add(x); return *this; }
+
 	int      FindAdd(const T& key, unsigned _hash);
 	int      FindAdd(const T& key);
-	AIndex&  operator<<(const T& x)          { Add(x); return *this; }
 
 	int      Put(const T& x, unsigned _hash);
 	int      Put(const T& x);
@@ -132,16 +125,13 @@ public:
 
 	void     Clear()                         { hash.Clear(); key.Clear(); }
 
-	void     ClearIndex()                    { hash.ClearIndex(); }
-	void     Reindex(int n)                  { hash.Reindex(n); }
-	void     Reindex()                       { hash.Reindex(); }
-
 	void     Unlink(int i)                   { hash.Unlink(i); }
 	int      UnlinkKey(const T& k, unsigned h);
 	int      UnlinkKey(const T& k);
 	bool     IsUnlinked(int i) const         { return hash.IsUnlinked(i); }
 	Vector<int> GetUnlinked() const          { return hash.GetUnlinked(); }
 	void     Sweep();
+	bool     HasUnlinked() const             { return hash.HasUnlinked(); }
 
 	T&       Insert(int i, const T& k, unsigned h);
 	T&       Insert(int i, const T& k);
@@ -155,92 +145,66 @@ public:
 	void     Trim(int n)                     { key.SetCount(n); hash.Trim(n); }
 	void     Drop(int n = 1)                 { key.Drop(n); hash.Drop(n); }
 	const T& Top() const                     { return key.Top(); }
+	T        Pop()                           { T x = pick(Top()); Drop(); return x; }
 
 	void     Reserve(int n)                  { key.Reserve(n); hash.Reserve(n); }
 	void     Shrink()                        { key.Shrink(); hash.Shrink(); }
 	int      GetAlloc() const                { return key.GetAlloc(); }
 
-#ifdef UPP
 	void     Serialize(Stream& s);
-#endif
+	void     Xmlize(XmlIO& xio, const char *itemtag = "key");
+	void     Jsonize(JsonIO& jio);
+	String   ToString() const;
+	template <class B> bool operator==(const B& b) const { return IsEqualRange(*this, b); }
+	template <class B> bool operator!=(const B& b) const { return !operator==(b); }
+	template <class B> int  Compare(const B& b) const    { return CompareRanges(*this, b); }
+	template <class B> bool operator<=(const B& x) const { return Compare(x) <= 0; }
+	template <class B> bool operator>=(const B& x) const { return Compare(x) >= 0; }
+	template <class B> bool operator<(const B& x) const  { return Compare(x) < 0; }
+	template <class B> bool operator>(const B& x) const  { return Compare(x) > 0; }
 
-	V        PickKeys() pick_                 { return key; }
-	const V& GetKeys() const                  { return key; }
-	bool     IsPicked(void) const             { return key.IsPicked(); }
+	Vector<T>        PickKeys()                          { Vector<T> r = pick(key); Clear(); return r; }
+	const Vector<T>& GetKeys() const                     { return key; }
 
-// Pick assignment & copy. Picked source can only Clear(), ~AIndex(), operator=, operator<<=
+	Index()                                               {}
+	Index(Index&& s) : key(pick(s.key)), hash(pick(s.hash)) {}
+	Index(const Index& s, int) : key(s.key, 0), hash(s.hash, 0) {}
+	explicit Index(Vector<T>&& s) : key(pick(s))          { Hash(); }
+	Index(const Vector<T>& s, int) : key(s, 0)            { Hash(); }
 
-	AIndex& operator=(pick_ V& s);
-	AIndex& operator<<=(const V& s);
+	Index& operator=(Vector<T>&& x)                       { key = pick(x); Hash(); return *this; }
+	Index& operator=(Index<T>&& x)                        { key = pick(x.key); hash = pick(x.hash); return *this; }
+
+	Index(std::initializer_list<T> init) : key(init)      { Hash(); }
+
+	typedef ConstIteratorOf<Vector<T>> ConstIterator;
 
 // Standard container interface
+	ConstIterator begin() const                           { return key.Begin(); }
+	ConstIterator end() const                             { return key.End(); }
+
+	friend void Swap(Index& a, Index& b)                  { UPP::Swap(a.hash, b.hash);
+	                                                        UPP::Swap(a.key, b.key); }
+
+#ifdef DEPRECATED
+	Index& operator<<=(const Vector<T>& s)                { *this = clone(s); return *this; }
 	typedef T                ValueType;
-	typedef typename V::ConstIterator ConstIterator;
-	ConstIterator  Begin() const                          { return key.Begin(); }
-	ConstIterator  End() const                            { return key.End(); }
+	typedef Vector<T>        ValueContainer;
 	ConstIterator  GetIter(int pos) const                 { return key.GetIter(pos); }
 
-	void Swap(AIndex& b)                                  { UPP::Swap(hash, b.hash);
-	                                                        UPP::Swap(key, b.key); }
-// Optimalizations
-	friend int  GetCount(const AIndex& v)                 { return v.GetCount(); }
+	void     ClearIndex()                    { hash.ClearIndex(); }
+	void     Reindex(int n)                  { hash.Reindex(n); }
+	void     Reindex()                       { hash.Reindex(); }
 
-protected:
-	AIndex(pick_ V& s);
-	AIndex(const V& s, int);
-	AIndex() {}
-	AIndex(const AIndex& s, int);
-};
-
-template <class T, class HashFn = StdHash<T> >
-class Index : MoveableAndDeepCopyOption< Index<T, HashFn > >,
-              public AIndex<T, Vector<T>, HashFn> {
-	typedef AIndex< T, Vector<T>, HashFn > B;
-public:
-	T        Pop()                           { T x = B::Top(); B::Drop(); return x; }
-
-	Index() {}
-	Index(pick_ Index& s) : B(s)             {}
-	Index(const Index& s, int) : B(s, 1)     {}
-	Index(pick_ Vector<T>& s) : B(s)         {}
-	Index(const Vector<T>& s, int) : B(s, 1) {}
-
-	Index& operator=(pick_ Vector<T>& x)     { B::operator=(x); return *this; }
-
-	friend void Swap(Index& a, Index& b)     { a.B::Swap(b); }
-
-	typedef typename B::ConstIterator ConstIterator; // GCC bug (?)
-	STL_INDEX_COMPATIBILITY(Index<T _cm_ HashFn>)
-};
-
-template <class T, class HashFn = StdHash<T> >
-class ArrayIndex : MoveableAndDeepCopyOption< ArrayIndex<T, HashFn > >,
-                   public AIndex<T, Array<T>, HashFn> {
-	typedef AIndex< T, Array<T>, HashFn > B;
-public:
-	T&       Add(const T& x, unsigned _hash)        { return B::Add(x, _hash); }
-	T&       Add(const T& x)                        { return B::Add(x); }
-	T&       Set(int i, const T& x, unsigned _hash) { return B::Set(i, x, _hash); }
-	T&       Set(int i, const T& x)                 { return B::Set(i, x); }
-
-	T&       Add(T *newt, unsigned _hash);
-	T&       Add(T *newt);
-	T&       Set(int i, T *newt, unsigned _hash);
-	T&       Set(int i, T *newt);
-
-	T       *PopDetach()                            { B::hash.Drop(1); return B::key.PopDetach(); }
-	T       *Detach(int i)                          { B::hash.Remove(i); return B::key.Detach(i); }
-
-	ArrayIndex() {}
-	ArrayIndex(pick_ ArrayIndex& s) : B(s)          {}
-	ArrayIndex(const ArrayIndex& s, int) : B(s, 1)  {}
-	ArrayIndex(pick_ Array<T>& s) : B(s)            {}
-	ArrayIndex(const Array<T>& s, int) : B(s, 1)    {}
-
-	ArrayIndex& operator=(pick_ Array<T>& x)        { B::operator=(x); return *this; }
-
-	friend void Swap(ArrayIndex& a, ArrayIndex& b)  { a.B::Swap(b); }
-
-	typedef typename B::ConstIterator ConstIterator; // GCC bug (?)
-	STL_INDEX_COMPATIBILITY(ArrayIndex<T _cm_ HashFn>)
+	typedef T             value_type;
+	typedef ConstIterator const_iterator;
+	typedef const T&      const_reference;
+	typedef int           size_type;
+	typedef int           difference_type;
+	const_iterator        Begin() const          { return begin(); }
+	const_iterator        End() const            { return end(); }
+	void                  clear()                { Clear(); }
+	size_type             size()                 { return GetCount(); }
+	bool                  empty() const          { return IsEmpty(); }
+#endif
 };

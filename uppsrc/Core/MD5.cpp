@@ -1,6 +1,6 @@
 #include "Core.h"
 
-NAMESPACE_UPP
+namespace Upp {
 
 #define MD5_CTX UPP_MD5_CTX
 
@@ -339,9 +339,14 @@ String Md5Stream::FinishStringS()
 	return HexString(hash, 16, 4);
 }
 
-Md5Stream::Md5Stream()
+void Md5Stream::Reset()
 {
 	MD5Init (&context);
+}
+
+Md5Stream::Md5Stream()
+{
+	Reset();
 }
 
 Md5Stream::~Md5Stream()
@@ -385,4 +390,4 @@ String MD5StringS(const String& data)
 	return MD5StringS(~data, data.GetCount());
 }
 
-END_UPP_NAMESPACE
+}

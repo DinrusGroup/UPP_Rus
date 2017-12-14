@@ -4,7 +4,9 @@
 #include <Draw/Draw.h>
 
 
-NAMESPACE_UPP
+namespace Upp {
+	
+INITIALIZE(GifRaster)
 
 class GIFRaster : public StreamRaster {
 public:
@@ -56,6 +58,6 @@ private:
 	String       comment;
 };
 
-END_UPP_NAMESPACE
+}
 
 #endif

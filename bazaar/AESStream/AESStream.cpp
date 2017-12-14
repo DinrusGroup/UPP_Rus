@@ -40,17 +40,7 @@ String AESPadString(const String &s, int l)
 
 dword rdtsc()
 {
-	dword _out;
-	#ifndef flagGCC
-	__asm 
-	{
-		rdtsc
-		mov _out, eax
-	}
-	#else
-	_out = Random();
-	#endif
-	return _out;
+	return Random();
 }
 
 //----------------------------------------------------------------------------------------------

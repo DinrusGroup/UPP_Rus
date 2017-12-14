@@ -1,6 +1,6 @@
 #include "Web.h"
 
-NAMESPACE_UPP
+namespace Upp {
 
 enum { EXPIRE = 60 * 30 }; // 30 minutes inactivity expires token
 
@@ -188,7 +188,7 @@ static String GetConnectPage(HttpQuery& out_map, const HttpQuery& map, const Str
 		+ HtmlCell() / HtmlEdit("USER", 20, 30, map.GetString("USER")))
 		<< HtmlRow() % (HtmlCell() / t_("Password:&nbsp;")
 		+ HtmlCell() / HtmlEdit("PASS", 20, 30, map.GetString("PASS"), true))
-		<< HtmlRow() % (HtmlCell() / "" + HtmlCell() / HtmlButton("LOGIN", "  Pøipojit  "));
+		<< HtmlRow() % (HtmlCell() / "" + HtmlCell() / HtmlButton("LOGIN", "  Pripojit  "));
 
 	Htmls out;
 	if(!IsNull(error))
@@ -286,4 +286,4 @@ String WebUser::Login(const HttpQuery& map, String& args, const char *iname, boo
 
 //////////////////////////////////////////////////////////////////////
 
-END_UPP_NAMESPACE
+}

@@ -1,6 +1,6 @@
 #include "Painter.h"
 
-NAMESPACE_UPP
+namespace Upp {
 
 dword Painter::GetInfo() const
 {
@@ -76,7 +76,6 @@ void Painter::DrawImageOp(int x, int y, int cx, int cy, const Image& image, cons
 {
 	Image img = IsNull(color) ? image : SetColorKeepAlpha(image, color);
 	RectPath(x, y, cx, cy);
-	Sizef sz = img.GetSize();
 	double sw = (double)cx / src.GetWidth();
 	double sh = (double)cy / src.GetHeight();
 	Fill(img, Xform2D::Scale(sw, sh) * Xform2D::Translation(x - sw * src.left, y - sh * src.top));
@@ -205,34 +204,14 @@ void Painter::DrawTextOp(int x, int y, int angle, const wchar *text, Font font, 
 		n = wstrlen(text);
 	double *ddx = NULL;
 	Buffer<double> h;
-	int cx = Null;
 	if(dx) {
 		h.Alloc(n);
 		ddx = h;
-		cx = 0;
-		for(int i = 0; i < n; i++) {
+		for(int i = 0; i < n; i++)
 			ddx[i] = dx[i];
-			cx += dx[i];
-		}
 	}
 	Text(0, 0, text, font, n, ddx);
 	Fill(ink);
-	if(font.IsUnderline()) {
-		if(IsNull(cx))
-			cx = GetTextSize(text, font).cx;
-		int a = font.GetAscent();
-		int cy = max(a / 16, 1);
-		Rectangle(0, a + cy, cx, cy);
-		Fill(ink);
-	}
-	if(font.IsStrikeout()) {
-		if(IsNull(cx))
-			cx = GetTextSize(text, font).cx;
-		int a = font.GetAscent();
-		int cy = max(a / 16, 1);
-		Rectangle(0, 2 * a / 3, cx, cy);
-		Fill(ink);
-	}
 	End();
 }
 
@@ -247,21 +226,4 @@ void Painter::DrawPaintingOp(const Rect& target, const Painting& p)
 	End();
 }
 
-void ImageAnyDrawPainter(Draw *(*f)(Size sz), Image (*e)(Draw *w));
-
-static Draw *sCP(Size sz)
-{
-	return new ImagePainter(sz);
 }
-
-static Image sEP(Draw *w)
-{
-	ImagePainter *ip = dynamic_cast<ImagePainter *>(w);
-	return ip ? (Image)(*ip) : Image();
-}
-
-INITBLOCK {
-	ImageAnyDrawPainter(sCP, sEP);
-}
-
-END_UPP_NAMESPACE

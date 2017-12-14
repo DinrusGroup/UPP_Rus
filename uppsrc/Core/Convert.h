@@ -1,24 +1,36 @@
-unsigned      stou(const char *ptr, void *endptr = NULL, unsigned base = 10);
-inline unsigned stou(const byte *ptr, void *endptr = NULL, unsigned base = 10) { return stou((const char *)ptr, endptr, base); }
-unsigned      stou(const wchar *ptr, void *endptr = NULL, unsigned base = 10);
+unsigned      stou(const char *ptr, void *endptr = NULL, unsigned radix = 10);
+inline unsigned stou(const byte *ptr, void *endptr = NULL, unsigned radix = 10) { return stou((const char *)ptr, endptr, radix); }
+unsigned      stou(const wchar *ptr, void *endptr = NULL, unsigned radix = 10);
 
-uint64        stou64(const char *s, void *endptr = NULL, unsigned base = 10);
-uint64        stou64(const wchar *s, void *endptr = NULL, unsigned base = 10);
+uint64        stou64(const char *s, void *endptr = NULL, unsigned radix = 10);
+uint64        stou64(const wchar *s, void *endptr = NULL, unsigned radix = 10);
 
 int           ScanInt(const char *ptr, const char **endptr = NULL, int radix = 10);
 int           ScanInt(const wchar *ptr, const wchar **endptr = NULL, int radix = 10);
 
-int64         ScanInt64(const char *ptr, const char **endptr = NULL, int base = 10);
+int64         ScanInt64(const char *ptr, const char **endptr = NULL, int radix = 10);
 
 double        ScanDouble(const char *ptr, const char **endptr = NULL, bool accept_comma = true);
 double        ScanDouble(const wchar *ptr, const wchar **endptr = NULL, bool accept_comma = true);
 
+double        Atof(const char *s);
+
 Value         StrIntValue(const char *s);
-inline int    StrInt(const char* s) { return ScanInt(s); }
-inline double IntDbl(int i)         { return IsNull(i) ? double(Null) : double(i); }
-inline int    DblInt(double d)      { return IsNull(d) ? int(Null) : fround(d); }
-Value         StrDblValue(const char* s);
-inline double StrDbl(const char* s) { return ScanDouble(s); }
+
+inline int     StrInt(const char* s)   { return ScanInt(s); }
+inline String  IntStr(int i)           { return FormatInt(i); }
+
+inline int64   StrInt64(const char *s) { return ScanInt64(s); }
+inline String  IntStr64(int64 i)       { return FormatInt64(i); }
+
+inline double  StrDbl(const char* s)   { return ScanDouble(s); }
+inline String  DblStr(double d)        { return FormatDouble(d, 10); }
+
+inline double  IntDbl(int i)           { return IsNull(i) ? double(Null) : double(i); }
+inline int     DblInt(double d)        { return IsNull(d) ? int(Null) : fround(d); }
+
+Value          StrDblValue(const char* s);
+
 
 Value NotNullError();
 
@@ -56,6 +68,9 @@ public:
 	int         GetMin() const                    { return (int)minval; }
 	int         GetMax() const                    { return (int)maxval; }
 	bool        IsNotNull() const                 { return notnull; }
+	
+	static int  GetDefaultMin()                   { return -INT_MAX; }
+	static int  GetDefaultMax()                   { return INT_MAX; }
 
 #ifdef flagSO
 	ConvertInt(int minval = -INT_MAX, int maxval = INT_MAX, bool notnull = false);
@@ -75,6 +90,9 @@ struct ConvertInt64 : public ConvertInt {
 	ConvertInt64& Max(int64 _max)                   { maxval = _max; return *this; }
 	int64         GetMin() const                    { return minval; }
 	int64         GetMax() const                    { return maxval; }
+
+	static int64  GetDefaultMin()                   { return -INT64_MAX; }
+	static int64  GetDefaultMax()                   { return INT64_MAX; }
 
 #ifdef flagSO
 	ConvertInt64(int64 minval = -INT64_MAX, int64 maxval = INT64_MAX, bool notnull = false);
@@ -108,6 +126,9 @@ public:
 	double         GetMax() const                    { return maxval; }
 	bool           IsNotNull() const                 { return notnull; }
 
+	static double  GetDefaultMin()                   { return DOUBLE_NULL_LIM; }
+	static double  GetDefaultMax()                   { return -DOUBLE_NULL_LIM; }
+
 	ConvertDouble(double minval = DOUBLE_NULL_LIM, double maxval = -DOUBLE_NULL_LIM,
 		          bool notnull = false);
 #ifdef flagSO
@@ -139,6 +160,8 @@ public:
 	Date         GetMax() const                    { return maxval; }
 	bool         IsNotNull() const                 { return notnull; }
 
+	static Date  GetDefaultMin()                   { return Date::Low(); }
+	static Date  GetDefaultMax()                   { return Date::High(); }
 
 	ConvertDate(Date minval = Date::Low(), Date maxval = Date::High(), bool notnull = false);
 	virtual ~ConvertDate();
@@ -157,6 +180,8 @@ protected:
 	Time minval, maxval, defaultval;
 	bool notnull;
 	bool seconds;
+	bool timealways;
+	bool dayend;
 
 public:
 	ConvertTime& MinMax(Time _min, Time _max)      { minval = _min; maxval = _max; return *this; }
@@ -166,11 +191,18 @@ public:
 	ConvertTime& NoNotNull()                       { return NotNull(false); }
 	ConvertTime& Seconds(bool b = true)            { seconds = b; return *this; }
 	ConvertTime& NoSeconds()                       { return Seconds(false); }
+	ConvertTime& TimeAlways(bool b = true)         { timealways = b; return *this; }
+	ConvertTime& DayEnd(bool b = true)             { dayend = b; return *this; }
 	ConvertTime& Default(Time d)                   { defaultval = d; return *this; }
 	Time         GetMin() const                    { return minval; }
 	Time         GetMax() const                    { return maxval; }
 	bool         IsNotNull() const                 { return notnull; }
 	bool         IsSeconds() const                 { return seconds; }
+	bool         IsTimeAlways() const              { return timealways; }
+	bool         IsDayEnd() const                  { return dayend; }
+
+	static Time  GetDefaultMin()                   { return ToTime(Date::Low()); }
+	static Time  GetDefaultMax()                   { return ToTime(Date::High()); }
 
 	ConvertTime(Time minval = ToTime(Date::Low()), Time maxval = ToTime(Date::High()), bool notnull = false);
 	virtual ~ConvertTime();
@@ -233,10 +265,12 @@ public:
 
 protected:
 	VectorMap<Value, Value> map;
+	Value                   default_value;
 
 public:
 	void         Clear()                                 { map.Clear(); }
 	MapConvert&  Add(const Value& a, const Value& b)     { map.Add(a, b); return *this; }
+	MapConvert&  Default(const Value& v)                 { default_value = v; return *this; }
 
 	int          GetCount() const                        { return map.GetCount(); }
 	int          Find(const Value& v) const              { return map.Find(v); }

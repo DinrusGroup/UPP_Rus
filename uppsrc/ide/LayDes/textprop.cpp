@@ -168,11 +168,11 @@ struct SmartTextEditProperty : public TextEditProperty<Editor> {
 				s++;
 			}
 			else
-			if(*s == '\\' && s[1] == 'b') {
-				r.Cat('\b');
-				s++;
-			}
-			else
+//			if(*s == '\\' && s[1] == 'b') {
+//				r.Cat('\b');
+//				s++;
+//			}
+//			else
 			if(*s == '\n' || *s >= ' ')
 				r.Cat(*s);
 		}
@@ -184,9 +184,9 @@ struct SmartTextEditProperty : public TextEditProperty<Editor> {
 			if(*s == '\1')
 				r.Cat("\\1");
 			else
-			if(*s == '\b')
-				r.Cat("\\b");
-			else
+//			if(*s == '\b')
+//				r.Cat("\\b");
+//			else
 			if(*s == '\n' || *s >= ' ')
 				r.Cat(*s);
 		}
@@ -202,7 +202,7 @@ struct TextProperty : public SmartTextEditProperty<EditString>
 	}
 
 	TextProperty() {
-		Add(editor.HSizePos(100, 2).TopPos(2));
+		Add(editor.HSizePosZ(100, 2).TopPos(2));
 		editor.SetConvert(*this);
 	}
 
@@ -223,8 +223,8 @@ struct DocProperty : public SmartTextEditProperty<DocEdit>
 
 	DocProperty() {
 		editor.UpDownLeave();
-		Add(editor.HSizePos(2, 2).TopPos(EditField::GetStdHeight() + 2, 120));
-		Add(large.RightPos(2, 16).TopPos(2, 16));
+		Add(editor.HSizePosZ(2, 2).TopPos(EditField::GetStdHeight() + 2, 120));
+		Add(large.RightPosZ(2, DPI(16)).TopPos(2, DPI(16)));
 		large.SetLabel("...");
 		large <<= THISBACK(LargeEdit);
 	}
@@ -243,7 +243,7 @@ void DocProperty::LargeEdit()
 	w.SetRect(s_texteditorpos);
 	w.Title(name.ToWString());
 	DocEdit edit;
-	edit.SetFont(Arial(14));
+	edit.SetFont(LayFont2());
 	edit <<= GetData();
 	w.Add(edit.SizePos());
 	w.Run();
@@ -262,8 +262,8 @@ struct QtfProperty : public TextEditProperty<RichTextView>
 	typedef QtfProperty CLASSNAME;
 
 	QtfProperty() {
-		Add(editor.HSizePos(2, 2).TopPos(EditField::GetStdHeight() + 2, 120));
-		Add(large.RightPos(2, 16).TopPos(2, 16));
+		Add(editor.HSizePosZ(2, 2).TopPos(EditField::GetStdHeight() + 2, Zy(120)));
+		Add(large.RightPosZ(2, 16).TopPos(2, 16));
 		large.SetLabel("...");
 		large <<= THISBACK(LargeEdit);
 		editor.SetZoom(Zoom(1, 7));

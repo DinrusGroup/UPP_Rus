@@ -1,3 +1,9 @@
+// #define MEMORY_SHRINK
+
+#ifndef  flagUSEMALLOC
+#define UPP_HEAP
+#endif
+
 #ifdef PLATFORM_WIN32
 #define __BREAK__        (*(int *)0 = 0)
 #else
@@ -12,6 +18,7 @@
 	#pragma warning(disable : 4005)
 	#pragma warning(disable : 4675)
 	#pragma warning(disable : 4996)
+	#pragma warning(disable : 4180)
 
 	#pragma setlocale("C")
 #endif
@@ -45,7 +52,7 @@ inline  void LOGNOP__() {}
 
 #define _cm_  ,
 
-#define __countof(a)          int(sizeof(a) / sizeof(a[0]))
+#define __countof(a)          int(sizeof(a) / sizeof(a[0]) )
 
 #define __Expand1(x) x(1)
 #define __Expand2(x)  __Expand1(x) x(2)
@@ -175,11 +182,6 @@ struct Callexit {
 };
 
 
-// deprecated, use INITBLOCK
-#define INITCODE(x) \
-static void COMBINE(MK__s, _fn)() { x } static UPP::Callinit MK__s(COMBINE(MK__s, _fn), __FILE__, __LINE__);
-
-
 #define INITBLOCK \
 static void COMBINE(MK__s, _fn)(); static UPP::Callinit MK__s(COMBINE(MK__s, _fn), __FILE__, __LINE__); \
 static void COMBINE(MK__s, _fn)()
@@ -187,11 +189,6 @@ static void COMBINE(MK__s, _fn)()
 #define INITBLOCK_(x) \
 static void COMBINE(x, _fn)(); static UPP::Callinit x(COMBINE(x, _fn), __FILE__, __LINE__); \
 static void COMBINE(x, _fn)()
-
-
-// deprecated, use EXITBLOCK
-#define EXITCODE(x) \
-static void COMBINE(MK__s, _fn)() { x } static UPP::Callexit MK__s(COMBINE(MK__s, _fn));
 
 
 #define EXITBLOCK \
@@ -202,6 +199,30 @@ static void COMBINE(MK__s, _fn)()
 static void COMBINE(x, _fn)(); static UPP::Callexit x(COMBINE(x, _fn)); \
 static void COMBINE(x, _fn)()
 
+#define INITIALIZE(x) \
+void x##__initializer(); \
+static struct x##__initialize_struct { x##__initialize_struct() { x##__initializer(); } } x##__initialize_dummy;
+
+#define INITIALIZER(x) \
+void x##__initializer_fn(); \
+void x##__initializer() \
+{ \
+	ONCELOCK { \
+		x##__initializer_fn(); \
+	} \
+} \
+void x##__initializer_fn()
+
+
+
+#ifdef DEPRECATED
+#define INITCODE(x) \
+static void COMBINE(MK__s, _fn)() { x } static UPP::Callinit MK__s(COMBINE(MK__s, _fn), __FILE__, __LINE__);
+
+#define EXITCODE(x) \
+static void COMBINE(MK__s, _fn)() { x } static UPP::Callexit MK__s(COMBINE(MK__s, _fn));
+#endif
+
 #ifdef min
 #undef min
 #endif
@@ -210,11 +231,107 @@ static void COMBINE(x, _fn)()
 #undef max
 #endif
 
+//$-template <class T> inline const T& min(const T& a, const T& b, ...);
+//$-template <class T> inline const T& max(const T& a, const T& b, ...);
+
 template <class T> inline const T& min(const T& a, const T& b) { return a < b ? a : b; }
 template <class T> inline const T& max(const T& a, const T& b) { return a > b ? a : b; }
 
-template <class T>
+#define E__MinMaxParam(I)  const T& COMBINE(p, I)
+#define E__MinMaxValue(I)  COMBINE(p, I)
+
+#define E__MinBody(I) \
+template <class T> \
+const T& min(const T& a, const T& b, __List##I(E__MinMaxParam)) \
+{\
+	return min(a, min(b, __List##I(E__MinMaxValue))); \
+} \
+
+__Expand40(E__MinBody)
+
+#define E__MaxBody(I) \
+template <class T> \
+const T& max(const T& a, const T& b, __List##I(E__MinMaxParam)) \
+{\
+	return max(a, max(b, __List##I(E__MinMaxValue))); \
+} \
+
+__Expand40(E__MaxBody)
+
+//$+
+
+
+template <class T> // deprecated name, use clamp
 inline T minmax(T x, T _min, T _max)                           { return min(max(x, _min), _max); }
+
+template <class T>
+inline T clamp(T x, T _min, T _max)                            { return minmax(x, _min, _max); }
+
+//$-int findarg(const T& x, const T1& p0, ...);
+inline void findarg_NOP() {} // Only to make List work for findarg
+
+#define E__TL(I)       typename COMBINE(T, I)
+#define E__NFIf(I)     findarg_NOP(); if(x == COMBINE(p, I)) return I - 1; findarg_NOP()
+#define E__NFValue(I)  const COMBINE(T, I)& COMBINE(p, I)
+
+#define E__NFBody(I) \
+template <typename T, __List##I(E__TL)> \
+int findarg(const T& x, __List##I(E__NFValue)) \
+{ \
+	__List##I(E__NFIf); \
+	return -1; \
+}
+
+__Expand40(E__NFBody)
+
+#undef E__TL
+#undef E__NFIf
+#undef E__NFValue
+#undef E__NFBody
+
+//$+
+
+//$-D decode(const T& x, const T1& p0, const V1& v0, ...);
+#define E__TL(I)       typename COMBINE(T, I), typename COMBINE(V, I)
+#define E__NFIf(I)     findarg_NOP(); if(x == COMBINE(p, I)) return COMBINE(v, I); findarg_NOP()
+#define E__NFValue(I)  const COMBINE(T, I)& COMBINE(p, I), const COMBINE(V, I)& COMBINE(v, I)
+
+#define E__NFBody(I) \
+template <typename T, __List##I(E__TL), typename D> \
+D decode(const T& x, __List##I(E__NFValue), const D& def) \
+{ \
+	__List##I(E__NFIf); \
+	return def; \
+}
+
+__Expand40(E__NFBody)
+
+#undef E__TL
+#undef E__NFIf
+#undef E__NFValue
+#undef E__NFBody
+//$+
+
+//$-const char *decode(const T& x, const T1& p0, const char *v0, ...);
+#define E__TL(I)       typename COMBINE(T, I)
+#define E__NFIf(I)     findarg_NOP(); if(x == COMBINE(p, I)) return COMBINE(v, I); findarg_NOP()
+#define E__NFValue(I)  const COMBINE(T, I)& COMBINE(p, I), const char *COMBINE(v, I)
+
+#define E__NFBody(I) \
+template <typename T, __List##I(E__TL)> \
+const char *decode(const T& x, __List##I(E__NFValue), const char *def) \
+{ \
+	__List##I(E__NFIf); \
+	return def; \
+}
+
+__Expand40(E__NFBody)
+
+#undef E__TL
+#undef E__NFIf
+#undef E__NFValue
+#undef E__NFBody
+//$+
 
 typedef unsigned char      byte;
 typedef signed char        int8;
@@ -247,13 +364,9 @@ typedef long long unsigned uint64;
 
 typedef uint64             qword;
 
-#ifdef PLATFORM_WIN32
-inline bool IsNaN(double d)        { return _isnan(d); }
-#elif __APPLE__
 inline bool IsNaN(double d)        { return std::isnan(d); }
-#else
-inline bool IsNaN(double d)        { return isnan(d); }
-#endif
+inline bool IsInf(double d)        { return std::isinf(d); }
+inline bool IsFin(double d)        { return !IsNaN(d) && !IsInf(d); }
 
 #ifdef COMPILER_MSC
 	#define I64(c) ((int64)COMBINE(c, i64))
@@ -286,13 +399,32 @@ inline bool IsNaN(double d)        { return isnan(d); }
 
 #define OFFSETOF(clss, mbr) ((int)(uintptr_t)&(((clss *)1)->mbr) - 1)
 
-#ifdef COMPILER_MSC
+template <typename T>
+T do_clone(const T& x) { return x; }
+
+template <typename T>
+T clone(const T& x) { using Upp::do_clone; return do_clone(x); }
+
 #define pick_
-#else
-#define pick_ const
+#define rval_default(T) T(T&&) = default; T& operator=(T&&) = default;
+
+template <typename T>
+auto pick(T&& x) noexcept -> decltype(std::move(x)) { return std::move(x); }
+
+template<class T> class Function;
+
+#ifdef DEPRECATED
+#define rval_ &&
+#define init_
 #endif
 
-#define init_
+#ifdef COMPILER_MSC
+#define force_inline __forceinline
+#elif defined(COMPILER_GCC)
+#define force_inline __attribute__((always_inline)) inline
+#else
+#define force_inline inline
+#endif
 
 #define BINARY(i, f) \
 extern "C" byte *i; \
@@ -308,22 +440,6 @@ extern "C" byte *i[]; \
 extern "C" int COMBINE(i, _length)[]; \
 extern "C" int COMBINE(i, _count); \
 extern "C" char *COMBINE(i, _files)[];
-
-int RegisterTypeNo__(const char *type);
-
-template <class T>
-int RegisterTypeNo___()
-{
-	return RegisterTypeNo__(typeid(T).name());
-}
-
-template <class T>
-inline int StaticTypeNo() {
-	static int typeno = -1;
-	if(typeno < 0)
-		typeno = RegisterTypeNo___<T>();
-	return typeno;
-}
 
 class NoCopy {
 private:
@@ -357,126 +473,21 @@ extern const Nuller Null;
 
 template <class T> void SetNull(T& x) { x = Null; }
 
-template <class T> bool IsNull(const T& x) { return x.IsNullInstance(); }
+template <class T> bool IsNull(const T& x)       { return x.IsNullInstance(); }
 
 template<> inline bool  IsNull(const int& i)     { return i == INT_NULL; }
 template<> inline bool  IsNull(const int64& i)   { return i == INT64_NULL; }
 template<> inline bool  IsNull(const double& r)  { return r < DOUBLE_NULL_LIM; }
 template<> inline bool  IsNull(const bool& r  )  { return false; }
 
-#if defined(flagMT)
-	#if defined(PLATFORM_WIN32) && defined(COMPILER_GCC)
-		#define flagUSEMALLOC //MINGW does not support
-	#endif
-#endif
-
-#ifndef  flagUSEMALLOC
-#define UPP_HEAP
-#endif
-
-#ifdef UPP_HEAP
-
-void *MemoryAllocPermanent(size_t size);
-
-void *MemoryAllocSz(size_t& size);
-void *MemoryAlloc(size_t size);
-void  MemoryFree(void *ptr);
-void *MemoryAlloc32();
-void  MemoryFree32(void *ptr);
-void *MemoryAlloc48();
-void  MemoryFree48(void *ptr);
-void  MemoryFreeThread();
-void  MemoryCheck();
-int   MemoryUsedKb();
-
-
-void  MemoryBreakpoint(dword serial);
-
-void  MemoryInitDiagnostics();
-void  MemoryDumpLeaks();
-
-enum MemoryProbeFlags {
-	MEMORY_PROBE_FULL    = 1,
-	MEMORY_PROBE_FREE    = 2,
-	MEMORY_PROBE_MIXED   = 4,
-	MEMORY_PROBE_LARGE   = 8,
-	MEMORY_PROBE_SUMMARY = 16,
-};
-
-#ifdef HEAPDBG
-void  MemoryIgnoreLeaksBegin();
-void  MemoryIgnoreLeaksEnd();
-
-void  MemoryCheckDebug();
-#else
-inline void  MemoryIgnoreLeaksBegin() {}
-inline void  MemoryIgnoreLeaksEnd() {}
-
-inline void  MemoryCheckDebug() {}
-#endif
-
-struct MemoryProfile {
-	int    allocated[1024];
-	int    fragmented[1024];
-	int    freepages;
-	int    large_count;
-	size_t large_size[1024];
-	size_t large_total;
-	int    large_free_count;
-	size_t large_free_size[1024];
-	int    large_free_total;
-
-	MemoryProfile();
-};
-
-MemoryProfile *PeakMemoryProfile();
-
-#else
-
-inline void  *MemoryAllocPermanent(size_t size)                { return malloc(size); }
-inline void  *MemoryAlloc(size_t size)     { return new byte[size]; }
-inline void  *MemoryAllocSz(size_t &size)  { return new byte[size]; }
-inline void   MemoryFree(void *p)          { delete[] (byte *) p; }
-inline void  *MemoryAlloc32()              { return new byte[32]; }
-inline void  *MemoryAlloc48()              { return new byte[48]; }
-inline void   MemoryFree32(void *ptr)      { delete[] (byte *)ptr; }
-inline void   MemoryFree48(void *ptr)      { delete[] (byte *)ptr; }
-inline void   MemoryInitDiagnostics()      {}
-inline void   MemoryCheck() {}
-inline void   MemoryCheckDebug() {}
-inline int    MemoryUsedKb() { return 0; }
-
-inline void  MemoryIgnoreLeaksBegin() {}
-inline void  MemoryIgnoreLeaksEnd() {}
-
-struct MemoryProfile {
-	int allocated[1024];
-	int fragmented[1024];
-	int freepages;
-	int large_count;
-	int large_size[4096];
-	int large_total;
-	int large_free_count;
-	int large_free_size[4096];
-	int large_free_total;
-
-	MemoryProfile() { memset(this, 0, sizeof(MemoryProfile)); }
-};
-
-inline MemoryProfile *PeakMemoryProfile() { return NULL; }
-
-#endif
-
-struct MemoryIgnoreLeaksBlock {
-	MemoryIgnoreLeaksBlock()  { MemoryIgnoreLeaksBegin(); }
-	~MemoryIgnoreLeaksBlock() { MemoryIgnoreLeaksEnd(); }
-};
+#include "Heap.h"
 
 #ifdef CPU_X86
 bool CpuMMX();
 bool CpuSSE();
 bool CpuSSE2();
 bool CpuSSE3();
+bool CpuHypervisor();
 #endif
 
 int  CPU_Cores();
@@ -484,98 +495,7 @@ int  CPU_Cores();
 bool IsDecentMachine();
 
 template <class T>
-inline void Swap(T& a, T& b) { T tmp = a; a = b; b = tmp; }
-
-#if defined(CPU_UNALIGNED) && defined(CPU_LE)
-inline int    Peek16le(const void *ptr)  { return *(const word *)ptr; }
-inline int    Peek32le(const void *ptr)  { return *(const dword *)ptr; }
-inline int64  Peek64le(const void *ptr)  { return *(const int64 *)ptr; }
-
-inline void   Poke16le(const void *ptr, int val)    { *(word *)ptr = val; }
-inline void   Poke32le(const void *ptr, int val)    { *(dword *)ptr = val; }
-inline void   Poke64le(const void *ptr, int64 val)  { *(int64 *)ptr = val; }
-#else
-inline int    Peek16le(const void *ptr)  { return MAKEWORD(((byte *)ptr)[0], ((byte *)ptr)[1]); }
-inline int    Peek32le(const void *ptr)  { return MAKELONG(Peek16le(ptr), Peek16le((byte *)ptr + 2)); }
-inline int64  Peek64le(const void *ptr)  { return MAKEQWORD(Peek32le(ptr), Peek32le((byte *)ptr + 4)); }
-
-inline void   Poke16le(const void *ptr, int val)    { ((byte *)ptr)[0] = LOBYTE(val); ((byte *)ptr)[1] = HIBYTE(val); }
-inline void   Poke32le(const void *ptr, int val)    { Poke16le(ptr, LOWORD(val)); Poke16le((byte *)ptr + 2, HIWORD(val)); }
-inline void   Poke64le(const void *ptr, int64 val)  { Poke32le(ptr, LODWORD(val)); Poke32le((byte *)ptr + 4, HIDWORD(val)); }
-#endif
-
-inline int    Peek16be(const void *ptr)  { return MAKEWORD(((byte *)ptr)[1], ((byte *)ptr)[0]); }
-inline int    Peek32be(const void *ptr)  { return MAKELONG(Peek16be((byte *)ptr + 2), Peek16be(ptr)); }
-inline int64  Peek64be(const void *ptr)  { return MAKEQWORD(Peek32be((byte *)ptr + 4), Peek32be(ptr)); }
-
-inline void   Poke16be(const void *ptr, int val)    { ((byte *)ptr)[1] = LOBYTE(val); ((byte *)ptr)[0] = HIBYTE(val); }
-inline void   Poke32be(const void *ptr, int val)    { Poke16be(ptr, HIWORD(val)); Poke16be((byte *)ptr + 2, LOWORD(val)); }
-inline void   Poke64be(const void *ptr, int64 val)  { Poke32be(ptr, HIDWORD(val)); Poke32be((byte *)ptr + 4, LODWORD(val)); }
-
-#if defined(CPU_X86) && (defined(COMPILER_GCC) || defined(COMPILER_MSC))
-#ifdef COMPILER_GCC
-#ifdef CPU_64
-inline word   SwapEndian16(word v)    { __asm__("xchgb %b0,%h0" : "=Q" (v) :  "0" (v)); return v; }
-inline int16  SwapEndian16(int16 v)   { __asm__("xchgb %b0,%h0" : "=Q" (v) :  "0" (v)); return v; }
-#else
-inline word   SwapEndian16(word v)    { __asm__("xchgb %b0,%h0" : "=q" (v) :  "0" (v)); return v; }
-inline int16  SwapEndian16(int16 v)   { __asm__("xchgb %b0,%h0" : "=q" (v) :  "0" (v)); return v; }
-#endif
-inline dword  SwapEndian32(dword v)   { __asm__("bswap %0" : "=r" (v) : "0" (v)); return v; }
-inline int    SwapEndian32(int v)     { __asm__("bswap %0" : "=r" (v) : "0" (v)); return v; }
-#endif
-
-#ifdef COMPILER_MSC
-#pragma intrinsic (_byteswap_ushort, _byteswap_ulong, _byteswap_uint64)
-
-inline word   SwapEndian16(word v)    { return _byteswap_ushort(v); }
-inline int16  SwapEndian16(int16 v)   { return _byteswap_ushort(v); }
-inline dword  SwapEndian32(dword v)   { return _byteswap_ulong(v); }
-inline int    SwapEndian32(int v)     { return _byteswap_ulong(v); }
-#endif
-
-inline void   EndianSwap(word& v)     { v = SwapEndian16(v); }
-inline void   EndianSwap(int16& v)    { v = SwapEndian16(v); }
-inline void   EndianSwap(dword& v)    { v = SwapEndian32(v); }
-inline void   EndianSwap(int& v)      { v = SwapEndian32(v); }
-
-#else
-inline void   EndianSwap(word& v)     { byte *x = (byte *)(&v); Swap(x[0], x[1]); }
-inline void   EndianSwap(int16& v)    { EndianSwap(*(word *)&v); }
-inline void   EndianSwap(dword& v)    { byte *x = (byte *)&v; Swap(x[0], x[3]); Swap(x[1], x[2]); }
-inline void   EndianSwap(int& v)      { EndianSwap(*(dword *)&v); }
-inline word   SwapEndian16(word v)    { EndianSwap(v); return v; }
-inline int16  SwapEndian16(int16 v)   { EndianSwap(v); return v; }
-inline dword  SwapEndian32(dword v)   { EndianSwap(v); return v; }
-inline int    SwapEndian32(int v)     { EndianSwap(v); return v; }
-#endif
-
-#if defined(CPU_AMD64) && (defined(COMPILER_GCC) || defined(COMPILER_MSC))
-#ifdef COMPILER_GCC
-inline uint64  SwapEndian64(uint64 v) { __asm__("bswap %0" : "=r" (v) : "0" (v)); return v; }
-inline int64   SwapEndian64(int64 v)  { __asm__("bswap %0" : "=r" (v) : "0" (v)); return v; }
-#endif
-#ifdef COMPILER_MSC
-inline uint64  SwapEndian64(uint64 v) { return _byteswap_uint64(v); }
-inline int64   SwapEndian64(int64 v)  { return _byteswap_uint64(v); }
-#endif
-
-inline void   EndianSwap(int64& v)    { v = SwapEndian64(v); }
-inline void   EndianSwap(uint64& v)   { v = SwapEndian64(v); }
-
-#else
-inline void   EndianSwap(int64& v)    { byte *x = (byte *)&v; Swap(x[0], x[7]); Swap(x[1], x[6]); Swap(x[2], x[5]); Swap(x[3], x[4]); }
-inline void   EndianSwap(uint64& v)   { EndianSwap(*(int64 *)&v); }
-inline int64  SwapEndian64(int64 v)   { EndianSwap(v); return v; }
-inline uint64 SwapEndian64(uint64 v)  { EndianSwap(v); return v; }
-#endif
-
-void EndianSwap(word *v, int count);
-void EndianSwap(int16 *v, int count);
-void EndianSwap(dword *v, int count);
-void EndianSwap(int *v, int count);
-void EndianSwap(int64 *v, int count);
-void EndianSwap(uint64 *v, int count);
+inline void Swap(T& a, T& b) { T tmp = pick(a); a = pick(b); b = pick(tmp); }
 
 //Quick fix....
 #ifdef PLATFORM_WINCE
@@ -592,3 +512,35 @@ void __LOGF__(const char *format, ...);
 #else
 inline void __LOGF__(const char *format, ...);
 #endif
+
+template <class T>
+void IGNORE_RESULT(const T&) {}
+
+// Backward compatibility
+
+#define GLOBAL_VP(type, name, param) \
+name() \
+{ \
+	static type x param; \
+	return x; \
+}
+
+#define GLOBAL_VARP(type, name, param) \
+type& GLOBAL_VP(type, name, param)
+
+#define GLOBAL_V(type, name)   GLOBAL_VP(type, name, init_)
+#define GLOBAL_VAR(type, name) type& GLOBAL_V(type, name)
+
+#define GLOBAL_VP_INIT(type, name, param) \
+name() \
+{ \
+	static type x param; \
+	return x; \
+} \
+INITBLOCK { name(); }
+
+#define GLOBAL_VARP_INIT(type, name, param) \
+type& GLOBAL_VP_INIT(type, name, param)
+
+#define GLOBAL_V_INIT(type, name)   GLOBAL_VP_INIT(type, name, init_)
+#define GLOBAL_VAR_INIT(type, name) type& GLOBAL_V_INIT(type, name)

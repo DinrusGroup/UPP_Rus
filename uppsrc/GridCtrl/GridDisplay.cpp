@@ -1,6 +1,6 @@
 #include <CtrlLib/CtrlLib.h>
 
-NAMESPACE_UPP
+namespace Upp {
 
 #include "GridDisplay.h"
 #define  IMAGECLASS GridImg
@@ -8,7 +8,12 @@ NAMESPACE_UPP
 #include <Draw/iml_source.h>
 #include "GridUtils.h"
 
-GridDisplay StdGridDisplay;
+
+GridDisplay& StdGridDisplay()
+{
+	static GridDisplay h;
+	return h;
+}
 
 static Image (*vhdr[])() =
 {
@@ -28,6 +33,7 @@ void GridDisplay::SetDefault()
 	SetHorzMargin();
 	SetVertMargin();
 	SetTheme();
+	ReverseSortIcon(false);
 }
 
 void GridDisplay::SetTheme(int th)
@@ -79,6 +85,7 @@ void GridDisplay::Paint(Draw &w, int x, int y, int cx, int cy, const Value &val,
 			Size isz = leftImg.GetSize();
 			w.DrawImage(nx, ny + (cy - isz.cy) / 2, style & GD::READONLY ? Grayscale(leftImg) : leftImg);
 			nx += isz.cx + 3;
+			ncx -= isz.cx + 3;
 		}
 		if(!rightImg.IsEmpty())
 		{
@@ -210,34 +217,49 @@ void GridDisplay::PaintFixed(Draw &w, bool firstx, bool firsty, int x, int y, in
 			tx += tsz.cx;
 		}
 
-		if(sortmode == 1)
-			w.DrawImage(xf, yf, GridImg::SortAsc(), col);
-		else
-			w.DrawImage(xf, yf, GridImg::SortDsc(), col);
+		bool asc = sortmode == 1;
+		if(reverse_sort_icon)
+			asc = !asc;
+		
+		w.DrawImage(xf, yf, asc ? GridImg::SortAsc() : GridImg::SortDsc(), col);
 
 		tx += 3;
 	}
+	
 	if(indicator)
 	{
 		w.Clip(x, y, cx, cy);
+
+		Image img;
+		
 		if((style & GD::CURSOR) && (style & GD::SELECT))
 		{
-			Size isz = GridImg::FocSel().GetSize();
-			w.DrawImage(x + (cx - isz.cx) / 2, y + (cy - isz.cy) / 2, GridImg::FocSel(), col);
+			img = GridImg::FocSel();
 		}
 		else if(style & GD::CURSOR)
 		{
-			Size isz = GridImg::Focused().GetSize();
-			w.DrawImage(x + (cx - isz.cx) / 2, y + (cy - isz.cy) / 2, GridImg::Focused(), col);
+			img = GridImg::Focused();
 		}
 		else if(style & GD::SELECT)
 		{
-			Size isz = GridImg::Selected().GetSize();
-			w.DrawImage(x + (cx - isz.cx) / 2, y + (cy - isz.cy) / 2, GridImg::Selected(), col);
+			img = GridImg::Selected();
 		}
+
+		if(!img.IsEmpty())
+		{
+			Size isz = img.GetSize();
+			int xp = IsNull(val)
+				? x + (cx - isz.cx) / 2
+				: tx;
+			w.DrawImage(xp, y + (cy - isz.cy) / 2, img, col);
+			if(!IsNull(val))
+				tx += isz.cx + 3;
+		}
+		
 		w.End();
 	}
-	else if(cx > lm + rm && cy > tm + bm)
+	
+	if(cx > lm + rm && cy > tm + bm)
 	{
 		int nx = x + lm;
 		int ny = y + tm;
@@ -261,8 +283,6 @@ int GridDisplay::GetLinesCount(int cx, const wchar* s, const Font& font, bool wr
 	if(*s == 0)
 		return 0;
 
-	int tcy = font.Info().GetHeight();
-
 	const wchar *p = s;
 	const wchar *t = s;
 		
@@ -280,7 +300,7 @@ int GridDisplay::GetLinesCount(int cx, const wchar* s, const Font& font, bool wr
 		{
 			if(p - e > 0 && wrap)
 			{
-				int tcx = GetTextSize(e, font, p - e).cx;
+				int tcx = GetTextSize(e, font, int(p - e)).cx;
 				if(tcx > cx)
 				{
 					lines += tcx / ccx;
@@ -312,7 +332,7 @@ void GridDisplay::DrawText(Draw &w, int mx, int x, int y, int cx, int cy, int al
 	const wchar *t = s;
 
 	int lines = 0;
-	int enters = 0;
+//	int enters = 0;
 
 	int ty = y;
 	Size tsz;
@@ -345,8 +365,15 @@ void GridDisplay::DrawText(Draw &w, int mx, int x, int y, int cx, int cy, int al
 		
 		if(nextline || endtext)
 		{
+			/*int kk = p - t;
+			if(p - t <= 1)
+			{
+				//break;
+				kk = 0;
+			}*/
+
 			int tx = x;
-			tsz = GetTextSize(t, font, p - t);
+			tsz = GetTextSize(t, font, int(p - t));
 
 			if(tsz.cx > gcx)
 			{
@@ -379,8 +406,8 @@ void GridDisplay::DrawText(Draw &w, int mx, int x, int y, int cx, int cy, int al
 
 			if(found)
 			{
-				int chs = t - s;
-				int che = p - s - 1;
+				int chs = int(t - s);
+				int che = int(p - s - 1);
 
 				if(fs <= che && fe >= chs)
 				{
@@ -403,12 +430,12 @@ void GridDisplay::DrawText(Draw &w, int mx, int x, int y, int cx, int cy, int al
 				if(p > t)
 				{
 					w.Clip(x, y, cx - isz.cx , cy);
-					w.DrawText(max(mx, tx), ty, t, font, tfg, p - t);
+					w.DrawText(max(mx, tx), ty, t, font, tfg, int(p - t));
 					w.End();
 				}
 			}
 			else
-				w.DrawText(max(mx, tx), ty, t, font, tfg, p - t);
+				w.DrawText(max(mx, tx), ty, t, font, tfg, int(p - t));
 
 			ty += tcy;
 			t = textbreak ? p : (p = pp + 1);
@@ -427,4 +454,4 @@ void GridDisplay::DrawText(Draw &w, int mx, int x, int y, int cx, int cy, int al
 	}
 }
 
-END_UPP_NAMESPACE
+}

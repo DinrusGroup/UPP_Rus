@@ -38,6 +38,10 @@ String  GetFullPath(const char *path);
 String  GetCurrentDirectory();
 #endif
 
+#ifdef PLATFORM_POSIX
+bool SetCurrentDirectory(const char *path);
+#endif
+
 struct FileTime;
 
 int Compare_FileTime(const FileTime& fa, const FileTime& fb);
@@ -50,14 +54,12 @@ struct FileTime : FILETIME, CompareRelOps<const FileTime&, &Compare_FileTime> {
 	                                      dwHighDateTime = ft.dwHighDateTime; }
 };
 
-class  FindFile {
-	WIN32_FIND_DATA  *a;
-	WIN32_FIND_DATAW *w;
+class  FindFile : NoCopy {
+	WIN32_FIND_DATAW  data[1];
 	HANDLE            handle;
 	String            pattern;
 	String            path;
 
-	void        Init();
 	bool        Next0();
 	void        Close();
 
@@ -65,27 +67,28 @@ public:
 	bool        Search(const char *path);
 	bool        Next();
 
-	dword       GetAttributes() const;
+	dword       GetAttributes() const      { return data->dwFileAttributes; }
 	String      GetName() const;
+	String      GetPath() const;
 	int64       GetLength() const;
-	FileTime    GetCreationTime() const;
-	FileTime    GetLastAccessTime() const;
-	FileTime    GetLastWriteTime() const;
+	FileTime    GetCreationTime() const    { return data->ftCreationTime; }
+	FileTime    GetLastAccessTime() const  { return data->ftLastAccessTime; }
+	FileTime    GetLastWriteTime() const   { return data->ftLastWriteTime; }
 
-	bool        IsDirectory() const;
+	bool        IsDirectory() const        { return GetAttributes() & FILE_ATTRIBUTE_DIRECTORY; }
 	bool        IsFolder() const;
-	bool        IsFile() const           { return !IsDirectory(); }
+	bool        IsFile() const             { return !IsDirectory(); }
 	bool        IsSymLink() const;
 	bool        IsExecutable() const;
 
-	bool        IsArchive() const;
-	bool        IsCompressed() const;
-	bool        IsHidden() const;
-	bool        IsReadOnly() const;
-	bool        IsSystem() const;
-	bool        IsTemporary() const;
+	bool        IsArchive() const          { return GetAttributes() & FILE_ATTRIBUTE_ARCHIVE; }
+	bool        IsCompressed() const       { return GetAttributes() & FILE_ATTRIBUTE_COMPRESSED; }
+	bool        IsHidden() const           { return GetAttributes() & FILE_ATTRIBUTE_HIDDEN; }
+	bool        IsReadOnly() const         { return GetAttributes() & FILE_ATTRIBUTE_READONLY; }
+	bool        IsSystem() const           { return GetAttributes() & FILE_ATTRIBUTE_SYSTEM; }
+	bool        IsTemporary() const        { return GetAttributes() & FILE_ATTRIBUTE_TEMPORARY; }
 
-	operator    bool() const             { return handle != INVALID_HANDLE_VALUE; }
+	operator    bool() const               { return handle != INVALID_HANDLE_VALUE; }
 
 	FindFile();
 	FindFile(const char *name);
@@ -108,7 +111,7 @@ struct FileTime : CompareRelOps<const FileTime&, &Compare_FileTime>
 
 inline int Compare_FileTime(const FileTime& f, const FileTime& g) { return f.ft < g.ft ? -1 : f.ft > g.ft ? 1 : 0; }
 
-class FindFile {
+class FindFile : NoCopy {
 	bool           file;
 	DIR           *dir;
 	mutable bool   statis;
@@ -118,6 +121,7 @@ class FindFile {
 	String         pattern;
 
 	struct stat &Stat() const;
+	bool CanMode(dword usr, dword grp, dword oth) const;
 
 public:
 	bool        Search(const char *name);
@@ -126,12 +130,20 @@ public:
 
 	dword       GetMode() const           { return Stat().st_mode; }
 	String      GetName() const           { return name; }
+	String      GetPath() const;
 	int64       GetLength() const         { return Stat().st_size; }
 	FileTime    GetLastChangeTime() const { return Stat().st_ctime; }
 	FileTime    GetLastAccessTime() const { return Stat().st_atime; }
 	FileTime    GetLastWriteTime() const  { return Stat().st_mtime; }
 
-	bool        IsReadOnly() const        { return !(GetMode() & (S_IWUSR|S_IWGRP|S_IWOTH)); }
+	uid_t       GetUid()                  { return Stat().st_uid; }
+	gid_t       GetGid()                  { return Stat().st_gid; }
+
+	bool        CanRead() const           { return CanMode(S_IRUSR, S_IRGRP, S_IROTH); }
+	bool        CanWrite() const          { return CanMode(S_IWUSR, S_IWGRP, S_IWOTH); }
+	bool        CanExecute() const        { return CanMode(S_IXUSR, S_IXGRP, S_IXOTH); }
+
+	bool        IsReadOnly() const        { return CanRead() && !CanWrite(); }
 
 	bool        IsHidden() const          { return *name == '.'; }
 	bool        IsDirectory() const       { return S_ISDIR(GetMode()); }
@@ -257,7 +269,7 @@ public:
 	bool                    IsWin32() const { return GetStyle() & STYLE_WIN32; }
 	bool                    IsPosix() const { return GetStyle() & STYLE_POSIX; }
 
-	virtual Array<FileInfo> Find(String mask, int max_count = 1000000) const; // mask = Null -> root
+	virtual Array<FileInfo> Find(String mask, int max_count = 1000000, bool unmounted = false) const; // mask = Null -> root
 	virtual bool            CreateFolder(String path, String& error) const;
 
 	bool                    FolderExists(String path) const;
@@ -286,9 +298,13 @@ public:
 	enum {
 		UNKNOWN, NETWORK, GROUP, SERVER, SHARE
 	};
-	String         GetName() const    { return name; }
-	String         GetPath() const    { return path; }
+	String         GetName() const     { return name; }
+	String         GetPath() const     { return path; }
 	int            GetDisplayType() const;
+	String         GetRemote() const   { return remote; }
+	String         GetLocal() const    { return local; }
+	String         GetProvider() const { return provider; }
+	String         GetComment() const  { return comment; }
 	Array<NetNode> Enum() const;
 
 	void           Serialize(Stream& s);

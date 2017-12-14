@@ -5,6 +5,11 @@ Ide::Ide()
 	verbose = false;
 }
 
+bool Ide::IsVerbose() const
+{
+	return verbose;
+}
+
 void Ide::PutConsole(const char *s)
 {
 	console << s << "\n";
@@ -31,19 +36,19 @@ String Ide::IdeGetOneFile() const
 	return onefile;
 }
 
-int Ide::IdeConsoleExecute(const char *cmdline, Stream *out, const char *envptr, bool quiet)
+int Ide::IdeConsoleExecute(const char *cmdline, Stream *out, const char *envptr, bool quiet, bool)
 {
 	return console.Execute(cmdline, out, envptr, quiet);
 }
 
-int Ide::IdeConsoleExecuteWithInput(const char *cmdline, Stream *out, const char *envptr, bool quiet)
+int Ide::IdeConsoleExecuteWithInput(const char *cmdline, Stream *out, const char *envptr, bool quiet, bool noconvert)
 {
 	return 0;
 }
 
-int Ide::IdeConsoleExecute(One<SlaveProcess> process, const char *cmdline, Stream *out, bool quiet)
+int Ide::IdeConsoleExecute(One<AProcess> process, const char *cmdline, Stream *out, bool quiet)
 {
-	return console.Execute(process, cmdline, out, quiet);
+	return console.Execute(pick(process), cmdline, out, quiet);
 }
 
 int Ide::IdeConsoleAllocSlot()
@@ -56,9 +61,9 @@ bool Ide::IdeConsoleRun(const char *cmdline, Stream *out, const char *envptr, bo
 	return console.Run(cmdline, out, envptr, quiet, slot, key, blitz_count);
 }
 
-bool Ide::IdeConsoleRun(One<SlaveProcess> process, const char *cmdline, Stream *out, bool quiet, int slot, String key, int blitz_count)
+bool Ide::IdeConsoleRun(One<AProcess> process, const char *cmdline, Stream *out, bool quiet, int slot, String key, int blitz_count)
 {
-	return console.Run(process, cmdline, out, quiet, slot, key, blitz_count);
+	return console.Run(pick(process), cmdline, out, quiet, slot, key, blitz_count);
 }
 
 void Ide::IdeConsoleFlush()
@@ -79,6 +84,17 @@ void Ide::IdeConsoleEndGroup()
 bool Ide::IdeConsoleWait()
 {
 	return console.Wait();
+}
+
+bool Ide::IdeConsoleWait(int slot)
+{
+	console.Wait(0);
+	return true;
+}
+
+void Ide::IdeConsoleOnFinish(Event<> cb)
+{
+	console.OnFinish(cb);
 }
 
 bool Ide::IdeIsDebug() const

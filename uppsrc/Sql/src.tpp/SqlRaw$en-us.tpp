@@ -1,4 +1,4 @@
-topic "class SqlRaw : public String, private AssignValueTypeNo<SqlRaw, SQLRAW_V> ";
+topic "SqlRaw";
 [2 $$0,0#00000000000000000000000000000000:Default]
 [l288;i1120;a17;O9;~~~.1408;2 $$1,0#10431211400427159095818037425705:param]
 [a83;*R6 $$2,5#31310162474203024125188417583966:caption]
@@ -25,8 +25,7 @@ topic "class SqlRaw : public String, private AssignValueTypeNo<SqlRaw, SQLRAW_V>
 [0 $$23,0#96390100711032703541132217272105:end]
 [{_}%EN-US 
 [s22;:SqlRaw`:`:class:%- [@(0.0.255) class]_[* SqlRaw]_:_[@(0.0.255) public]_[*@3 String], 
-[@(0.0.255) private]_[*@3 AssignValueTypeNo][@(0.0.255) <][* SqlRaw], 
-SQLRAW`_V[@(0.0.255) >]_&]
+[*@3 ValueType][@(0.0.255) <][* SqlRaw], SQLRAW`_V[@(0.0.255) >]_&]
 [s6; This type represents a string with binary data. It is required 
 because otherwise Sql interface would be unable to tell which 
 sql statement parameters should be treated as regular texts and 
@@ -34,4 +33,4 @@ which parameters are raw binary data (to be stored into raw binary
 data columns).&]
 [s6; Note that only input parameters `- values in Insert/Update statements 
 `- can be SqlRaw. When fetching data from database, normal String 
-values are returned for binary columns.]
+values are returned for binary columns.]]

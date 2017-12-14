@@ -26,6 +26,7 @@ class DispatcherTest : public WithDispatcherTestLayout<TopWindow>
 public:
 	typedef DispatcherTest CLASSNAME;
 	DispatcherTest();
+	~DispatcherTest();
 	
 	void sliderCB();
 
@@ -36,4 +37,3 @@ public:
 };
 
 #endif
-

@@ -5,9 +5,11 @@
 #include <sql.h>
 #include <sqlext.h>
 
-NAMESPACE_UPP
+// debian: sudo apt-get install unixodbc-dev
 
-bool   ODBCPerformScript(const String& text, StatementExecutor& executor, Gate2<int, int> progress_canceled = false);
+namespace Upp {
+
+bool   ODBCPerformScript(const String& text, StatementExecutor& executor, Gate<int, int> progress_canceled = Null);
 
 class ODBCConnection;
 
@@ -42,19 +44,30 @@ private:
 	HSTMT                 hstmt;
 	String                user;
 	int                   tlevel;
-	ODBCConnection       *current;
+	int                   tmode;
+	int                   charset = -1;
 
 	void   FlushConnections();
 	bool   IsOk(SQLRETURN ret);
 
 public:
+	static Array< Tuple2<String, String> > EnumDSN();
+
 	bool Connect(const char *cs);
 	void Close();
+	
+	enum TransactionMode {
+		NORMAL,              // autocommit at level 0, no Commit or Rollback allowed at level 0 (default)
+		IMPLICIT             // Oracle-style Commit and Rollback at level 0
+	};
+
+	void    SetTransactionMode(int mode);
+	void    Charset(int cs)                              { charset = cs; }
 
 	ODBCSession();
 	~ODBCSession();
 };
 
-END_UPP_NAMESPACE
+}
 
 #endif

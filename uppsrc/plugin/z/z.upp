@@ -1,6 +1,6 @@
 description "zlib compressor/decompressor and its U++ encapsulation\3770,128,128";
 
-optimize_speed;
+options(BUILDER_OPTION) NOWARNINGS;
 
 flags(NOTMFC) "!GUI !CONSOLE";
 
@@ -15,7 +15,7 @@ file
 	lib\crc32.h,
 	lib\deflate.c,
 	lib\deflate.h,
-	lib\gzio.c,
+	lib\gzguts.h,
 	lib\infback.c,
 	lib\inffast.c,
 	lib\inffast.h,
@@ -30,5 +30,8 @@ file
 	lib\zconf.h,
 	lib\zlib.h,
 	lib\zutil.c,
-	lib\zutil.h;
+	lib\zutil.h,
+	lib\ChangeLog,
+	lib\README,
+	Copying;
 

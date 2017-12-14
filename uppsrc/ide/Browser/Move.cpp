@@ -14,9 +14,9 @@ void MoveTopicDlg::Package()
 {
 	String g = ~group;
 	group.Clear();
-	group.Add("src", "Справка (src)");
-	group.Add("srcdoc", "Документы (srcdoc)");
-	group.Add("srcimp", "Реализация (srcimp)");
+	group.Add("src", "Reference (src)");
+	group.Add("srcdoc", "Documents (srcdoc)");
+	group.Add("srcimp", "Implementation (srcimp)");
 	FindFile ff(SourcePath(~package, "*.tpp"));
 	while(ff) {
 		if(ff.IsFolder()) {
@@ -34,7 +34,7 @@ void MoveTopicDlg::Package()
 
 MoveTopicDlg::MoveTopicDlg()
 {
-	CtrlLayoutOKCancel(*this, "Переместить тематику");
+	CtrlLayoutOKCancel(*this, "Move topic");
 
 	topic.NotNull();
 	topic.MaxLen(30);
@@ -66,7 +66,7 @@ void TopicEditor::MoveTopic()
 	String np = AppendFileName(SourcePath(~dlg.package, (String)~dlg.group + ".tpp"),
 	                           (String)~dlg.topic + "$" + ToLower(LNGAsText(~dlg.lang)) + ".tpp");
 	if(FindFile(np)) {
-		if(!PromptYesNo("Целевой файл уже существует!&Хотите переписать его?"))
+		if(!PromptYesNo("Target file aready exists!&Do you want to overwrite it?"))
 			return;
 		FileDelete(np);
 	}
@@ -74,7 +74,7 @@ void TopicEditor::MoveTopic()
 	RealizeDirectory(GetFileFolder(np));
 	String pi = ForceExt(p, ".tppi");
 	if(!SaveFile(np, LoadFile(p))) {
-		Exclamation("Операция провалилась!");
+		Exclamation("Operation failed!");
 		TopicCursor();
 		return;
 	}

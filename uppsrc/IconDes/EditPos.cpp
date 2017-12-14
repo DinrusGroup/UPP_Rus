@@ -1,6 +1,6 @@
 #include "IconDes.h"
 
-NAMESPACE_UPP
+namespace Upp {
 
 bool IsSelection(const Image& m) {
 	const RGBA *s = m;
@@ -16,8 +16,8 @@ bool IsSelection(const Image& m) {
 IconDes::EditPos IconDes::GetEditPos()
 {
 	EditPos e;
-	e.cursor = list.GetCursor();
-	e.sc = list.GetCursorSc();
+	e.cursor = ilist.GetKey();
+	e.sc = ilist.GetScroll();
 	e.slot.Clear();
 	e.slot.SetCount(slot.GetCount());
 	for(int i = 0; i < slot.GetCount(); i++) {
@@ -51,13 +51,12 @@ void IconDes::SetEditPos(const EditPos& e)
 			c.undo = es.undo;
 			c.redo = es.redo;
 		}
-		if(e.cursor >= 0 && e.cursor < list.GetCount()) {
-			list.SetCursor(e.cursor);
-			list.ScCursor(e.sc);
+		if(e.cursor >= 0 && e.cursor < slot.GetCount()) {
+			ilist.ScrollTo(e.sc);
+			GoTo(e.cursor);
 		}
 	}
-	list.ScrollIntoCursor();
 	SyncImage();
 }
 
-END_UPP_NAMESPACE
+}

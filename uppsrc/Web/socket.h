@@ -64,15 +64,15 @@ public:
 	};
 
 	Socket()                                                 { ClearError(); }
-	Socket(One<Data> data) : data(data)                      { ClearError(); if(data) data->sock = this; }
-	Socket(pick_ Socket& s) : data(s.data)                   { ClearError(); if(data) data->sock = this; }
+	Socket(One<Data>& data) : data(pick(data))               { ClearError(); if(data) data->sock = this; }
+	Socket(pick_ Socket& s) : data(pick(s.data))             { ClearError(); if(data) data->sock = this; }
 
-	Socket&         operator = (pick_ Socket& s)             { ClearError(); data = s.data; if(data) data->sock = this; return *this; }
+	Socket&         operator = (pick_ Socket& s)             { ClearError(); data = pick(s.data); if(data) data->sock = this; return *this; }
 
 	static void     Init();
 
-	void            Attach(One<Data> d)                      { data = d; data->sock = this; ClearError(); }
-	void            Clear()                                  { if(!data.IsPicked() && data) data->sock = NULL; data.Clear(); }
+	void            Attach(One<Data>& d)                     { data = pick(d); data->sock = this; ClearError(); }
+	void            Clear()                                  { if(data) data->sock = NULL; data.Clear(); }
 
 	bool            IsOpen() const                           { return data && data->IsOpen(); }
 
@@ -149,11 +149,13 @@ private:
 	One<Data>       data;
 	bool            is_error;
 	int             errorcode;
-	String          errordesc;	
+	String          errordesc;
+	
+	friend bool SSLSecureSocket(Socket& socket);
 };
 
 #ifdef PLATFORM_WIN32
-class SocketEvent : public Event {
+class SocketEvent : public Win32Event {
 public:
 	SocketEvent() {}
 

@@ -57,10 +57,15 @@
 	virtual bool Select(String range);								\
 	virtual bool Select(int fromX, int fromY, int toX, int toY);	\
 	virtual bool Select();											\
+	virtual bool EnableCommandVars(bool enable); 				\
 																\
-	virtual void DefMatrix(int width, int height);				\
-	virtual bool FillSelectionMatrix();							\
-	virtual void SetMatrixValue(int i, int j, ::Value value);	\
+	virtual bool MatrixAllocate(int width, int height);			\
+	virtual bool MatrixDelete();								\
+	virtual bool MatrixSetSelection();							\
+	virtual bool MatrixSet(int fromX, int fromY, Vector<Vector < ::Value> > &data);		\
+	virtual bool MatrixSetValue(int i, int j, ::Value value);							\
+	virtual bool MatrixGet(int fromX, int fromY, int width, int height, Vector<Vector < ::Value> > &data);		\
+	virtual bool MatrixGetValue(int i, int j, ::Value &value);							\
 														\
 	virtual bool Print();								\
 														\
@@ -86,6 +91,7 @@
 	virtual bool WriteText(String value);					\
 															\
 	virtual bool Select();									\
+	virtual bool EnableCommandVars(bool enable); 			\
 															\
 	virtual bool Replace(String search, String replace);	\
 															\

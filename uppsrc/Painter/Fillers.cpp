@@ -1,7 +1,7 @@
 #include "Painter.h"
 #include "Fillers.h"
 
-NAMESPACE_UPP
+namespace Upp {
 
 void FillRGBA(RGBA *t, RGBA c, int len)
 {
@@ -137,7 +137,7 @@ void SubpixelFiller::RenderN(int val, int h, int n)
 	int hh;
 	v += n;
 	switch(n) {
-	case 1: 
+	case 1:
 		w[-2] += h;
 		w[-1] += h2;
 		w[1] += h2;
@@ -217,7 +217,7 @@ void SubpixelFiller::Render(int val, int len)
 	if(len > 6) {
 		int q = (3333333 - (v + 2 - begin)) % 3;
 		len -= q + 2;
-		int l = v + 2 + q - begin;
+		int l = int(v + 2 + q - begin);
 		RenderN(val, h, q + 4);
 		Write(l / 3);
 		l = len / 3;
@@ -238,7 +238,7 @@ void SubpixelFiller::Render(int val, int len)
 		else {
 			if(val == 256)
 				if(!ss && color.a == 255) {
-					FillRGBA(t, color, e - t);
+					FillRGBA(t, color, int(e - t));
 					t = e;
 				}
 				else
@@ -272,19 +272,19 @@ void SubpixelFiller::Write(int len)
 		if(t->a != 255)
 			AlphaBlendCover8(*t, c, (q[0] + q[1] + q[2]) / 3);
 		else
-			if(c.a == 255) {
-				t->r = (c.r * q[0] >> 8) + ((257 - q[0]) * t->r >> 8);
-				t->g = (c.g * q[1] >> 8) + ((257 - q[1]) * t->g >> 8);
-				t->b = (c.b * q[2] >> 8) + ((257 - q[2]) * t->b >> 8);
-			}
-			else {
-				a = c.a * q[0] >> 8;
-				t->r = (c.r * q[0] >> 8) + ((256 - a - (a >> 7)) * t->r >> 8);
-				a = c.a * q[1] >> 8;
-				t->g = (c.g * q[1] >> 8) + ((256 - a - (a >> 7)) * t->g >> 8);
-				a = c.a * q[2] >> 8;
-				t->b = (c.b * q[2] >> 8) + ((256 - a - (a >> 7)) * t->b >> 8);
-			}
+		if(c.a == 255) {
+			t->r = (c.r * q[0] >> 8) + ((257 - q[0]) * t->r >> 8);
+			t->g = (c.g * q[1] >> 8) + ((257 - q[1]) * t->g >> 8);
+			t->b = (c.b * q[2] >> 8) + ((257 - q[2]) * t->b >> 8);
+		}
+		else {
+			a = c.a * q[0] >> 8;
+			t->r = (c.r * q[0] >> 8) + ((256 - a - (a >> 7)) * t->r >> 8);
+			a = c.a * q[1] >> 8;
+			t->g = (c.g * q[1] >> 8) + ((256 - a - (a >> 7)) * t->g >> 8);
+			a = c.a * q[2] >> 8;
+			t->b = (c.b * q[2] >> 8) + ((256 - a - (a >> 7)) * t->b >> 8);
+		}
 		t++;
 		q += 3;
 	}
@@ -293,7 +293,7 @@ void SubpixelFiller::Write(int len)
 void SubpixelFiller::End()
 {
 	v[3] = v[4] = v[5] = 0;
-	Write((v + 3 - begin) / 3);
+	Write(int(v + 3 - begin) / 3);
 }
 
 void SpanFiller::Start(int minx, int maxx)
@@ -308,7 +308,7 @@ void SpanFiller::Render(int val)
 	if(alpha != 256)
 		val = alpha * val >> 8;
 	AlphaBlendCover8(*t++, *s++, val);
-} 
+}
 
 void SpanFiller::Render(int val, int len)
 {
@@ -317,19 +317,23 @@ void SpanFiller::Render(int val, int len)
 		s += len;
 		return;
 	}
-	const RGBA *e = t + len;
 	if(alpha != 256)
 		val = alpha * val >> 8;
-	if(val == 256)
-		while(t < e) {
-			if(s->a == 255)
-				*t++ = *s++;
+	if(val == 256) {
+		for(int i = 0; i < len; i++) {
+			if(s[i].a == 255)
+				t[i] = s[i];
 			else
-				AlphaBlend(*t++, *s++);
+				AlphaBlend(t[i], s[i]);
 		}
-	else
+		t += len;
+		s += len;
+	}
+	else {
+		const RGBA *e = t + len;
 		while(t < e)
 			AlphaBlendCover8(*t++, *s++, val);
+	}
 }
 
 ClipFiller::ClipFiller(int _cx)
@@ -415,7 +419,7 @@ void ClipFiller::Finish(ClippingLine& cl)
 	if(full)
 		cl.SetFull();
 	else
-		cl.Set(~buffer, t - ~buffer);
+		cl.Set(~buffer, int(t - ~buffer));
 }
 
 void MaskFillerFilter::Render(int val)
@@ -507,4 +511,4 @@ void NoAAFillerFilter::Render(int val)
 	t->Render(val < 128 ? 0 : 256);
 }
 
-END_UPP_NAMESPACE
+}

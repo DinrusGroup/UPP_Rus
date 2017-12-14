@@ -1,10 +1,10 @@
 #ifdef _WIN32
 
 #include <CtrlLib/CtrlLib.h>
+#include "ActiveX.h"
 
 using namespace Upp;
-
-#include "ActiveX.h"
+//NAMESPACE_UPP
 
 bool BSTRSet(const String str, BSTR &bstr) {
 	wchar_t *buffer;
@@ -29,7 +29,7 @@ String BSTRGet(BSTR &bstr) {
 	if (!(buffer = (char *)GlobalAlloc(GMEM_FIXED, sizeof(wchar_t) * size)))
 		return Null;
 	
-	int i = wcstombs(buffer, bstr, size);
+	size_t i = wcstombs(buffer, bstr, size);
 	buffer[i] = 0;
 	
 	String ret = buffer;
@@ -60,7 +60,7 @@ bool CBSTR::Set(const String str) {
 }
 
 DHCtrlActiveX::DHCtrlActiveX(CLSID clsid, const String name, bool status) : 
-						oleObj(0), pClientSite(0), clsid(clsid), name(name), status(status) {}
+						clsid(clsid), name(name), status(status), oleObj(0), pClientSite(0) {}
 
 DHCtrlActiveX::~DHCtrlActiveX(void) {
 	Detach();
@@ -77,7 +77,7 @@ DHCtrlActiveX &DHCtrlActiveX::SetStatus(bool _status) {
 		BackPaint(FULLBACKPAINT);
 	}
 	return *this;
-};
+}
           
 LRESULT DHCtrlActiveX::WindowProc(UINT message, WPARAM wParam, LPARAM lParam) {
 	if (status) {
@@ -373,5 +373,7 @@ HRESULT STDMETHODCALLTYPE AXClientSite::DeactivateAndUndo() {
 HRESULT STDMETHODCALLTYPE AXClientSite::OnPosRectChange(LPCRECT lprcPosRect) {
 	return S_OK;
 }
+
+//END_UPP_NAMESPACE
 
 #endif

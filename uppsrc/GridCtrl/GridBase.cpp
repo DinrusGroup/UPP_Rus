@@ -1,6 +1,6 @@
 #include "GridCtrl.h"
 
-NAMESPACE_UPP
+namespace Upp {
 
 int GridCtrl::ItemRect::sortCol;
 int GridCtrl::ItemRect::sortMode;
@@ -73,15 +73,12 @@ GridCtrl::ItemRect& GridCtrl::ItemRect::Size(int n, bool hv)
 {
 	hidden = n == 0;
 	
-	n = hv ? Ctrl::HorzLayoutZoom(n) : Ctrl::VertLayoutZoom(n);
-
 	if(!hidden)
 	{
+		n = hv ? Ctrl::HorzLayoutZoom(n) : Ctrl::VertLayoutZoom(n);
 		if(n < min) { n = min; ismin = true; }
 		if(n > max) { n = max; ismax = true; }
 	}
-	else
-		n = 0;
 
 	size = nsize = n;
 	return *this;
@@ -296,4 +293,10 @@ GridCtrl::ItemRect& GridCtrl::ItemRect::NoEditable()
 	return Editable(false);
 }
 
-END_UPP_NAMESPACE
+Value GridCtrl::ItemRect::ExtractValue(int r, int c) const
+{
+	const Value& v = (*items)[r][c].val;
+	return IsType<AttrText>(v) ? Value(ValueTo<AttrText>(v).text) : v;
+}
+
+}

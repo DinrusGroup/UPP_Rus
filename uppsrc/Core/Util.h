@@ -9,48 +9,165 @@ static const int _MAX_PATH = PATH_MAX;
 dword  GetTickCount();
 #endif
 
+int      msecs(int from = 0);
+
 class TimeStop : Moveable<TimeStop> {
 	dword starttime;
 
 public:
 	dword  Elapsed() const           { return GetTickCount() - starttime; }
+	double Seconds() const           { return (double)Elapsed() / 1000; }
 	String ToString() const;
 	void   Reset();
 
 	TimeStop();
 };
 
+struct TimeStopper {
+	const char *name;
+	TimeStop tm;
+	
+	TimeStopper(const char *name) : name(name) {}
+	~TimeStopper() { RLOG(name << " " << tm); }
+};
+
+#define RTIMESTOP(name) TimeStopper COMBINE(sTmStop, __LINE__)(name);
+
 void   SetAssertFailedHook(void (*h)(const char *));
 
+void   ReloadIniFile();
 void   SetIniFile(const char *path = NULL);
+String GetIniFile();
 String GetIniKey(const char *id, const String& def);
 String GetIniKey(const char *id);
+
+VectorMap<String, String> GetIniKeys();
+
+#ifdef flagSO
+bool IniChanged__(int version);
+#else
+extern int  ini_version__;
+inline bool IniChanged__(int version) { return version != ini_version__; }
+#endif
+
+struct IniString {
+// "private":
+	const char   *id;
+	String      (*def)();
+	String&     (*ref_fn)();
+	int           version;
+
+// "public:"
+	operator String();
+	String   operator=(const String& s);
+	String   ToString() const;
+};
+
+struct IniInt {
+// "private":
+	const char *id;
+	int       (*def)();
+	int         version;
+	int         value;
+	int         Load();
+
+// "public:"
+	operator    int()             { int h = value; if(IniChanged__(version)) return Load(); return h; }
+	int         operator=(int b);
+	String      ToString() const;
+};
+
+struct IniInt64 {
+// "private":
+	const char *id;
+	int64     (*def)();
+	int         version;
+	int64       value;
+
+// "public:"
+	operator    int64();
+	int64       operator=(int64 b);
+	String      ToString() const;
+};
+
+struct IniDouble {
+// "private":
+	const char *id;
+	double    (*def)();
+	int         version;
+	double      value;
+	double      Load();
+
+// "public:"
+	operator    double()           { double h = value; if(IniChanged__(version)) return Load(); return h; }
+	double      operator=(double b);
+	String      ToString() const;
+};
+
+struct IniBool {
+// "private":
+	const char *id;
+	bool      (*def)();
+	int         version;
+	bool        value;
+	bool        Load();
+
+// "public:"
+	operator     bool()            { bool h = value; if(IniChanged__(version)) return Load(); return h; }
+	bool         operator=(bool b);
+	String       ToString() const;
+};
+
+void AddIniInfo(const char *id, String (*current)(), String (*def)(), const char *info);
+
+struct IniInfo {
+	String id;
+	String info;
+	String (*current)();
+	String (*def)();
+};
+
+const Array<IniInfo>& GetIniInfo();
+String GetIniInfoFormatted();
+String DefaultIniFileContent();
+String CurrentIniFileContent(bool comment_defaults);
+
+#define INI_TYPE(var, def, info, type, decl, ref)\
+type DefIni_##var() { return def; }\
+decl var = { #var, DefIni_##var, ref };\
+String AsStringIniCurrent_##var() { return AsString(var); } \
+String AsStringIniDefault_##var() { return AsString(DefIni_##var()); } \
+INITBLOCK { AddIniInfo(#var, AsStringIniCurrent_##var, AsStringIniDefault_##var, info); }
+
+#define INI_BOOL(var, def, info)   INI_TYPE(var, def, info, bool, IniBool, 0);
+#define INI_INT(var, def, info)    INI_TYPE(var, def, info, int, IniInt, 0);
+#define INI_INT64(var, def, info)  INI_TYPE(var, def, info, int64, IniInt64, 0);
+#define INI_DOUBLE(var, def, info) INI_TYPE(var, def, info, double, IniDouble, 0);
+
+#define INI_STRING(var, def, info) String& DefRef_##var() { static String x; return x; }\
+                                   INI_TYPE(var, def, info, String, IniString, DefRef_##var);
 
 VectorMap<String, String> LoadIniStream(Stream &in);
 VectorMap<String, String> LoadIniFile(const char *filename);
 
 String timeFormat(double second);
 
-String Garble(const char *s, const char *e);
-String Garble(const String& s);
+String HexEncode(const byte *s, int count, int sep = INT_MAX, int sepchr = ' ');
+inline String HexEncode(const char *s, int count, int sep = INT_MAX, int sepchr = ' ') { return HexEncode((byte *)s, count, sep, sepchr); }
+inline String HexEncode(const void *s, int count, int sep = INT_MAX, int sepchr = ' ') { return HexEncode((byte *)s, count, sep, sepchr); }
+String HexEncode(const String& s, int sep = INT_MAX, int sepchr = ' ');
 
-String Encode64(const String& s);
-String Decode64(const String& s);
-
-String HexString(const byte *s, int count, int sep = INT_MAX, int sepchr = ' ');
-inline String HexString(const char *s, int count, int sep = INT_MAX, int sepchr = ' ') { return HexString((byte *)s, count, sep); }
-inline String HexString(const void *s, int count, int sep = INT_MAX, int sepchr = ' ') { return HexString((byte *)s, count, sep); }
-String HexString(const String& s, int sep = INT_MAX, int sepchr = ' ');
-
-String ScanHexString(const char *s, const char *lim);
-inline String ScanHexString(const char *s, int len) { return ScanHexString(s, s + len); }
-inline String ScanHexString(const String& s)        { return ScanHexString(~s, s.GetCount()); }
+String HexDecode(const char *s, const char *lim);
+inline String HexDecode(const char *s, int len) { return HexDecode(s, s + len); }
+inline String HexDecode(const String& s)        { return HexDecode(~s, s.GetCount()); }
 
 #ifdef PLATFORM_WINCE
 WString ToSystemCharset(const String& src);
 String  FromSystemCharset(const WString& src);
 #else
+String  ToSystemCharset(const String& src, int cp);
 String  ToSystemCharset(const String& src);
+String  FromWin32Charset(const String& src, int cp);
 String  FromSystemCharset(const String& src);
 WString ToSystemCharsetW(const char *src);
 String  FromSystemCharsetW(const wchar *src);
@@ -71,6 +188,7 @@ String GetLastErrorMessage();
 void   BeepInformation();
 void   BeepExclamation();
 void   BeepQuestion();
+void   BeepError();
 
 inline
 void memsetw(void *t, word value, int count)
@@ -107,7 +225,10 @@ int MemICmp(const void *dest, const void *src, int count);
 String NormalizeSpaces(const char *s);
 String NormalizeSpaces(const char *begin, const char *end);
 
-String CsvString(const String& text);
+String         CsvString(const String& text);
+Vector<String> GetCsvLine(Stream& s, int separator, byte charset);
+
+String         CompressLog(const char *s);
 
 #ifndef PLATFORM_WIN32
 void Sleep(int msec);
@@ -147,8 +268,14 @@ inline void Dbl_Self(T *x)
 
 #define ZeroArray(x)       memset((x), 0, sizeof(x))
 
-dword Random();
-dword Random(dword n);
+dword  Random();
+dword  Random(dword n);
+qword  Random64();
+qword  Random64(qword n);
+double Randomf();
+
+void  SeedRandom(dword *seed,int len);
+void  SeedRandom(dword seed = 0);
 
 // Math utils
 
@@ -235,75 +362,15 @@ public:
 	BitAndPtr()           { bap = 0; }
 };
 
-class Exc : public String {
-public:
-	Exc(); // throw exception according to GetLastError()
-	Exc(const String& desc) : String(desc) {}
-
-//	void Show() const;
-};
-
 class AbortExc : public Exc {
 public:
 	AbortExc();
 };
 
-// --------------
-
-/*
-template <class T>
-va_list va_ptr(const T& obj)
-{
-	va_list temp;
-	va_start(temp, obj);
-	return temp;
-}
-*/
-
 // ---------------
 
 int  InScListIndex(const char *s, const char *list);
 bool InScList(const char *s, const char *list);
-
-struct TextTest {
-	virtual const char *Accept(const char *s) const = 0;
-	virtual ~TextTest() {}
-};
-
-class CharFilterTextTest : public TextTest {
-	int (*filter)(int);
-
-public:
-	virtual const char *Accept(const char *s) const;
-	CharFilterTextTest(int (*filter)(int));
-	virtual ~CharFilterTextTest();
-};
-
-Vector<String> Split(const char *s, const TextTest& delim, bool ignoreempty = true);
-Vector<String> Split(const char *s, int (*filter)(int), bool ignoreempty = true);
-Vector<String> Split(const char *s, int chr, bool ignoreempty = true);
-Vector<String> Split(const char *s, const String& delim, bool ignoreempty = true);
-String Join(const Vector<String>& im, const String& delim);
-
-WString Join(const Vector<WString>& im, const WString& delim);
-
-class StringC {
-	BitAndPtr bap;
-
-	bool     IsString() const                  { return bap.GetBit(); }
-	void     Free();
-
-public:
-	void     SetString(const String& s);
-	void     SetCharPtr(const char *s);
-
-	bool     IsEmpty() const;
-
-	operator const char *() const;
-	operator String() const;
-
-	~StringC();
-};
 
 // ------------------- Linux style text settings -------------
 
@@ -331,10 +398,12 @@ public:
 
 // ------------------- Advanced streaming --------------------
 
-bool Load(Callback1<Stream&> serialize, Stream& stream, int version = Null);
-bool Store(Callback1<Stream&> serialize, Stream& stream, int version = Null);
-bool LoadFromFile(Callback1<Stream&> serialize, const char *file = NULL, int version = Null);
-bool StoreToFile(Callback1<Stream&> serialize, const char *file = NULL, int version = Null);
+void CheckedSerialize(const Event<Stream&> serialize, Stream& stream, int version = Null);
+
+bool Load(Event<Stream&> serialize, Stream& stream, int version = Null);
+bool Store(Event<Stream&> serialize, Stream& stream, int version = Null);
+bool LoadFromFile(Event<Stream&> serialize, const char *file = NULL, int version = Null);
+bool StoreToFile(Event<Stream&> serialize, const char *file = NULL, int version = Null);
 
 template <class T>
 void SerializeTFn(Stream &s, T *x)
@@ -343,7 +412,7 @@ void SerializeTFn(Stream &s, T *x)
 }
 
 template <class T>
-Callback1<Stream&> SerializeCb(T& x)
+Event<Stream&> SerializeCb(T& x)
 {
 	return callback1(SerializeTFn<T>, &x);
 }
@@ -381,8 +450,9 @@ bool LoadFromString(T& x, const String& s) {
 	return Load(x, ss);
 }
 
-void             RegisterGlobalConfig(const char *name) init_;
-void             RegisterGlobalConfig(const char *name, Callback WhenFlush) init_;
+void             RegisterGlobalConfig(const char *name);
+void             RegisterGlobalSerialize(const char *name, Event<Stream&> WhenSerialize);
+void             RegisterGlobalConfig(const char *name, Event<>  WhenFlush);
 
 String           GetGlobalConfigData(const char *name);
 void             SetGlobalConfigData(const char *name, const String& data);
@@ -402,8 +472,40 @@ void StoreToGlobal(T& x, const char *name)
 	SetGlobalConfigData(name, ss);
 }
 
+bool LoadFromGlobal(Event<Stream&> serialize, const char *name);
+void StoreToGlobal(Event<Stream&> serialize, const char *name);
+
 void SerializeGlobalConfigs(Stream& s);
 
 #ifdef PLATFORM_WINCE
 inline void abort() { TerminateProcess(NULL, -1); }
 #endif
+
+String  Replace(const String& s, const Vector<String>& find, const Vector<String>& replace);
+String  Replace(const String& s, const VectorMap<String, String>& fr);
+WString Replace(const WString& s, const Vector<WString>& find, const Vector<WString>& replace);
+WString Replace(const WString& s, const VectorMap<WString, WString>& fr);
+
+bool SpellWordRaw(const WString& wrd, int lang, Vector<String> *withdia = NULL);
+bool SpellWord(const WString& ws, int lang);
+bool SpellWord(const wchar *ws, int len, int lang);
+void SpellerAdd(const WString& w, int lang);
+
+String GetP7Signature(const void *data, int length, const String& cert_pem, const String& pkey_pem);
+String GetP7Signature(const String& data, const String& cert_pem, const String& pkey_pem);
+
+// deprecated
+String HexString(const byte *s, int count, int sep = INT_MAX, int sepchr = ' ');
+inline String HexString(const char *s, int count, int sep = INT_MAX, int sepchr = ' ') { return HexString((byte *)s, count, sep, sepchr); }
+inline String HexString(const void *s, int count, int sep = INT_MAX, int sepchr = ' ') { return HexString((byte *)s, count, sep, sepchr); }
+String HexString(const String& s, int sep = INT_MAX, int sepchr = ' ');
+
+String ScanHexString(const char *s, const char *lim);
+inline String ScanHexString(const char *s, int len) { return ScanHexString(s, s + len); }
+inline String ScanHexString(const String& s)        { return ScanHexString(~s, s.GetCount()); }
+
+String Garble(const char *s, const char *e);
+String Garble(const String& s);
+
+String Encode64(const String& s);
+String Decode64(const String& s);

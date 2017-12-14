@@ -10,7 +10,7 @@ struct Custom : public WithCustomLayout<TopWindow> {
 
 	void InsertCmd(String s);
 	void InsertOut(String s);
-	void DoMenu(Button& b, Callback1<String> cb);
+	void DoMenu(Button& b, Callback1<String> cb, bool cmd);
 	void OutMenu();
 	void CmdMenu();
 
@@ -31,50 +31,61 @@ void Custom::InsertOut(String s) {
 	output.SetFocus();
 }
 
-void Custom::DoMenu(Button& b, Callback1<String> cb) {
+void Custom::DoMenu(Button& b, Callback1<String> cb, bool cmd) {
 	if(!list.IsCursor()) return;
 	MenuBar menu;
-//	CallbackArg<String> set;
+//	Event<> Arg<String> set;
 //	set <<= cb;
 	String pk = list.Get(0);
 	String ext = (String)list.Get(2);
 	if(ext[0] != '.')
 		ext = '.' + ext;
-	String sample = SourcePath(pk, ForceExt("sample", ext));
-	menu.Add("Путь к входному файлу (типа '" + UnixPath(sample) + "')", callback1(cb, "$(PATH)"));
-	menu.Add("Папка входного файла (типа '" + UnixPath(GetFileFolder(sample)) + "')", callback1(cb, "$(DIR)"));
-	menu.Add("Имя входного файла (типа '" + GetFileName(sample) + "')", callback1(cb, "$(FILE)"));
-	menu.Add("Заглавие входного файла (типа '" + GetFileTitle(sample) + "')", callback1(cb, "$(TITLE)"));
+	String samplefile = "foo/" + ForceExt("sample", ext);
+	String sample = SourcePath(pk, samplefile);
+	menu.Add("Input file path (like '" + UnixPath(sample) + "')", callback1(cb, "$(PATH)"));
+	menu.Add("Input file package-relative path (like '" + samplefile + "')", callback1(cb, "$(RELPATH)"));
+	menu.Add("Input file directory (like '" + samplefile + "')", callback1(cb, "$(FILEDIR)"));
+	menu.Add("Package directory (like '" + UnixPath(GetFileFolder(sample)) + "')", callback1(cb, "$(DIR)"));
+	menu.Add("Input file name (like '" + GetFileName(sample) + "')", callback1(cb, "$(FILE)"));
+	menu.Add("Input file title (like '" + GetFileTitle(sample) + "')", callback1(cb, "$(TITLE)"));
+	menu.Add("Input file package (like '" + pk + "')", callback1(cb, "$(PACKAGE)"));
 	Vector<String> ss = SplitFlags0((String)list.Get(1));
-	String opath = "f:/out/app/WIN32-ST/somefile.ext";
-	menu.Add("Папка вывода пакета (типа '" + UnixPath(GetFileFolder(opath)) + "')", callback1(cb, "$(OUTDIR)"));
-	menu.Add("Папка вывода пакета (типа '" + UnixPath(opath) + "')", callback1(cb, "$(OUTPATH)"));
-	menu.Add("Папка вывода пакета (типа '" + GetFileName(opath) + "')", callback1(cb, "$(OUTFILE)"));
-	menu.Add("Папка вывода пакета (типа '" + GetFileTitle(opath) + "')", callback1(cb, "$(OUTTITLE)"));
-	menu.Add("Разделённые точкой с запятой папки включений (типа '/bin/include;/cpp/inc')", callback1(cb, "$(INCLUDE)"));
-	menu.Add("Префиксированные папки включений (типа '-inc/include -inc/cpp/inc' for '$(!-inc)')",
+	String opath = "f:/out/mypackage/WIN32-ST/somefile.ext";
+	menu.Add("Package output directory (like '" + opath + "')", callback1(cb, "$(OUTDIR)"));
+	opath = "f:/out/WIN32-ST/myapp.exe";
+	menu.Add("Executable path (like '" + UnixPath(opath) + "')", callback1(cb, "$(EXEPATH)"));
+	menu.Add("Executable directory (like '" + UnixPath(GetFileFolder(opath)) + "')", callback1(cb, "$(EXEDIR)"));
+	menu.Add("Executable filename (like '" + UnixPath(GetFileName(opath)) + "')", callback1(cb, "$(EXEFILE)"));
+	menu.Add("Executable title (like '" + UnixPath(GetFileTitle(opath)) + "')", callback1(cb, "$(EXETITLE)"));
+	menu.Add("Semicolon separated include dirs (like '/bin/include;/cpp/inc')", callback1(cb, "$(INCLUDE)"));
+	menu.Add("Prefixed include dirs (like '-inc/include -inc/cpp/inc' for '$(!-inc)')",
 		     callback1(cb, "$(!)"));
-	menu.Add("$ символ", callback1(cb, "$$"));
+	menu.Add("$ character", callback1(cb, "$$"));
+	if(cmd) {
+		menu.Separator();
+		menu.Add("copy command", callback1(cb, "cp "));
+		menu.Add("chdir command", callback1(cb, "cd "));
+	}
 	menu.Execute(b.GetScreenRect().BottomLeft());
 }
 
 void Custom::OutMenu() {
-	DoMenu(outputmenu, THISBACK(InsertOut));
+	DoMenu(outputmenu, THISBACK(InsertOut), false);
 }
 
 void Custom::CmdMenu() {
-	DoMenu(commandmenu, THISBACK(InsertCmd));
+	DoMenu(commandmenu, THISBACK(InsertCmd), true);
 }
 
 Custom::Custom() {
-	CtrlLayoutExit(*this, "Пошаговое построение");
+	CtrlLayoutExit(*this, "Custom build steps");
 	Sizeable().MaximizeBox();
 	list.AutoHideSb();
 	list.Appending().Removing();
-	list.AddColumn("Пакет-хост", 85).Edit(package);
-	list.AddColumn("Когда", 416).Edit(when);
+	list.AddColumn("Host package", 85).Edit(package);
+	list.AddColumn("When", 416).Edit(when);
 	when.SetFilter(CondFilter);
-	list.AddColumn(".расширение", 74).Edit(extension);
+	list.AddColumn(".extension", 74).Edit(extension);
 	list.AddCtrl(command);
 	list.AddCtrl(output);
 	outputmenu.SetFrame(InsetFrame());

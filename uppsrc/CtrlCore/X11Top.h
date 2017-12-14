@@ -1,4 +1,4 @@
-//$ class TopWindow {
+//$ class Upp::TopWindow {
 protected:
 	virtual void    EventProc(XWindow& w, XEvent *event);
 private:
@@ -7,14 +7,17 @@ private:
 	XClassHint *class_hint;
 	Size        xminsize, xmaxsize;
 	bool        topmost;
+	
+	Buffer<unsigned long>  PreperIcon(const Image& icon, int& len);
+	
+	void                   CenterRect(Ctrl *owner);
+	void                   DefSyncTitle();
+	void                   EndIgnoreTakeFocus();
 
-	void          CenterRect(Ctrl *owner);
-	void          DefSyncTitle();
-	void          EndIgnoreTakeFocus();
+	void                   SyncState();
 
-	void          SyncState();
-	void          SyncState0();
+	Image                  invert;
+	WString                title2;
 
-	Image         invert;
-	WString       title2;
+	static  Rect           windowFrameMargin;
 //$ };

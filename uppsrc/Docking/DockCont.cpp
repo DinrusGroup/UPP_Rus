@@ -1,130 +1,6 @@
-#include "DockCont.h"
 #include "Docking.h"
 
-NAMESPACE_UPP
-
-// DockCont (Dockable Container)
-#if	defined(PLATFORM_WIN32)
-LRESULT DockCont::WindowProc(UINT message, WPARAM wParam, LPARAM lParam)
-{
-	if (animating) 
-		return TopWindow::WindowProc(message, wParam, lParam);
-	if (message == WM_NCRBUTTONDOWN) {
-		WindowMenu();
-		return 1L;
-	}
-	if (IsFloating() && base) {
-		switch (message) {
-			case WM_NCLBUTTONDBLCLK:
-				RestoreCurrent();
-				return 0;
-			case WM_NCLBUTTONUP:
-			case WM_SIZE:					
-				dragging = 0;
-				break;
-			case WM_ENTERSIZEMOVE:
-				dragging = 1;
-				break;
-			case WM_MOVING:
-				LOG("Got Message: LeftDown " << GetMouseLeft());
-				if (GetMouseLeft() && dragging >= 1)
-					(dragging > 2) ? Moving() : MoveBegin();
-				dragging++;
-				break;
-			case WM_EXITSIZEMOVE:
-				if (!GetMouseLeft() && dragging) {
-					dragging = 0;
-					Ptr<TopWindow> _this = this;
-					MoveEnd();
-					if (!_this) return 0;
-				}
-				break;
-		}
-	}
-	return TopWindow::WindowProc(message, wParam, lParam);
-}
-
-void DockCont::StartMouseDrag()
-{
-	SendMessage(GetHWND(), WM_NCLBUTTONDOWN, 2, MAKELONG(GetMousePos().x, GetMousePos().y));	
-}
-#elif defined(PLATFORM_X11)
-static const int CB_ID = 10;
-void DockCont::EventProc(XWindow& w, XEvent *event)
-{
-	static bool notify = true;
-	static bool composited = IsCompositedGui();
-	if (IsOpen() && !animating) {
-		switch(event->type) {
-		case ConfigureNotify:{
-				XConfigureEvent& e = event->xconfigure;
-				if (Point(e.x, e.y) != GetScreenRect().TopLeft()) {
-					if (!dragging)
-						MoveBegin();
-					Moving();				
-					SetFocus();
-					dragging = true;
-				}
-			}
-			break;
-		case FocusIn: {
-				if (notify && composited) {
-					SetTimeCallback(-300, THISBACK(Notify), CB_ID);
-					notify = false;
-				}
-				XFocusChangeEvent &e = event->xfocus;
-				if (e.mode == NotifyUngrab && dragging) {
-					if (!notify && composited) {
-						KillTimeCallback(CB_ID);
-						notify = true;
-						Ctrl* owner = GetOwner();
-						if (owner)
-							owner->SetFocus();
-						SetFocus();
-					}
-					dragging = false;
-					MoveEnd();
-					return;
-				}
-				break;
-			}
-		}
-	}
-	TopWindow::EventProc(w, event);	
-}
-
-void DockCont::Notify()
-{
-	Window window = GetWindow();
-	if (window) {
-		XWindowAttributes attr;
-		XGetWindowAttributes(Xdisplay, window, &attr);
-		XSetWindowBorderWidth(Xdisplay, window, attr.border_width);
-	}
-}
-
-void DockCont::StartMouseDrag()
-{
-	Atom xwndDrag = XAtom("_NET_WM_MOVERESIZE");
-	XEvent e;
-	Zero(e);
-	e.xclient.type = ClientMessage;
-	e.xclient.message_type = xwndDrag;
-	e.xclient.window = GetWindow();
-	e.xclient.format = 32;
-	e.xclient.display = Xdisplay;
-	e.xclient.send_event = XTrue;
-	e.xclient.data.l[0] = GetMousePos().x;
-	e.xclient.data.l[1] = GetMousePos().y;
-	e.xclient.data.l[2] = 8;
-	e.xclient.data.l[3] = 1;
-	e.xclient.data.l[4] = 0;	
-	
-	XUngrabPointer( Xdisplay, CurrentTime );
-	XSendEvent(Xdisplay, RootWindow(Xdisplay, Xscreenno), XFalse, SubstructureNotifyMask, &e);
-	XFlush(Xdisplay);
-}
-#endif
+namespace Upp {
 
 // ImgButton
 void ImgButton::Paint(Draw &w)
@@ -143,7 +19,7 @@ void ImgButton::Paint(Draw &w)
 // DockContHandle frame
 int DockCont::DockContHandle::GetHandleSize(const DockableCtrl::Style &s) const
 {
-	return 	(!IsNull(s.title_font) ? 12 : s.title_font.GetHeight()+4)
+	return 	(IsNull(s.title_font) ? 12 : s.title_font.GetHeight()+4)
 			 + (s.handle_vert ? s.handle_margins.GetWidth() : s.handle_margins.GetHeight()); 
 }
 /*
@@ -214,7 +90,7 @@ void DockCont::DockContHandle::Paint(Draw& w)
 				r.right = c ? c->GetRect().left - m.right : r.right - m.right;
 			w.Clip(r);
 			WString text = IsNull(dc->GetGroup()) ? dc->GetTitle() : (WString)Format("%s (%s)", dc->GetTitle(), dc->GetGroup());
-			w.DrawText(p.x, p.y, s.handle_vert ? 900 : 0, text, s.title_font, s.title_ink[focus]);
+			w.DrawText(p.x, p.y, s.handle_vert ? 900 : 0, text, s.title_font, s.title_ink[0/*focus*/]);
 			w.End();
 		}
 	}	
@@ -359,9 +235,10 @@ void DockCont::TabSelected()
 			c->ChildTitleChanged(*this);
 			c->TabSelected();
 		}
-		else
+		else {
 			handle.Refresh();
 			RefreshLayout();
+		}
 	}
 }
 
@@ -432,7 +309,7 @@ void DockCont::TabClosed(Value v)
 		RefreshLayout();
 }
 
-void DockCont::TabsClosed(Vector<Value> vv)
+void DockCont::TabsClosed(ValueArray vv)
 {
 	for (int i = vv.GetCount()-1; i >= 0 ; --i)
 		TabClosed0(vv[i]);
@@ -801,7 +678,7 @@ void DockCont::ChildTitleChanged(Ctrl *child, WString title, Image icon)
 		    break;
 		}
 	if (!GetParent()) 
-		Title(GetTitle());	
+		Title(GetTitle());
 	RefreshFrame();
 }
 
@@ -879,9 +756,9 @@ void DockCont::DockContMenu::ContainerMenu(Bar& bar, DockCont *c, bool withgroup
 			Sort(groups);
 			for (int i = 0; i < groups.GetCount(); i++)
 				bar.Add(groups[i], THISBACK1(GroupWindowsMenu, groups[i]));
-			bar.Add(t_("Все"), THISBACK1(GroupWindowsMenu, String(Null)));	
+			bar.Add(t_("All"), THISBACK1(GroupWindowsMenu, String(Null)));	
 		}
-	}	
+	}
 }
 
 void DockCont::DockContMenu::MenuDock(int align, DockableCtrl *dc)
@@ -930,7 +807,6 @@ void DockCont::SyncFrames(bool hidehandle)
 
 DockCont::DockCont()
 {
-	dragging = 0;
 	dockstate = STATE_NONE;
 	base = NULL;
 	waitsync = false;	
@@ -944,24 +820,25 @@ DockCont::DockCont()
 
 	tabbar.AutoHideMin(1);
 	tabbar<<= THISBACK(TabSelected);
-	tabbar.WhenClose 		= THISBACK(TabClosed);
-	tabbar.WhenCloseSome	= THISBACK(TabsClosed);
+	tabbar.WhenClose = THISBACK(TabClosed);
+	tabbar.WhenCloseSome = THISBACK(TabsClosed);
 	tabbar.SetBottom();	
 
-	WhenClose 				= THISBACK(CloseAll);
+	WhenClose = THISBACK(CloseAll);
 	
 	handle << close << autohide << windowpos;
 	handle.WhenContext = THISBACK(WindowMenu);
 	handle.WhenLeftDrag = THISBACK(MoveBegin);
 	handle.WhenLeftDouble = THISBACK(RestoreCurrent);
-	close.Tip(t_("Закрыть")) 				<<= THISBACK(CloseAll);
-	autohide.Tip(t_("Автоскрытие")) 		<<= THISBACK(AutoHide);
-	windowpos.Tip(t_("Оконное Меню")) 	<<= THISBACK(WindowMenu);		
+	close.Tip(t_("Close")) 				<<= THISBACK(CloseAll);
+	autohide.Tip(t_("Auto-Hide")) 		<<= THISBACK(AutoHide);
+	windowpos.Tip(t_("Window Menu")) 	<<= THISBACK(WindowMenu);		
 	
 	AddFrame(NullFrame());
 	AddFrame(tabbar);
-	AddFrame(handle);	
+	AddFrame(handle);
+
 	Lock(false);	
 }
 
-END_UPP_NAMESPACE
+}

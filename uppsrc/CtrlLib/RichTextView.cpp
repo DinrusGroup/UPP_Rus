@@ -1,6 +1,6 @@
 #include "CtrlLib.h"
 
-NAMESPACE_UPP
+namespace Upp {
 
 #define LLOG(x) // LOG(x)
 
@@ -35,15 +35,13 @@ void  RichTextView::Paint(Draw& w)
 	pi.usecache = true;
 	pi.sizetracking = sizetracking;
 	pi.shrink_oversized_objects = shrink_oversized_objects;
-	int y = 0;
-	if(vcenter && sb.GetTotal() < sb.GetPage()) {
-		PageY py = text.GetHeight(GetPage());
-		y = (sz.cy / zoom  - py.y) / 2;
-	}
 	Color c = SColorPaper();
 	if(Grayscale(c) < 100)
 		pi.coloroverride = true;
-	text.Paint(pw, GetPage(), pi);
+	Rect pg = GetPage();
+	if(vcenter && sb.GetTotal() < sb.GetPage())
+		pg.top = (sb.GetPage() - sb.GetTotal()) / 2;
+	text.Paint(pw, pg, pi);
 	w.End();
 	w.End();
 }
@@ -90,18 +88,17 @@ Image RichTextView::CursorImage(Point p, dword keyflags)
 {
 	int pos = GetPointPos(p);
 	if(WhenLink && pos >= 0 && !IsNull(GetLink(pos, p)))
-		return CtrlImg::HandCursor();
+		return Image::Hand();
 	if(HasCapture())
-		return CtrlImg::ibeam0();
+		return Image::IBeam();
 	return Image::Arrow();
 }
 
-void RichTextView::Copy()
+WString RichTextView::GetSelText() const
 {
 	if(anchor == cursor)
-		WriteClipboardUnicodeText(text.GetPlainText());
+		return text.GetPlainText();
 	else {
-		RefreshSel();
 		WString h = text.GetPlainText(false).Mid(sell, selh - sell);
 		WString r;
 		for(const wchar *s = ~h; s < h.End(); s++) {
@@ -109,15 +106,34 @@ void RichTextView::Copy()
 				r.Cat('\r');
 			r.Cat(*s);
 		}
-		WriteClipboardUnicodeText(r);
+		return r;
 	}
+}
+
+void RichTextView::Copy()
+{
+	RefreshSel();
+	WriteClipboardUnicodeText(GetSelText());
+}
+
+String RichTextView::GetSelectionData(const String& fmt) const
+{
+	return GetTextClip(GetSelText(), fmt);
 }
 
 void RichTextView::RightDown(Point p, dword keyflags)
 {
 	MenuBar b;
-	b.Add(CtrlImg::copy(), t_("Копировать"), THISBACK(Copy)).Key(K_CTRL_C);
+	b.Add(cursor != anchor, t_("Copy"), CtrlImg::copy(), THISBACK(Copy)).Key(K_CTRL_C);
 	b.Execute();
+}
+
+Point RichTextView::GetTextPoint(Point p) const
+{
+	p -= margin.TopLeft();
+	Zoom zoom = GetZoom();
+	p.y += sb * zoom;
+	return Point(p.x / zoom, p.y / zoom);
 }
 
 int  RichTextView::GetPointPos(Point p) const
@@ -125,10 +141,8 @@ int  RichTextView::GetPointPos(Point p) const
 	Size sz = GetSize();
 	sz.cx -= margin.left + margin.right;
 	sz.cy -= margin.top + margin.bottom;
-	p -= margin.TopLeft();
-	Zoom zoom = GetZoom();
-	p.y += sb * zoom;
-	return text.GetPos(p.x / zoom, PageY(0, p.y / zoom), GetPage());
+	p = GetTextPoint(p);
+	return text.GetPos(p.x, PageY(0, p.y), GetPage());
 }
 
 String RichTextView::GetLink(int pos, Point p) const
@@ -137,12 +151,14 @@ String RichTextView::GetLink(int pos, Point p) const
 	RichObject object = text.GetRichPos(pos).object;
 	if(object) {
 		Rect rc = text.GetCaret(pos, GetPage());
+		//TODO: Perhaps use GetTextPoint here?
 		link = object.GetLink(p - rc.TopLeft(), rc.Size());
 	}
 
 	if(IsNull(link)) {
 		RichPos richpos = text.GetRichPos(pos);
-		if(richpos.chr != '\n')
+		Rect rc = text.GetCaret(pos, GetPage());
+		if(richpos.chr != '\n' && rc.Contains(GetTextPoint(p)))
 			link = Nvl(richpos.fieldformat.link, richpos.format.link);
 	}
 	return link;
@@ -150,14 +166,14 @@ String RichTextView::GetLink(int pos, Point p) const
 
 void RichTextView::RefreshRange(int a, int b)
 {
-	int l = min(a, b);
-	int h = max(a, b);
+	int l = max(min(a, b) - 1, 0); // Extend the range to cover 'weird' cases (line break)
+	int h = min(max(a, b) + 1, GetLength());
 	if(l == h)
 		return;
 	Rect r1 = text.GetCaret(l, GetPage());
 	Rect r2 = text.GetCaret(h, GetPage());
 	Zoom zoom = GetZoom();
-	Refresh(0, zoom * (r1.top - sb), GetSize().cx, zoom * (r2.bottom - sb + zoom.d - 1));
+	Refresh(Rect(0, zoom * (r1.top - sb), GetSize().cx, zoom * (r2.bottom - sb + zoom.d - 1)));
 }
 
 void  RichTextView::RefreshSel()
@@ -180,14 +196,15 @@ void  RichTextView::RefreshSel()
 	}
 	sell = l;
 	selh = h;
+	if(IsSelection())
+		SetSelectionSource(ClipFmtsText());
 }
 
 void  RichTextView::LeftDown(Point p, dword keyflags)
 {
 	int pos = GetPointPos(p);
 	if(pos < 0) {
-		cursor = 0;
-		anchor = 0;
+		cursor = anchor = 0;
 		return;
 	}
 	String link = GetLink(pos, p);
@@ -201,6 +218,33 @@ void  RichTextView::LeftDown(Point p, dword keyflags)
 		SetFocus();
 		SetCapture();
 	}
+}
+
+void RichTextView::LeftDouble(Point p, dword keyflags)
+{
+	int pos = GetPointPos(p);
+	if(IsLeNum(text[pos])) {
+		anchor = pos;
+		while(anchor > 0 && IsLeNum(text[anchor - 1]))
+			anchor--;
+		cursor = pos;
+		while(cursor < text.GetLength() && IsLeNum(text[cursor]))
+			cursor++;
+		while(cursor < text.GetLength() && text[cursor] == ' ')
+			cursor++;
+		RefreshSel();
+		SetFocus();
+	}
+}
+
+void RichTextView::LeftTriple(Point p, dword keyflags)
+{
+    int pos = GetPointPos(p);
+	RichPos rp = text.GetRichPos(pos);
+	anchor = pos - rp.posinpara;
+	cursor = anchor + rp.paralen + 1;
+    RefreshSel();
+    SetFocus();
 }
 
 void RichTextView::MouseMove(Point p, dword keyflags)
@@ -280,20 +324,20 @@ void  RichTextView::Clear()
 	anchor = cursor = sell = selh = 0;
 }
 
-void  RichTextView::Pick(pick_ RichText& rt)
+void  RichTextView::Pick(RichText&& rt)
 {
 	sb = 0;
 	anchor = cursor = sell = selh = 0;
-	text = rt;
+	text = pick(rt);
 	SetSb();
 	UpdateRefresh();
 	highlight = -1;
 }
 
-void  RichTextView::Pick(pick_ RichText& txt, Zoom z) {
+void  RichTextView::Pick(RichText&& txt, Zoom z) {
 	if(z.m != z.d)
 		const_cast<RichText&>(txt).ApplyZoom(z);
-	Pick(txt);
+	Pick(pick(txt));
 	sb.SetLine(z * 100);
 }
 
@@ -461,4 +505,4 @@ bool Print(const RichText& text, const Rect& page, int currentpage, const char *
 
 #endif
 
-END_UPP_NAMESPACE
+}

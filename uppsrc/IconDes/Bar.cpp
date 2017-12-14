@@ -1,6 +1,6 @@
 #include "IconDes.h"
 
-NAMESPACE_UPP
+namespace Upp {
 
 #define KEYNAMESPACE IconDesKeys
 #define KEYGROUPNAME "Icon designer"
@@ -22,6 +22,7 @@ bool IconDes::Key(dword key, int count)
 	case K_SHIFT_DOWN:  KeyMove(0, 1); return true;
 	case K_PAGEUP:      ChangeSlot(-1); return true;
 	case K_PAGEDOWN:    ChangeSlot(1); return true;
+	case K_CTRL_F:      search.SetFocus(); return true;
 	}
 	return false;
 }
@@ -153,6 +154,7 @@ void IconDes::ImageBar(Bar& bar)
 	bar.Add(c, AK_CONTRAST, IconDesImg::Contrast(), THISBACK(Contrast));
 	bar.Add(c, AK_ALPHA, IconDesImg::AlphaI(), THISBACK(Alpha));
 	bar.Add(c, AK_COLORS, IconDesImg::Colors(), THISBACK(Colors));
+	bar.Add(c, AK_SMOOTHEN, IconDesImg::Smoothen(), THISBACK(Smoothen));
 }
 
 void IconDes::DrawBar(Bar& bar)
@@ -173,6 +175,8 @@ void IconDes::DrawBar(Bar& bar)
 	   .Check(tool == &IconDes::EmptyRectTool && notpasting && !selectrect);
 	bar.Add(AK_HOTSPOTS, IconDesImg::HotSpot(), THISBACK1(SetTool, &IconDes::HotSpotTool))
 	   .Check(tool == &IconDes::HotSpotTool);
+	bar.Add(AK_TEXT, IconDesImg::Text(), THISBACK(Text))
+	   .Check(textdlg.IsOpen());
 	bar.Separator();
 	for(int i = 1; i <= 6; i++)
 		bar.Add("Pen " + AsString(i), IconDesImg::Get(IconDesImg::I_Pen1 + i - 1), THISBACK1(SetPen, i))
@@ -197,6 +201,7 @@ void IconDes::MainToolBar(Bar& bar)
 void IconDes::SetBar()
 {
 	toolbar.Set(THISBACK(MainToolBar));
+	SetSb();
 }
 
 struct CachedIconImage : public Display {
@@ -216,11 +221,18 @@ struct CachedIconImage : public Display {
 		Point p = r.CenterPos(m.GetSize());
 		w.DrawImage(p.x, p.y, m);
 	}
+	virtual Size GetStdSize(const Value& q) const
+	{
+		Image m = q;
+		if(IsNull(m))
+			return Size(0, 0);
+		Size isz = m.GetSize();
+		return isz.cx < 200 && isz.cy < 200 ? isz : IconDesImg::LargeImage().GetSize();
+	}
 };
 
 void IconDes::SerializeSettings(Stream& s)
 {
-
 	void (IconDes::*toollist[])(Point p, dword flags) = {
 		&IconDes::LineTool,
 		&IconDes::FreehandTool,
@@ -259,33 +271,51 @@ IconDes::IconDes()
 	doselection = false;
 
 	tool = &IconDes::FreehandTool;
-
+	
 	AddFrame(leftpane);
-	AddFrame(bottompane);
 	AddFrame(toolbar);
+	AddFrame(bottompane);
 	AddFrame(sb);
 	AddFrame(ViewFrame());
 
 	leftpane.Left(rgbactrl, 256);
-	rgbactrl.SubCtrl(&list);
+	rgbactrl.SubCtrl(&imgs);
+
 	rgbactrl <<= THISBACK(ColorChanged);
 
-	list.AddColumn("", 4);
-	list.AddColumn("").SetDisplay(Single<CachedIconImage>());
-	list.NoHeader().NoVertGrid();
-	list.WhenBar = THISBACK(ListMenu);
-	list.WhenCursor = THISBACK(ListCursor);
-	list.WhenLeftDouble = THISBACK(EditImage);
-	list.NoWantFocus();
+	search.NullText("Search (Ctrl+F)");
+	search <<= THISBACK(Search);
+	search.SetFilter(CharFilterToUpper);
+
+	int cy = EditString::GetStdHeight();
+	imgs.Add(search.HSizePos().TopPos(0, cy));
+	imgs.Add(ilist.HSizePos().VSizePos(cy, 0));
+
+	ilist.AddKey();
+	ilist.AddColumn("", 4);
+	ilist.AddColumn("").SetDisplay(Single<CachedIconImage>());
+	ilist.NoHeader().NoVertGrid();
+	ilist.WhenBar = THISBACK(ListMenu);
+	ilist.WhenCursor = THISBACK(ListCursor);
+	ilist.WhenLeftDouble = THISBACK(EditImage);
+	ilist.NoWantFocus();
+	
+	ilist.WhenDrag = THISBACK(Drag);
+	ilist.WhenDropInsert = THISBACK(DnDInsert);
+
+	search <<= THISBACK(Search);
+	search.SetFilter(CharFilterToUpper);
 
 	bottompane.Bottom(iconshow, 64);
-
+	
 	SetBar();
 	ColorChanged();
 	BackPaint();
 
 	magnify = 13;
 	pen = 1;
+	
+	single_mode = false;
 }
 
-END_UPP_NAMESPACE
+}

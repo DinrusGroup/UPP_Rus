@@ -1,6 +1,8 @@
 #include "Report.h"
 
-NAMESPACE_UPP
+namespace Upp {
+
+#define LLOG(x)  // DLOG(x)
 
 Report::Report()
 {
@@ -51,15 +53,26 @@ void Report::PaintHF(Draw& w, int y, const char *qtf, int i)
 	txt.Paint(w, 0, y, GetSize().cx);
 }
 
+void Report::Flush()
+{
+	if(pagei >= 0) {
+		Drawing dw = GetResult();
+		page.At(pagei).Append(dw);
+		Create(GetSize());
+	}
+}
+
 void Report::StartPage(int i)
 {
-	DrawingDraw dw;
-	PaintHF(dw, 0, header, i);
-	PaintHF(dw, GetSize().cy - footercy, footer, i);
-	Drawing& g = page.At(i);
-	g = dw;
-	g.SetSize(GetSize());
+	DrawingDraw dw(GetSize());
+	page.At(i) = dw;
+	LLOG("Start page " << i);
 	Create(GetSize());
+	WhenPage();
+	LLOG("Paint header");
+	PaintHF(*this, 0, header, i);
+	LLOG("Paint footer");
+	PaintHF(*this, GetSize().cy - footercy, footer, i);
 	y = GetPageRect().top;
 }
 
@@ -72,7 +85,6 @@ Draw& Report::Page(int i)
 		while(page.GetCount() <= pagei)
 			StartPage(page.GetCount());
 		y = GetPageRect().top;
-		Create(GetSize());
 	}
 	return *this;
 }
@@ -121,19 +133,17 @@ Report& Report::Footer(const char *qtf, int spc)
 	return *this;
 }
 
+Report& Report::OnPage(Callback whenpage)
+{
+	WhenPage = whenpage;
+	RestartPage();
+	return *this;
+}
+
 void Report::RestartPage()
 {
 	page.SetCount(pagei + 1);
 	StartPage(pagei);
-}
-
-void Report::Flush()
-{
-	if(pagei >= 0) {
-		Drawing dw = GetResult();
-		page.At(pagei).Append(dw);
-		Create(GetSize());
-	}
 }
 
 Report& Report::Landscape()
@@ -146,6 +156,7 @@ Report& Report::Landscape()
 void Report::Put(const RichText& txt, void *context)
 {
 	PageY py(pagei, y);
+	LLOG("Put RichText, py: " << py << ", pagerect: " << GetPageRect());
 	PaintInfo paintinfo;
 	paintinfo.top = PageY(0, 0);
 	paintinfo.bottom = PageY(INT_MAX, INT_MAX);
@@ -154,6 +165,7 @@ void Report::Put(const RichText& txt, void *context)
 	paintinfo.context = context;
 	txt.Paint(*this, py, GetPageRect(), paintinfo);
 	py = txt.GetHeight(py, GetPageRect());
+	LLOG("Final pos: " << py);
 	Page(py.page);
 	y = py.y;
 }
@@ -186,4 +198,4 @@ bool Report::ChooseDefaultPrinter(const char *jobname)
 	return true;
 }
 
-END_UPP_NAMESPACE
+}

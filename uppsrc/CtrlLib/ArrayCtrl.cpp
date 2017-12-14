@@ -1,8 +1,8 @@
 #include "CtrlLib.h"
 
-NAMESPACE_UPP
+namespace Upp {
 
-#define LTIMING(x) //  TIMING(x)
+#define LTIMING(x)  // DTIMING(x)
 
 ArrayCtrl::Column::Column() {
 	convert = NULL;
@@ -14,7 +14,6 @@ ArrayCtrl::Column::Column() {
 	clickedit = true;
 	index = -1;
 	order = NULL;
-	cmp = NULL;
 }
 
 ArrayCtrl::Column& ArrayCtrl::Column::Cache() {
@@ -46,6 +45,15 @@ ArrayCtrl::Column& ArrayCtrl::Column::SetConvert(const Convert& c) {
 	return *this;
 }
 
+ArrayCtrl::Column& ArrayCtrl::Column::ConvertBy(Function<Value(const Value&)> cv)
+{
+	convertby = cv;
+	ClearCache();
+	arrayctrl->Refresh();
+	arrayctrl->SyncInfo();
+	return *this;
+}
+
 ArrayCtrl::Column& ArrayCtrl::Column::SetFormat(const char *fmt)
 {
 	FormatConvert::SetFormat(fmt);
@@ -62,9 +70,14 @@ ArrayCtrl::Column& ArrayCtrl::Column::SetDisplay(const Display& d)
 	return *this;
 }
 
-ArrayCtrl::Column& ArrayCtrl::Column::Ctrls(Callback2<int, One<Ctrl>&> _factory)
+ArrayCtrl::Column& ArrayCtrl::Column::Ctrls(Event<int, One<Ctrl>&> factory)
 {
-	factory = _factory;
+	return WithLined(factory);
+}
+
+ArrayCtrl::Column& ArrayCtrl::Column::WithLined(Event<int, One<Ctrl>&> f)
+{
+	factory = f;
 	arrayctrl->hasctrls = arrayctrl->headerctrls = true;
 	arrayctrl->SyncCtrls();
 	arrayctrl->Refresh();
@@ -72,20 +85,14 @@ ArrayCtrl::Column& ArrayCtrl::Column::Ctrls(Callback2<int, One<Ctrl>&> _factory)
 	return *this;
 }
 
-static void sPerformSimple(int, One<Ctrl>& x, Callback1<One<Ctrl>&> factory)
+ArrayCtrl::Column& ArrayCtrl::Column::With(Event<One<Ctrl>&> factory)
 {
-	factory(x);
-}
-
-void ArrayCtrl::Column::Factory1(int, One<Ctrl>& x)
-{
-	factory1(x);
+	return WithLined([=](int, One<Ctrl>& x) { factory(x); });
 }
 
 ArrayCtrl::Column& ArrayCtrl::Column::Ctrls(Callback1<One<Ctrl>&> _factory)
 {
-	factory1 = _factory;
-	return Ctrls(THISBACK(Factory1));
+	return Ctrls([=](int, One<Ctrl>& x) { _factory(x); });
 }
 
 void ArrayCtrl::Column::ClearCache() {
@@ -99,28 +106,39 @@ void ArrayCtrl::Column::Sorts()
 
 ArrayCtrl::Column& ArrayCtrl::Column::Sorting(const ValueOrder& o)
 {
-	cmp = NULL;
 	order = &o;
+	cmp.Clear();
+	line_order.Clear();
 	Sorts();
 	return *this;
 }
 
-ArrayCtrl::Column& ArrayCtrl::Column::Sorting(int (*c)(const Value& a, const Value& b))
+ArrayCtrl::Column& ArrayCtrl::Column::SortingBy(Function<int (const Value& a, const Value& b)> c)
 {
-	order = NULL;
 	cmp = c;
+	order = NULL;
+	line_order.Clear();
+	Sorts();
+	return *this;
+}
+
+ArrayCtrl::Column& ArrayCtrl::Column::SortingLined(Gate<int, int> aorder)
+{
+	line_order = aorder;
+	order = NULL;
+	cmp.Clear();
 	Sorts();
 	return *this;
 }
 
 ArrayCtrl::Column& ArrayCtrl::Column::Sorting()
 {
-	return Sorting(StdValueCompare);
+	return SortingBy(StdValueCompare);
 }
 
 ArrayCtrl::Column& ArrayCtrl::Column::SortDefault()
 {
-	if(!cmp || !order)
+	if(!cmp && !order && !line_order)
 		Sorting();
 	arrayctrl->SetSortColumn(index);
 	return *this;
@@ -168,6 +186,11 @@ HeaderCtrl::Column& ArrayCtrl::Column::HeaderTab() {
 	return arrayctrl->header.Tab(arrayctrl->header.FindIndex(index));
 }
 
+const HeaderCtrl::Column& ArrayCtrl::Column::HeaderTab() const
+{
+	return arrayctrl->header.Tab(arrayctrl->header.FindIndex(index));
+}
+
 void ArrayCtrl::InvalidateCache(int ri)
 {
 	for(int i = 0; i < column.GetCount(); i++)
@@ -201,7 +224,7 @@ void ArrayCtrl::CellInfo::Set(Ctrl *ctrl, bool owned, bool value)
 	ptr.Set1(cc);
 }
 
-ArrayCtrl::CellInfo::CellInfo(pick_ CellInfo& s)
+ArrayCtrl::CellInfo::CellInfo(CellInfo&& s)
 {
 	ptr = s.ptr;
 	const_cast<CellInfo&>(s).ptr.SetPtr(NULL);
@@ -251,7 +274,7 @@ void  ArrayCtrl::SetCtrl(int i, int j, Ctrl& ctrl, bool value)
 	SyncLineCtrls(i);
 }
 
-Ctrl * ArrayCtrl::GetCtrl(int i, int col)
+Ctrl *ArrayCtrl::GetCtrl(int i, int col)
 {
 	SyncLineCtrls(i);
 	if(IsCtrl(i, col))
@@ -281,6 +304,23 @@ void ArrayCtrl::SetDisplay(int i, int j, const Display& d)
 	RefreshRow(i);
 }
 
+void ArrayCtrl::SetRowDisplay(int i, const Display& d)
+{
+	if(i >= 0 && i < GetCount())
+		for (int j = 0 ; j < GetColumnCount(); j++)
+			this->cellinfo.At(i).At(j).Set(d);
+	RefreshRow(i);
+}
+
+void ArrayCtrl::SetColumnDisplay(int j, const Display& d)
+{
+	if(j >= 0 && j < GetColumnCount())
+		for (int i = 0 ; i < GetCount(); i++) {
+			this->cellinfo.At(i).At(j).Set(d);
+			RefreshRow(i);
+		}
+}
+
 const Display& ArrayCtrl::GetDisplay(int i, int j)
 {
 	if(i < cellinfo.GetCount() && j < cellinfo[i].GetCount() && cellinfo[i][j].IsDisplay())
@@ -295,7 +335,7 @@ const Display& ArrayCtrl::GetDisplay(int j)
 
 int ArrayCtrl::Pos(int pos) const {
 	if(pos >= 0) return pos;
-	pos = idx.Find(Id(-pos));
+	pos = idx.Find(id_ndx[-pos]);
 	ASSERT(pos >= 0);
 	return pos;
 }
@@ -341,7 +381,7 @@ Value ArrayCtrl::Get(int ii) const {
 	return Get0(cursor, ii);
 }
 
-Value ArrayCtrl::Get(Id id) const {
+Value ArrayCtrl::Get(const Id& id) const {
 	return Get(GetPos(id));
 }
 
@@ -349,7 +389,7 @@ Value ArrayCtrl::GetOriginal(int ii) const {
 	return Get0(cursor, ii);
 }
 
-Value ArrayCtrl::GetOriginal(Id id) const {
+Value ArrayCtrl::GetOriginal(const Id& id) const {
 	return GetOriginal(GetPos(id));
 }
 
@@ -380,7 +420,7 @@ bool ArrayCtrl::IsModified(int ii) const {
 	return false;
 }
 
-bool ArrayCtrl::IsModified(Id id) const {
+bool ArrayCtrl::IsModified(const Id& id) const {
 	return IsModified(GetPos(id));
 }
 
@@ -441,7 +481,7 @@ void ArrayCtrl::Set(int ii, const Value& v) {
 	RefreshRow(cursor);
 }
 
-void ArrayCtrl::Set(Id id, const Value& v) {
+void ArrayCtrl::Set(const Id& id, const Value& v) {
 	Set(GetPos(id), v);
 }
 
@@ -468,7 +508,7 @@ void ArrayCtrl::Set(int i, int ii, const Value& v)
 	AfterSet(i);
 }
 
-void ArrayCtrl::Set(int i, Id id, const Value& v) {
+void ArrayCtrl::Set(int i, const Id& id, const Value& v) {
 	Set(i, GetPos(id), v);
 }
 
@@ -476,7 +516,7 @@ Value ArrayCtrl::Get(int i, int ii) const {
 	return i == cursor ? Get(ii) : Get0(i, ii);
 }
 
-Value ArrayCtrl::Get(int i, Id id) const {
+Value ArrayCtrl::Get(int i, const Id& id) const {
 	return Get(i, GetPos(id));
 }
 
@@ -510,7 +550,7 @@ Value ArrayCtrl::GetConvertedColumn(int i, int col) const {
 	LTIMING("GetConvertedColumn");
 	const Column& m = column[col];
 	Value v = GetColumn(i, col);
-	if(!m.convert) return v;
+	if(!m.convert && !m.convertby) return v;
 	if(m.cache.Is< Vector<String> >() && i < m.cache.Get< Vector<String> >().GetCount()) {
 		const String& s = m.cache.Get< Vector<String> >()[i];
 		if(!s.IsVoid()) return s;
@@ -519,19 +559,22 @@ Value ArrayCtrl::GetConvertedColumn(int i, int col) const {
 		const Value& v = m.cache.Get< Vector<Value> >()[i];
 		if(!v.IsVoid()) return v;
 	}
-	Value r = m.convert->Format(v);
+	if(m.convertby)
+		v = m.convertby(v);
+	if(m.convert)
+		v = m.convert->Format(v);
 	if(m.cached) {
 		if(m.cache.IsEmpty())
 			m.cache.Create< Vector<String> >();
-		if(IsString(r) && m.cache.Is< Vector<String> >())
-			m.cache.Get< Vector<String> >().At(i, String::GetVoid()) = r;
-		if(!IsString(r) && m.cache.Is< Vector<String> >())
+		if(IsString(v) && m.cache.Is< Vector<String> >())
+			m.cache.Get< Vector<String> >().At(i, String::GetVoid()) = v;
+		if(!IsString(v) && m.cache.Is< Vector<String> >())
 			m.cache.Create< Vector<Value> >();
 		if(m.cache.Is< Vector<Value> >())
-			m.cache.Get< Vector<Value> >().At(i) = r;
+			m.cache.Get< Vector<Value> >().At(i) = v;
 		ASSERT(m.pos.GetCount() || m.cache.IsEmpty());
 	}
-	return r;
+	return v;
 }
 
 int ArrayCtrl::GetCount() const {
@@ -543,6 +586,8 @@ void ArrayCtrl::SetVirtualCount(int c) {
 	Refresh();
 	SyncInfo();
 	SetSb();
+	if(cursor >= virtualcount)
+		GoEnd();
 }
 
 void ArrayCtrl::SetSb() {
@@ -552,6 +597,7 @@ void ArrayCtrl::SetSb() {
 }
 
 void ArrayCtrl::Layout() {
+	SyncColumnsPos();
 	SetSb();
 	HeaderScrollVisibility();
 	PlaceEdits();
@@ -560,19 +606,29 @@ void ArrayCtrl::Layout() {
 
 void ArrayCtrl::Reline(int i, int y)
 {
-	while(i < ln.GetCount()) {
-		Ln& p = ln[i];
-		p.y = y;
-		y += Nvl(p.cy, linecy) + horzgrid;
-		i++;
-	}
+	if(WhenLineVisible)
+		while(i < ln.GetCount()) {
+			Ln& p = ln[i];
+			p.y = y;
+			if(IsLineVisible(i))
+				y += Nvl(p.cy, linecy) + horzgrid;
+			i++;
+		}
+	else
+		while(i < ln.GetCount()) {
+			Ln& p = ln[i];
+			p.y = y;
+			if(IsLineVisible0(i))
+				y += Nvl(p.cy, linecy) + horzgrid;
+			i++;
+		}
 	SetSb();
 }
 
 int  ArrayCtrl::GetLineY(int i) const
 {
 	return i < ln.GetCount() ? ln[i].y
-	                         : (ln.GetCount() ? ln.Top().y + Nvl(ln.Top().cy, linecy) + horzgrid : 0)
+	                         : (ln.GetCount() ? ln.Top().y + IsLineVisible(ln.GetCount() - 1) * (Nvl(ln.Top().cy, linecy) + horzgrid) : 0)
 	                           + (linecy + horzgrid) * (i - ln.GetCount());
 }
 
@@ -611,6 +667,11 @@ void ArrayCtrl::SetLineCy(int i, int cy)
 		else
 			Reline(0, 0);
 	}
+}
+
+void ArrayCtrl::SetLineColor(int i, Color c)
+{
+	array.At(i).paper = c;
 }
 
 int  ArrayCtrl::GetTotalCy() const
@@ -710,7 +771,7 @@ void  ArrayCtrl::SyncPageCtrls()
 	ctrl_high = 0;
 	p = NULL;
 	for(int i = min_visible_line; i <= min(max_visible_line, GetCount() - 1); i++)
-		p = SyncLineCtrls(i, p);	
+		p = SyncLineCtrls(i, p);
 }
 
 void  ArrayCtrl::SyncCtrls()
@@ -746,11 +807,13 @@ void ArrayCtrl::ChildGotFocus()
 		RefreshRow(cursor);
 	if(!acceptingrow) {
 		Point p = FindCellCtrl(GetFocusCtrl());
-		if(!IsNull(p))
+		if(!IsNull(p)) {
 			if(nocursor)
 				ScrollInto(p.y);
 			else
+			if(p.y != cursor) // avoid setting cursor if it is already there - important for multiselect
 				SetCursor(p.y);
+		}
 	}
 	Ctrl::ChildGotFocus();
 }
@@ -783,6 +846,8 @@ const Display& ArrayCtrl::GetCellInfo(int i, int j, bool f0,
 	bg = i & 1 ? evenpaper : oddpaper;
 	if(nobg)
 		bg = Null;
+	if(i < array.GetCount() && !IsNull(array[i].paper))
+		bg = array[i].paper;
 	fg = i & 1 ? evenink : oddink;
 	if((st & Display::SELECT) ||
 	    !multiselect && (st & Display::CURSOR) && !nocursor ||
@@ -794,8 +859,22 @@ const Display& ArrayCtrl::GetCellInfo(int i, int j, bool f0,
 	return GetDisplay(i, j);
 }
 
+void ArrayCtrl::SpanWideCell(const Display& d, const Value& q, int cm, int& cw, Rect& r, int i, int& j)
+{
+	int cx = d.GetStdSize(q).cx;
+	while(cx > r.Width() - 2 * cm && j + 1 < column.GetCount()) {
+		Value v = GetConvertedColumn(i, j + 1);
+		if(!IsNull(v))
+			break;
+		j++;
+		cw += header.GetTabWidth(j);
+		r.right = r.left + cw - vertgrid + (j == column.GetCount() - 1);
+	}
+}
+
 Size  ArrayCtrl::DoPaint(Draw& w, bool sample) {
 	LTIMING("Paint");
+	SyncColumnsPos();
 	bool hasfocus0 = HasFocusDeep() || sample;
 	Size size = sample ? StdSampleSize() : GetSize();
 	Rect r;
@@ -812,42 +891,47 @@ Size  ArrayCtrl::DoPaint(Draw& w, bool sample) {
 	int sy = 0;
 	if(!IsNull(i))
 		while(i < GetCount()) {
-			if(!sample || i == cursor || i < array.GetCount() && array[i].select) {
+			if((!sample || i == cursor || i < array.GetCount() && array[i].select) && IsLineVisible(i)) {
 				r.top = sample ? sy : GetLineY(i) - sb;
 				if(r.top > size.cy)
 					break;
 				r.bottom = r.top + GetLineCy(i);
 				int x = xs;
 				dword st = 0;
-				for(int j = js; j < column.GetCount(); j++) {
-					int cw = header.GetTabWidth(j);
-					int jj = header.GetTabIndex(j);
-					int cm = column[jj].margin;
-					if(cm < 0)
-						cm = header.Tab(j).GetMargin();
-					if(x > size.cx) break;
-					r.left = x;
-					r.right = x + cw - vertgrid + (j == column.GetCount() - 1);
-					dword st;
-					Color fg, bg;
-					Value q;
-					const Display& d = GetCellInfo(i, jj, hasfocus0, q, fg, bg, st);
-					if(sample || w.IsPainting(r))
-						if(cw < 2 * cm || editmode && i == cursor && column[jj].edit)
-							d.PaintBackground(w, r, q, fg, bg, st);
-						else {
-							d.PaintBackground(w, RectC(r.left, r.top, cm, r.Height()), q, fg, bg, st);
-							r.left += cm;
-							r.right -= cm;
-							d.PaintBackground(w, RectC(r.right, r.top, cm, r.Height()), q, fg, bg, st);
-							w.Clip(r);
-							GetDisplay(i, jj).Paint(w, r, q, fg, bg, st);
-							w.End();
+				if(r.bottom > r.top)
+					for(int j = js; j < column.GetCount(); j++) {
+						int cw = header.GetTabWidth(j);
+						int jj = header.GetTabIndex(j);
+						int cm = column[jj].margin;
+						if(cm < 0)
+							cm = header.Tab(j).GetMargin();
+						if(x > size.cx) break;
+						r.left = x;
+						r.right = x + cw - vertgrid + (jj == column.GetCount() - 1);
+						dword st;
+						Color fg, bg;
+						Value q;
+						const Display& d = GetCellInfo(i, jj, hasfocus0, q, fg, bg, st);
+						if(sample || w.IsPainting(r)) {
+							if(spanwidecells)
+								SpanWideCell(d, q, cm, cw, r, i, j);
+							
+							if(cw < 2 * cm || editmode && i == cursor && column[jj].edit)
+								d.PaintBackground(w, r, q, fg, bg, st);
+							else {
+								d.PaintBackground(w, RectC(r.left, r.top, cm, r.Height()), q, fg, bg, st);
+								r.left += cm;
+								r.right -= cm;
+								d.PaintBackground(w, RectC(r.right, r.top, cm, r.Height()), q, fg, bg, st);
+								w.Clip(r);
+								d.Paint(w, r, q, fg, bg, st);
+								w.End();
+							}
 						}
-					x += cw;
-					if(vertgrid)
-						w.DrawRect(x - 1, r.top, 1, r.Height(), gridcolor);
-				}
+						x += cw;
+						if(vertgrid)
+							w.DrawRect(x - 1, r.top, 1, r.Height(), gridcolor);
+					}
 				if(horzgrid)
 					w.DrawRect(0, r.bottom, size.cx, 1, gridcolor);
 				r.left = 0;
@@ -903,6 +987,7 @@ void ArrayCtrl::MinMaxLine()
 }
 
 void ArrayCtrl::Scroll() {
+	SyncColumnsPos();
 	MinMaxLine();
 	SyncPageCtrls();
 	PlaceEdits();
@@ -911,12 +996,34 @@ void ArrayCtrl::Scroll() {
 	WhenScroll();
 }
 
+void ArrayCtrl::SyncColumnsPos()
+{
+	int x = 0;
+	column_pos.Clear();
+	column_width.Clear();
+	for(int i = 0; i < header.GetCount(); i++) {
+		int w = header.GetTabWidth(i);
+		int ii = header.GetTabIndex(i);
+		column_pos.At(ii, 0) = x;
+		column_width.At(ii, 0) = w;
+		x += w;
+	}
+}
+
 void ArrayCtrl::HeaderLayout() {
+	SyncColumnsPos();
 	MinMaxLine();
 	Refresh();
 	SyncInfo();
 	SyncPageCtrls();
 	PlaceEdits();
+	WhenHeaderLayout();
+}
+
+void ArrayCtrl::HeaderScroll()
+{
+	Scroll();
+	WhenHeaderLayout();
 }
 
 void ArrayCtrl::HeaderScrollVisibility()
@@ -941,11 +1048,11 @@ ArrayCtrl::IdInfo& ArrayCtrl::IndexInfo(int i) {
 	return idx[i];
 }
 
-ArrayCtrl::IdInfo& ArrayCtrl::IndexInfo(Id id) {
+ArrayCtrl::IdInfo& ArrayCtrl::IndexInfo(const Id& id) {
 	return idx.Get(id);
 }
 
-ArrayCtrl::IdInfo& ArrayCtrl::AddIndex(Id id) {
+ArrayCtrl::IdInfo& ArrayCtrl::AddIndex(const Id& id) {
 	return idx.Add(id);
 }
 
@@ -953,7 +1060,7 @@ ArrayCtrl::IdInfo& ArrayCtrl::AddIndex() {
 	return idx.Add(Id());
 }
 
-ArrayCtrl::IdInfo& ArrayCtrl::SetId(int i, Id id) {
+ArrayCtrl::IdInfo& ArrayCtrl::SetId(int i, const Id& id) {
 	while(idx.GetCount() < i + 1)
 		idx.Add(Id());
 	idx.SetKey(i, id);
@@ -965,7 +1072,7 @@ ArrayCtrl::Column& ArrayCtrl::AddColumn(const char *text, int w) {
 	return AddColumnAt(idx.GetCount() - 1, text, w);
 }
 
-ArrayCtrl::Column& ArrayCtrl::AddColumn(Id id, const char *text, int w) {
+ArrayCtrl::Column& ArrayCtrl::AddColumn(const Id& id, const char *text, int w) {
 	AddIndex(id);
 	return AddColumnAt(idx.GetCount() - 1, text, w);
 }
@@ -981,7 +1088,7 @@ ArrayCtrl::Column& ArrayCtrl::AddColumnAt(int pos, const char *text, int w) {
 	return m;
 }
 
-ArrayCtrl::Column& ArrayCtrl::AddColumnAt(Id id, const char *text, int w) {
+ArrayCtrl::Column& ArrayCtrl::AddColumnAt(const Id& id, const char *text, int w) {
 	header.Add(text, w);
 	Column& m = column.Add();
 	m.arrayctrl = this;
@@ -1012,7 +1119,7 @@ int ArrayCtrl::FindColumnWithPos(int pos) const
 	return -1;
 }
 
-int ArrayCtrl::FindColumnWithId(Id id) const
+int ArrayCtrl::FindColumnWithId(const Id& id) const
 {
 	return FindColumnWithPos(GetPos(id));
 }
@@ -1023,7 +1130,7 @@ ArrayCtrl::IdInfo& ArrayCtrl::AddCtrl(Ctrl& ctrl) {
 	return f;
 }
 
-ArrayCtrl::IdInfo& ArrayCtrl::AddCtrl(Id id, Ctrl& ctrl) {
+ArrayCtrl::IdInfo& ArrayCtrl::AddCtrl(const Id& id, Ctrl& ctrl) {
 	IdInfo& f = AddIndex(id);
 	AddCtrlAt(idx.GetCount() - 1, ctrl);
 	return f;
@@ -1037,8 +1144,8 @@ void ArrayCtrl::AddCtrlAt(int ii, Ctrl& ctrl) {
 	ctrl <<= Null;
 }
 
-void ArrayCtrl::AddCtrlAt(Id id, Ctrl& ctrl) {
-	AddCtrlAt(-id.AsNdx(), ctrl);
+void ArrayCtrl::AddCtrlAt(const Id& id, Ctrl& ctrl) {
+	AddCtrlAt(-AsNdx(id), ctrl);
 }
 
 void ArrayCtrl::AddRowNumCtrl(Ctrl& ctrl) {
@@ -1047,15 +1154,13 @@ void ArrayCtrl::AddRowNumCtrl(Ctrl& ctrl) {
 
 Rect ArrayCtrl::GetCellRect(int i, int col) const
 {
+	LTIMING("GetCellRect");
 	Rect r;
 	r.top = GetLineY(i) - sb;
 	r.bottom = r.top + GetLineCy(i);
-	int x = 0;
-	HeaderCtrl& h = const_cast<HeaderCtrl&>(header); // Ugly!!!
-	for(i = 0; header.GetTabIndex(i) != col; i++)
-		x += h.GetTabWidth(i);
-	r.left = x - header.GetScroll();
-	r.right = r.left + h.GetTabWidth(i) - vertgrid + (col == column.GetCount() - 1);
+	r.left = (col < column_pos.GetCount() ? column_pos[col] : 0) - header.GetScroll();
+	r.right = r.left + (col < column_width.GetCount() ? column_width[col] : 0) - vertgrid +
+	          (col == column.GetCount() - 1);
 	return r;
 }
 
@@ -1180,6 +1285,7 @@ bool ArrayCtrl::UpdateRow() {
 		}
 	}
 	if(iv) {
+		RefreshRow(cursor);
 		InvalidateCache(cursor);
 		WhenArrayAction();
 	}
@@ -1292,7 +1398,7 @@ void ArrayCtrl::SetCursorEditFocus()
 }
 
 bool ArrayCtrl::SetCursor0(int i, bool dosel) {
-	if(nocursor || GetCount() == 0 || i >= 0 && i < array.GetCount() && !array[i].enabled)
+	if(nocursor || GetCount() == 0 || !IsLineEnabled(i))
 		return false;
 	i = minmax(i, 0, GetCount() - 1);
 	bool sel = false;
@@ -1400,7 +1506,27 @@ void ArrayCtrl::EnableLine(int i, bool en)
 
 bool ArrayCtrl::IsLineEnabled(int i) const
 {
-	return i < 0 ? false : i < array.GetCount() ? array[i].enabled : true;
+	bool b = i < 0 ? false : i < array.GetCount() ? array[i].enabled : true;
+	WhenLineEnabled(i, b);
+	return b;
+}
+
+void ArrayCtrl::ShowLine(int i, bool e)
+{
+	int q = ln.GetCount();
+	array.At(i).visible = e;
+	ln.At(i);
+	if(q > 0)
+		Reline(q - 1, ln[q - 1].y);
+	else
+		Reline(0, 0);
+}
+
+bool ArrayCtrl::IsLineVisible(int i) const
+{
+	bool b = IsLineVisible0(i);
+	WhenLineVisible(i, b);
+	return b;
 }
 
 void ArrayCtrl::Select(int i, int count, bool sel)
@@ -1434,6 +1560,15 @@ void ArrayCtrl::ClearSelection()
 bool ArrayCtrl::IsSel(int i) const
 {
 	return multiselect ? IsSelected(i) : GetCursor() == i;
+}
+
+Vector<int> ArrayCtrl::GetSelKeys() const
+{
+	Vector<int> id;
+	for(int i = 0; i < GetCount(); i++)
+		if(IsSel(i))
+			id.Add(Get(i, 0));
+	return id;
 }
 
 int  ArrayCtrl::GetScroll() const
@@ -1596,20 +1731,22 @@ void ArrayCtrl::SyncInfo()
 		c.y = GetLineAt(p.y + sb);
 		if(c.y >= 0) {
 			for(c.x = 0; c.x < column.GetCount(); c.x++) {
-				Rect r = GetCellRect(c.y, c.x);
-				if(r.Contains(p)) {
-					if(!IsCtrl(c.y, c.x)) {
-						int cm = column[c.x].margin;
-						if(cm < 0)
-							cm = header.Tab(header.FindIndex(c.x)).GetMargin();
-						dword st;
-						Color fg, bg;
-						Value q;
-						const Display& d = GetCellInfo(c.y, c.x, HasFocusDeep(), q, fg, bg, st);
+				if(!IsCtrl(c.y, c.x)) {
+					Rect r = GetCellRect(c.y, c.x);
+					int cm = column[c.x].margin;
+					if(cm < 0)
+						cm = header.Tab(header.FindIndex(c.x)).GetMargin();
+					dword st;
+					Color fg, bg;
+					Value q;
+					const Display& d = GetCellInfo(c.y, c.x, HasFocusDeep(), q, fg, bg, st);
+					int cw = r.Width();
+					if(spanwidecells)
+						SpanWideCell(d, q, cm, cw, r, c.y, c.x);
+					if(r.Contains(p)) {
 						info.Set(this, r, q, &d, fg, bg, st, cm);
 						return;
 					}
-					break;
 				}
 			}
 		}
@@ -1642,6 +1779,8 @@ void ArrayCtrl::MouseLeave()
 
 Image ArrayCtrl::CursorImage(Point p, dword)
 {
+	if(!IsNull(cursor_override))
+		return cursor_override;
 	return header.GetSplit(p.x) < 0 || header.GetMode() == HeaderCtrl::FIXED ? Image::Arrow()
 	                                                                         : CtrlsImg::HorzPos();
 }
@@ -1776,11 +1915,12 @@ bool ArrayCtrl::Key(dword key, int) {
 		if(IsCursor()) {
 			int d = GetEditColumn();
 			int i = FindEnabled(cursor - 1,  -1);
-			if(i >= 0 && SetCursor0(i))
+			if(i >= 0 && SetCursor0(i)) {
 				if(d >= 0)
 					StartEdit(d);
 				else
 					KeyMultiSelect(aanchor, key);
+			}
 		}
 		else
 		if((IsInserting() || IsAppending()) && IsAppendLine())
@@ -1852,6 +1992,7 @@ bool ArrayCtrl::AcceptEnter() {
 }
 
 void  ArrayCtrl::Set(int i, const Vector<Value>& v) {
+	array.At(i).line.Clear();
 	for(int ii = 0; ii < v.GetCount(); ii++)
 		Set(i, ii, v[ii]);
 	InvalidateCache(i);
@@ -1882,12 +2023,69 @@ void  ArrayCtrl::Add(const Vector<Value>& v)
 	Set(array.GetCount(), v);
 }
 
+void ArrayCtrl::Set(int ii, const VectorMap<String, Value>& m)
+{
+	for(int i = 0; i < m.GetCount(); i++) {
+		int j = GetPos(m.GetKey(i));
+		if(j >= 0)
+			Set(ii, j, m[i]);
+	}
+}
+
+void ArrayCtrl::SetMap(int ii, const ValueMap& m)
+{
+	for(int i = 0; i < m.GetCount(); i++) {
+		int j = GetPos((String)m.GetKey(i));
+		if(j >= 0)
+			Set(ii, j, m.GetValue(i));
+	}
+}
+
+void ArrayCtrl::Add(const VectorMap<String, Value>& m)
+{
+	Set(array.GetCount(), m);
+}
+
+void ArrayCtrl::AddMap(const ValueMap& m)
+{
+	SetMap(array.GetCount(), m);
+}
+
+ValueMap ArrayCtrl::GetMap(int i) const
+{
+	ValueMap m;
+	for(int j = 0; j < GetIndexCount(); j++) {
+		String id = ~GetId(j);
+		if(id.GetCount())
+			m(id, Get(i, j));
+	}
+	return m;
+}
+
+ValueArray ArrayCtrl::GetArray(int i) const
+{
+	return ValueArray(clone(GetLine(i)));
+}
+
+void ArrayCtrl::SetArray(int i, const ValueArray& va)
+{
+	Set(i, va.Get());
+}
+
+void ArrayCtrl::AddArray(const ValueArray& va)
+{
+	SetArray(array.GetCount(), va);
+}
+
 struct ArrayCtrlSeparatorDisplay : Display {
 	virtual void Paint(Draw& w, const Rect& r, const Value& q, Color ink, Color paper, dword style) const {
 		int y = r.top + r.GetHeight() / 2;
 		w.DrawRect(r, paper);
 		w.DrawRect(r.left, y, r.GetWidth(), 1, SColorShadow());
 		w.DrawRect(r.left, y + 1, r.GetWidth(), 1, SColorLight());
+	}
+	virtual Size GetStdSize(const Value& q) const {
+		return Size(0, 2);
 	}
 };
 
@@ -1901,6 +2099,7 @@ void ArrayCtrl::AddSeparator()
 	DisableLine(ii);
 }
 
+//$-
 #define E__Addv(I)    Set0(q, I - 1, p##I)
 #define E__AddF(I) \
 void ArrayCtrl::Add(__List##I(E__Value)) { \
@@ -1909,6 +2108,7 @@ void ArrayCtrl::Add(__List##I(E__Value)) { \
 	AfterSet(q); \
 }
 __Expand(E__AddF)
+//$+
 
 void  ArrayCtrl::Insert(int i, int count) {
 	if(i < array.GetCount()) {
@@ -2082,11 +2282,14 @@ String ArrayCtrl::RowFormat(const char *s)
 bool ArrayCtrl::DoRemove()
 {
 	if(IsReadOnly()) return false;
-	if(!IsCursor() || askremove && !PromptOKCancel(RowFormat(t_("Вы действительно намерены удалить выделенный %s ?"))))
+	if(!IsCursor() || askremove && !PromptOKCancel(RowFormat(t_("Do you really want to delete the selected %s ?"))))
 		return false;
 	if(multiselect) {
+		Bits sel;
+		for(int i = 0; i < GetCount(); i++)
+			sel.Set(i, IsSelected(i));
 		for(int i = GetCount() - 1; i >= 0; i--)
-			if(IsSelected(i))
+			if(sel[i])
 				Remove(i);
 	}
 	else
@@ -2119,53 +2322,53 @@ void ArrayCtrl::StdBar(Bar& menu)
 	bool c = !IsEdit() && e;
 	bool d = c && IsCursor();
 	if(inserting)
-		menu.Add(e, RowFormat(t_("Введите %s")), THISBACK(DoInsertBefore))
-			.Help(RowFormat(t_("Введите новый %s в таблицу.")))
+		menu.Add(e, RowFormat(t_("Insert %s")), THISBACK(DoInsertBefore))
+			.Help(RowFormat(t_("Insert a new %s into the table.")))
 			.Key(K_INSERT);
 	if(bains == 1) {
-		menu.Add(e, RowFormat(t_("Введите %s перед")), THISBACK(DoInsertBefore))
-		    .Help(RowFormat(t_("Введите новый %s в таблицу перед текущим")))
+		menu.Add(e, RowFormat(t_("Insert %s before")), THISBACK(DoInsertBefore))
+		    .Help(RowFormat(t_("Insert a new %s into the table before current")))
 		    .Key(K_INSERT);
-		menu.Add(e, RowFormat(t_("Введите %s после")), THISBACK(DoInsertAfter))
-		    .Help(RowFormat(t_("Введите новый %s в таблицу после текущего")))
+		menu.Add(e, RowFormat(t_("Insert %s after")), THISBACK(DoInsertAfter))
+		    .Help(RowFormat(t_("Insert a new %s into the table after current")))
 		    .Key(K_SHIFT_INSERT);
 	}
 	if(bains == 2) {
-		menu.Add(e, RowFormat(t_("Введите %s после")), THISBACK(DoInsertAfter))
-		    .Help(RowFormat(t_("Введите новый %s в таблицу после текущего")))
+		menu.Add(e, RowFormat(t_("Insert %s after")), THISBACK(DoInsertAfter))
+		    .Help(RowFormat(t_("Insert a new %s into the table after current")))
 		    .Key(K_INSERT);
-		menu.Add(e, RowFormat(t_("Введите %s перед")), THISBACK(DoInsertBefore))
-		    .Help(RowFormat(t_("Введите новый %s в таблицу перед текущим")))
+		menu.Add(e, RowFormat(t_("Insert %s before")), THISBACK(DoInsertBefore))
+		    .Help(RowFormat(t_("Insert a new %s into the table before current")))
 		    .Key(K_SHIFT_INSERT);
 	}
 	if(IsAppending())
-		menu.Add(c, RowFormat(t_("Добавьте %s")), THISBACK(DoAppend))
-			.Help(RowFormat(t_("Добавьте новый %s в конце таблицы.")))
+		menu.Add(c, RowFormat(t_("Append %s")), THISBACK(DoAppend))
+			.Help(RowFormat(t_("Append a new %s at the end of the table.")))
 			.Key(inserting ? (int)K_SHIFT_INSERT : (int)K_INSERT);
 	if(duplicating)
-		menu.Add(d, RowFormat(t_("Дублируйте %s")), THISBACK(DoDuplicate))
-			.Help(RowFormat(t_("Дублируйте текущую таблицу %s.")))
+		menu.Add(d, RowFormat(t_("Duplicate %s")), THISBACK(DoDuplicate))
+			.Help(RowFormat(t_("Duplicate current table %s.")))
 			.Key(K_CTRL_INSERT);
 	if(IsEditing())
-		menu.Add(d, RowFormat(t_("Редактировать %s")), THISBACK(DoEdit))
-			.Help(RowFormat(t_("Редактировать активный %s.")))
+		menu.Add(d, RowFormat(t_("Edit %s")), THISBACK(DoEdit))
+			.Help(RowFormat(t_("Edit active %s.")))
 			.Key(K_CTRL_ENTER);
 	if(removing)
-		menu.Add(d, RowFormat(t_("Удалить %s\tУдалить")), THISBACK(DoRemovem))
-			.Help(RowFormat(t_("Удалить активный %s.")))
+		menu.Add(d, RowFormat(t_("Delete %s\tDelete")), THISBACK(DoRemovem))
+			.Help(RowFormat(t_("Delete active %s.")))
 			.Key(K_DELETE);
 	if(moving) {
-		menu.Add(GetCursor() > 0, RowFormat(t_("Поднять %s")), THISBACK(SwapUp))
-			.Help(RowFormat(t_("Обменять %s с предыдущим, подняв его выше.")))
+		menu.Add(GetCursor() > 0, RowFormat(t_("Move %s up")), THISBACK(SwapUp))
+			.Help(RowFormat(t_("Swap %s with previous thus moving it up.")))
 			.Key(K_CTRL_UP);
 		menu.Add(GetCursor() >= 0 && GetCursor() < GetCount() - 1,
-		         RowFormat(t_("Опустить %s")), THISBACK(SwapDown))
-			.Help(RowFormat(t_("Обменять %s с предыдущим, опустив его ниже.")))
+		         RowFormat(t_("Move %s down")), THISBACK(SwapDown))
+			.Help(RowFormat(t_("Swap %s with next thus moving it down.")))
 			.Key(K_CTRL_DOWN);
 	}
 	if(multiselect) {
-		menu.Add(GetCount() > 0, RowFormat(t_("Выделить все")), THISBACK(DoSelectAll))
-			.Help(t_("Выделить все ряды таблицы"))
+		menu.Add(GetCount() > 0, RowFormat(t_("Select all")), CtrlImg::select_all(), THISBACK(DoSelectAll))
+			.Help(t_("Select all table rows"))
 			.Key(K_CTRL_A);
 	}
 }
@@ -2180,7 +2383,7 @@ int ArrayCtrl::Find(const Value& v, int ii, int i) const {
 	return -1;
 }
 
-int  ArrayCtrl::Find(const Value& v, Id id, int i) const {
+int  ArrayCtrl::Find(const Value& v, const Id& id, int i) const {
 	return Find(v, GetPos(id), i);
 }
 
@@ -2191,7 +2394,7 @@ bool ArrayCtrl::FindSetCursor(const Value& val, int ii, int i) {
 	return true;
 }
 
-bool ArrayCtrl::FindSetCursor(const Value& val, Id id, int i) {
+bool ArrayCtrl::FindSetCursor(const Value& val, const Id& id, int i) {
 	return FindSetCursor(val, idx.Find(id), i);
 }
 
@@ -2215,7 +2418,7 @@ void ArrayCtrl::SortA()
 				if(IsCtrl(i, j)) {
 					const Column& m = column[j];
 					ASSERT(m.pos.GetCount() == 1);
-					array[i].line[m.pos[0]] = GetCellCtrl(i, j).ctrl->GetData();
+					array[i].line.At(m.pos[0]) = GetCellCtrl(i, j).ctrl->GetData();
 				}
 	}
 }
@@ -2228,15 +2431,15 @@ void ArrayCtrl::SortB(const Vector<int>& o)
 	Vector< Vector<CellInfo> > ncellinfo;
 	for(int i = 0; i < o.GetCount(); i++) {
 		int oi = o[i];
-		narray[i] = array[oi];
+		narray[i] = pick(array[oi]);
 		if(oi < cellinfo.GetCount())
-			ncellinfo.At(i) = cellinfo[oi];
+			ncellinfo.At(i) = pick(cellinfo[oi]);
 		if(oi < ln.GetCount())
 			nln.At(i) = ln[oi];
 	}
-	array = narray;
-	cellinfo = ncellinfo;
-	ln = nln;
+	array = pick(narray);
+	cellinfo = pick(ncellinfo);
+	ln = pick(nln);
 	Reline(0, 0);
 	if(hasctrls) {
 		for(int i = 0; i < array.GetCount(); i++)
@@ -2244,55 +2447,102 @@ void ArrayCtrl::SortB(const Vector<int>& o)
 				if(IsCtrl(i, j)) {
 					const Column& m = column[j];
 					ASSERT(m.pos.GetCount() == 1);
-					array[i].line[m.pos[0]] = Null;
+					array[i].line.At(m.pos[0]) = Null;
 				}
 		SyncCtrls();
 		ChildGotFocus();
 	}
 }
 
-void ArrayCtrl::Sort(const ArrayCtrl::Order& order) {
-	CHECK(KillCursor());
+void ArrayCtrl::ReArrange(const Vector<int>& order)
+{
+	KillCursor();
+	ClearSelection();
 	ClearCache();
-	SortPredicate sp;
-	sp.order = &order;
-	if(ln.GetCount() || cellinfo.GetCount()) {
-		SortA();
-		Vector<int> o = GetStableSortOrder(array, sp);
-		SortB(GetStableSortOrder(array, sp));
-	}
-	else
-		StableSort(array, sp);
+	SortA();
+	SortB(order);
 	Refresh();
 	SyncInfo();
 }
 
-// Fixme: Use SortB to sort CellInfo too.
-
-void ArrayCtrl::Sort(int from, int count, const ArrayCtrl::Order& order) {
-	CHECK(KillCursor());
+void ArrayCtrl::Sort(int from, int count, Gate<int, int> order)
+{
+	KillCursor();
+	ClearSelection();
 	ClearCache();
-	SortPredicate sp;
-	sp.order = &order;
-	StableSort(array.GetIter(from), array.GetIter(from + count), sp);
+	Vector<int> h;
+	for(int i = 0; i < array.GetCount(); i++)
+		h.Add(i);
+	SortA();
+	StableSort(SubRange(h, from, count).Write(), order);
+	SortB(h);
+	Refresh();
+	SyncInfo();
 }
 
-void ArrayCtrl::ColumnSort(int column, const ValueOrder& order)
+void ArrayCtrl::Sort(Gate<int, int> order)
+{
+	if(sorting_from < array.GetCount())
+		Sort(sorting_from, array.GetCount() - sorting_from, order);
+}
+
+bool ArrayCtrl::OrderPred(int i1, int i2, const ArrayCtrl::Order *o)
+{
+	return (*o)(array[i1].line, array[i2].line);
+}
+
+void ArrayCtrl::Sort(int from, int count, const ArrayCtrl::Order& order)
+{
+	Sort(from, count, THISBACK1(OrderPred, &order));
+}
+
+void ArrayCtrl::Sort(const ArrayCtrl::Order& order)
+{
+	if(sorting_from < array.GetCount())
+		Sort(sorting_from, array.GetCount() - sorting_from, order);
+}
+
+struct sAC_ColumnSort : public ValueOrder {
+	bool                                           descending;
+	const ValueOrder                              *order;
+	Function<int (const Value& a, const Value& b)> cmp;
+
+	virtual bool operator()(const Value& a, const Value& b) const {
+		return descending ? order ? (*order)(b, a) : cmp(b, a) < 0
+		                  : order ? (*order)(a, b) : cmp(a, b) < 0;
+	}
+};
+
+bool ArrayCtrl::ColumnSortPred(int i1, int i2, int column, const ValueOrder *o)
+{
+	return (*o)(GetConvertedColumn(i1, column), GetConvertedColumn(i2, column));
+}
+
+void ArrayCtrl::ColumnSort(int column, Gate<int, int> order)
 {
 	Value key = GetKey();
 	CHECK(KillCursor());
 	if(columnsortsecondary)
 		Sort(*columnsortsecondary);
-	ClearCache();
-	Vector<Value> hv;
-	for(int i = 0; i < GetCount(); i++)
-		hv.Add(GetConvertedColumn(i, column));
-	SortA();
-	SortB(GetStableSortOrder(hv, order));
-	Refresh();
-	SyncInfo();
+	Sort(order);
 	if(columnsortfindkey)
 		FindSetCursor(key);
+}
+
+void ArrayCtrl::ColumnSort(int column, const ValueOrder& order)
+{
+	ColumnSort(column, THISBACK2(ColumnSortPred, column, &order));
+}
+
+void ArrayCtrl::ColumnSort(int column, int (*compare)(const Value& a, const Value& b))
+{
+	sAC_ColumnSort cs;
+	cs.descending = false;
+	cs.order = NULL;
+	cs.cmp = compare;
+	if(!cs.cmp)
+		cs.cmp = StdValueCompare;
+	ColumnSort(column, cs);
 }
 
 void ArrayCtrl::SetSortColumn(int ii, bool desc)
@@ -2312,17 +2562,6 @@ void ArrayCtrl::ToggleSortColumn(int ii)
 	}
 	DoColumnSort();
 }
-
-struct sAC_ColumnSort : public ValueOrder {
-	bool              descending;
-	const ValueOrder *order;
-	int             (*cmp)(const Value& a, const Value& b);
-
-	virtual bool operator()(const Value& a, const Value& b) const {
-		return descending ? cmp ? (*cmp)(b, a) < 0 : (*order)(b, a)
-		                  : cmp ? (*cmp)(a, b) < 0 : (*order)(a, b);
-	}
-};
 
 void ArrayCtrl::DoColumnSort()
 {
@@ -2344,13 +2583,18 @@ void ArrayCtrl::DoColumnSort()
 	if(sortcolumn >= 0 && sortcolumn < column.GetCount()) {
 		sAC_ColumnSort cs;
 		const Column& c = column[sortcolumn];
-		cs.descending = sortcolumndescending;
-		cs.order = c.order;
-		cs.cmp = c.cmp;
-		if(!cs.order && !cs.cmp)
-			cs.cmp = StdValueCompare;
-		ColumnSort(sortcolumn, cs);
+		if(c.line_order)
+			ColumnSort(sortcolumn, c.line_order);
+		else {
+			cs.descending = sortcolumndescending;
+			cs.order = c.order;
+			cs.cmp = c.cmp;
+			if(!cs.order && !cs.cmp)
+				cs.cmp = StdValueCompare;
+			ColumnSort(sortcolumn, cs);
+		}
 	}
+	WhenColumnSorted();
 }
 
 ArrayCtrl& ArrayCtrl::AllSorting()
@@ -2396,7 +2640,7 @@ void ArrayCtrl::Sort(int ii, int (*compare)(const Value& v1, const Value& v2)) {
 	Sort(io);
 }
 
-void ArrayCtrl::Sort(Id id, int (*compare)(const Value& v1, const Value& v2)) {
+void ArrayCtrl::Sort(const Id& id, int (*compare)(const Value& v1, const Value& v2)) {
 	Sort(idx.Find(id), compare);
 }
 
@@ -2405,11 +2649,13 @@ void ArrayCtrl::Clear() {
 	if(cursor >= 0) {
 		WhenKillCursor();
 		cursor = -1;
-		WhenCursor();
-		WhenSel();
 		info.Cancel();
 	}
 	array.Clear();
+	if(cursor >= 0) {
+		WhenCursor();
+		WhenSel();
+	}
 	cellinfo.Clear();
 	ln.Clear();
 	ClearCache();
@@ -2444,6 +2690,8 @@ void ArrayCtrl::Serialize(Stream& s)
 void ArrayCtrl::Reset() {
 	header.Reset();
 	idx.Clear();
+	id_ndx.Clear();
+	id_ndx.Add(Id());
 	column.Clear();
 	control.Clear();
 	nocursor = false;
@@ -2475,10 +2723,12 @@ void ArrayCtrl::Reset() {
 	allsorting = false;
 	acceptingrow = 0;
 	columnsortfindkey = false;
+	spanwidecells = false;
 	linecy = Draw::GetStdFontCy();
 	Clear();
 	sb.SetLine(linecy);
 	columnsortsecondary = NULL;
+	sorting_from = 0;
 	min_visible_line = 0;
 	max_visible_line = INT_MAX;
 	ctrl_low = ctrl_high = 0;
@@ -2498,7 +2748,8 @@ void ArrayCtrl::MouseWheel(Point p, int zdelta, dword keyflags) {
 
 Vector<Value> ArrayCtrl::ReadRow(int i) const {
 	Vector<Value> v;
-	for(int j = 0; j < idx.GetCount(); j++)
+	int n = max(idx.GetCount(), i < array.GetCount() ? array[i].line.GetCount() : 0);
+	for(int j = 0; j < n; j++)
 		v.Add(Get(i, j));
 	return v;
 }
@@ -2533,6 +2784,16 @@ ArrayCtrl& ArrayCtrl::ColumnWidths(const char *s)
 	return *this;
 }
 
+String ArrayCtrl::GetColumnWidths()
+{
+	String text;
+	for(int i = 0; i < header.GetCount(); i++)
+		text << Format(i ? " %d" : "%d",
+		              header.GetMode() == HeaderCtrl::SCROLL ? (int)header[i].GetRatio()
+		                                                     : header.GetTabWidth(i));
+	return text;
+}
+
 ArrayCtrl& ArrayCtrl::OddRowColor(Color paper, Color ink)
 {
 	oddpaper = paper;
@@ -2560,7 +2821,8 @@ void ArrayCtrl::RefreshSel()
 		while(y < sz.cy && i < array.GetCount()) {
 			if(IsSelected(i))
 				RefreshRow(i);
-			y += GetLineCy(i++);
+			if(IsLineVisible(i))
+				y += GetLineCy(i++);
 		}
 	}
 }
@@ -2658,10 +2920,11 @@ void ArrayCtrl::DragLeave()
 
 void ArrayCtrl::RemoveSelection()
 {
-	for(int i = GetCount() - 1; i >= 0; i--)
-		if(IsSel(i))
-			Remove(i); // Optimize!
+	int ci = cursor;
 	KillCursor();
+	for(int i = GetCount() - 1; i >= 0; i--)
+		if(IsSel(i) || i == ci)
+			Remove(i); // Optimize!
 }
 
 void ArrayCtrl::InsertDrop(int line, const Vector< Vector<Value> >& data, PasteClip& d, bool self)
@@ -2669,12 +2932,19 @@ void ArrayCtrl::InsertDrop(int line, const Vector< Vector<Value> >& data, PasteC
 	if(data.GetCount() == 0)
 		return;
 	if(d.GetAction() == DND_MOVE && self) {
-		for(int i = GetCount() - 1; i >= 0; i--) {
-			if(IsSel(i)) {
-				Remove(i); // Optimize!
-				if(i < line)
-					line--;
+		if(IsMultiSelect())
+			for(int i = GetCount() - 1; i >= 0; i--) {
+				if(IsSel(i)) {
+					Remove(i); // Optimize!
+					if(i < line)
+						line--;
+				}
 			}
+		else
+		if(IsCursor()) {
+			if(GetCursor() < line)
+				line--;
+			Remove(GetCursor());
 		}
 		KillCursor();
 		d.SetAction(DND_COPY);
@@ -2775,7 +3045,7 @@ static String sCsvFormat(const Value& v)
 
 String ArrayCtrl::AsCsv(bool sel, int sep, bool hdr)
 {
-	char h[2] = { sep, 0 };
+	char h[2] = { (char)sep, 0 };
 	return AsText(sCsvFormat, sel, h, "\r\n", hdr ? h : NULL, "\r\n");
 }
 
@@ -2785,9 +3055,10 @@ ArrayCtrl::ArrayCtrl() {
 	AddFrame(sb);
 	AddFrame(header);
 	header.WhenLayout = THISBACK(HeaderLayout);
-	header.WhenScroll = sb.WhenScroll = THISBACK(Scroll);
+	header.WhenScroll = THISBACK(HeaderScroll);
+	sb.WhenScroll = THISBACK(Scroll);
 	header.Moving();
-	WhenAcceptRow = true;
+	WhenAcceptRow = [] { return true; };
 	WhenBar = THISBACK(StdBar);
 	SetFrame(ViewFrame());
 	oddpaper = evenpaper = SColorPaper;
@@ -2868,7 +3139,7 @@ ArrayCtrl::Column& ArrayOption::AddColumn(ArrayCtrl& ac, const char *text, int w
 	return AddColumn(ac, Id(), text, w).NoClickEdit();
 }
 
-ArrayCtrl::Column& ArrayOption::AddColumn(ArrayCtrl& ac, Id id, const char *text, int w)
+ArrayCtrl::Column& ArrayOption::AddColumn(ArrayCtrl& ac, const Id& id, const char *text, int w)
 {
 	Connect(ac, ac.GetIndexCount());
 	return ac.AddColumn(id, text, w).SetDisplay(*this).InsertValue(f).NoClickEdit();
@@ -2877,7 +3148,6 @@ ArrayCtrl::Column& ArrayOption::AddColumn(ArrayCtrl& ac, Id id, const char *text
 void ArrayOption::Paint(Draw& w, const Rect& r, const Value& q,
 		                Color ink, Color paper, dword style) const
 {
-	bool focusCursor = (style & (CURSOR | SELECT)) && (style & FOCUS);
 	bool gray = (array && !array->IsEnabled());
 	w.DrawRect(r, paper);
 
@@ -2894,4 +3164,4 @@ void ArrayOption::Paint(Draw& w, const Rect& r, const Value& q,
 	w.DrawImage(p.x, p.y, img);
 }
 
-END_UPP_NAMESPACE
+}

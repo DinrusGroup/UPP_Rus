@@ -1,8 +1,7 @@
 #include <CtrlLib/CtrlLib.h>
+#include "Controls4U.h"
 
 using namespace Upp;
-
-#include "Controls4U/Controls4U.h"
 
 #define TFILE <Controls4U/Controls4U.t>
 #include <Core/t.h>
@@ -10,6 +9,11 @@ using namespace Upp;
 #define IMAGECLASS Controls4UImg
 #define IMAGEFILE <Controls4U/Controls4U.iml>
 #include <Draw/iml.h>
+
+#define TOPICFILE <Controls4U/src.tpp/all.i>
+#include <Core/topic_group.h>
+
+
 
 void PaintCenterText(Painter &w, double x, double y, String text, Font fnt, Color color) {
 	Size sz = GetTextSize(text, fnt);
@@ -36,30 +40,47 @@ void PaintArc(Painter &w, double cx, double cy, double R, double ang0, double an
 }
 	
 void EditFileFolder::Init() {
-	//EditString::AddFrame(butLeft);
-	//EditString::AddFrame(butRight);
-	//EditString::AddFrame(butUp);
-	EditString::AddFrame(butBrowse);
 	WhenEnter = THISBACK1(DoGo, true);
-	butBrowse.SetImage(Controls4UImg::Folder());
-	butBrowse <<= THISBACK(DoBrowse);
+	//EditString::AddFrame(butBrowseLeft);
+	butBrowseLeft.SetImage(Controls4UImg::Folder());
+	butBrowseLeft.Tip(t_("Browse"));
+	butBrowseLeft <<= THISBACK(DoBrowse);
+	EditString::AddFrame(butBrowseRight);
+	butBrowseRight.SetImage(Controls4UImg::Folder());
+	butBrowseRight <<= THISBACK(DoBrowse);
+	butBrowseRight.Tip(t_("Browse"));
 	butLeft.SetImage(CtrlImg::SmallLeft());
 	butLeft <<= THISBACK(DoLeft);
+	butRight.Tip(t_("Go to previous"));
 	butLeft.Enable(false);
 	butRight.SetImage(CtrlImg::SmallRight());
 	butRight <<= THISBACK(DoRight);
+	butRight.Tip(t_("Go to next"));
 	butRight.Enable(false);
 	butUp.SetImage(CtrlImg::DirUp());//SmallUp());
 	butUp <<= THISBACK(DoUp);
+	butUp.Tip(t_("Directory up"));
 	butUp.Enable(false);
-	EditString::AddFrame(butGo);
+	//EditString::AddFrame(butGo);
 	butGo.SetImage(CtrlImg::SmallRight()); 
 	butGo <<= THISBACK1(DoGo, true); 
 	isFile = isLoad = true;
 	histInd = -1;
-	fs.Asking(!isLoad);
+	pfs = 0;
 }
 
+void EditFileFolder::InitFs() {
+	if (pfs)
+		return;
+	pfs = new FileSel_();
+	pfs->Asking(!isLoad);
+}
+
+EditFileFolder::~EditFileFolder() {
+	if (pfs)
+		delete pfs;
+}
+	
 EditFileFolder &EditFileFolder::UseHistory(bool use) {
 	if (use) {
 		if (EditString::FindFrame(butLeft) == -1) {
@@ -86,43 +107,65 @@ EditFileFolder &EditFileFolder::UseUp(bool use) {
 
 EditFileFolder &EditFileFolder::UseBrowse(bool use) {
 	if (use) {
-		if (EditString::FindFrame(butBrowse) == -1) {
+		if (EditString::FindFrame(butBrowseLeft) == -1) {
 			int pos = EditString::FindFrame(butUp);
 			if (pos == -1) 
 				pos = EditString::FindFrame(butRight);
-			EditString::InsertFrame(pos+1, butBrowse);
+			EditString::InsertFrame(pos+1, butBrowseLeft);
 		}
 	} else 
-		EditString::RemoveFrame(butBrowse);	
+		EditString::RemoveFrame(butBrowseLeft);	
+	return *this;
+}
+
+EditFileFolder &EditFileFolder::UseBrowseRight(bool use) {
+	if (use) {
+		if (EditString::FindFrame(butBrowseRight) == -1) {
+			int pos = EditString::FindFrame(butRight);
+			EditString::InsertFrame(pos+1, butBrowseRight);
+		}
+	} else 
+		EditString::RemoveFrame(butBrowseRight);	
+	return *this;
+}
+
+EditFileFolder &EditFileFolder::UseGo(bool use) {
+	if (use) {
+		if (EditString::FindFrame(butGo) == -1) {
+			int pos = EditString::FindFrame(butRight);
+			EditString::InsertFrame(pos+1, butGo);
+		}
+	} else 
+		EditString::RemoveFrame(butGo);
 	return *this;
 }
 
 void EditFileFolder::DoBrowse() {
+	InitFs();
+	FileSel_ &fs = *pfs;
+	
 	String s = GetData();
-	//fs.Set(s);
-	if (DirectoryExists(s)) 
-		fs.PreSelect(s);
-	else {
-		fs.PreSelect(GetFileName(s));
-		//fs.BaseDir(s);
-		fs.dir <<= GetFileDirectory(s);
+	if (!s.IsEmpty()) {
+		if (DirectoryExists(AppendFileName(fs.GetBaseDir(), s))) 
+			fs.PreSelect(s);
+		else {
+			String folder = GetFileFolder(s);
+			if (folder.IsEmpty() || folder.Find("..") >= 0 || 
+				!DirectoryExists(AppendFileName(fs.GetBaseDir(), folder))) 
+				s = AppendFileName(NormalizePath(folder, fs.GetActiveDir()), GetFileName(s));
+			fs.PreSelect(s);
+		}
 	}
 	if (isFile && isLoad) {
-		if (fs.ExecuteOpen(title)) {
+		if (fs.ExecuteOpen(title)) 
 			SetData(~fs);
-			//DoGo();//WhenChange();
-		}
 	} else if (isFile && !isLoad)  {
-		if (fs.ExecuteSaveAs(title)) {
+		if (fs.ExecuteSaveAs(title)) 
 			SetData(~fs);
-			//DoGo();//WhenChange();
-		}
 	} else if (!isFile) {
 		fs.ClearFiles();
-		if (fs.ExecuteSelectDir(title)) {
+		if (fs.ExecuteSelectDir(title)) 
 			SetData(~fs);
-			//DoGo();//WhenChange();
-		}
 	}
 }
 
@@ -131,10 +174,9 @@ void EditFileFolder::SetData(const Value& data) {
 	DoGo();
 }
 
-
 void EditFileFolder::DoGo(bool add) {
 	Set(GetData());			// Write Edit to FileSel
-	if (UpperFolder(GetData().ToString()))
+	if (!IsRootFolder(GetData().ToString()))
 		butUp.Enable(true);
 	else
 		butUp.Enable(false);
@@ -148,6 +190,7 @@ void EditFileFolder::DoGo(bool add) {
 			butRight.Enable(false);
 	}
 	WhenChange();
+	Accept();
 }
 
 void EditFileFolder::DoLeft() {
@@ -181,13 +224,13 @@ EditFile::EditFile() {
 	isFile = true;		
 	title = t_("Select file");	
 	EditFileFolder();
-};
+}
 
 EditFolder::EditFolder() {
 	isFile = false;	
 	title = t_("Select directory");	
 	EditFileFolder();
-};
+}
 
 bool SetFirstChild(Ctrl *ctrl) {
 	if (Ctrl *p = ctrl->GetParent()) {
@@ -200,18 +243,149 @@ bool SetFirstChild(Ctrl *ctrl) {
 		return false;
 }
 
- void StaticImage::Layout() {
-   	if (useAsBackground) {
-  		Ctrl *q = GetFirstChild(); 
-		//if (StaticImage *c = dynamic_cast<StaticImage *>(q)) {
-		//	if (!c->useAsBackground) {
-				SetFirstChild((Ctrl *)this);
-				SizePos();
-		//	}
-		//}
+void ImagePopUp::Paint(Draw &w) {
+	Size sz = GetSize();
+	Size imagesize = image.GetSize();	
+	
+	switch (fit) {
+	case StaticImage::BestFit: {
+		Rect rect = FitInFrame(sz, imagesize);
+		sz = rect.GetSize();
+		w.DrawImage(sz, image);
+		break; }
+	case StaticImage::FillFrame:
+		w.DrawImage(0, 0, sz.cx, sz.cy, image);
+		break;
+	case StaticImage::NoScale:
+		w.DrawImage(0, 0, image);
+		break;		
+	case StaticImage::RepeatToFill:
+		for (int left = 0; left < sz.cx; left += imagesize.cx) 
+			for (int top = 0; top < sz.cy; top += imagesize.cy) 
+				w.DrawImage(left, top, image);
+		break;	
 	}
-	//Ctrl::Layout();
+	
+	DrawBorder(w, sz, BlackBorder);
+}
+
+Point ImagePopUp::Offset(Point p) {
+	return p + GetScreenView().TopLeft() - ctrl->GetScreenView().TopLeft();
+}
+
+void ImagePopUp::LeftDown(Point p, dword flags) {
+	ctrl->LeftDown(Offset(p), flags);
+}
+
+void ImagePopUp::LeftDrag(Point p, dword flags) {
+	Close();
+	ctrl->LeftDrag(Offset(p), flags);
+}
+
+void ImagePopUp::LeftDouble(Point p, dword flags) {
+	ctrl->LeftDouble(Offset(p), flags);
+}
+
+void ImagePopUp::RightDown(Point p, dword flags) {
+	ctrl->RightDown(Offset(p), flags);
+}
+
+void ImagePopUp::LeftUp(Point p, dword flags) {
+	ctrl->LeftUp(Offset(p), flags);
+}
+
+void ImagePopUp::MouseWheel(Point p, int zdelta, dword flags) {
+	ctrl->MouseWheel(Offset(p), zdelta, flags);
+}
+
+void ImagePopUp::MouseLeave() {
+	ctrl->MouseLeave();
+	Close();
+}
+
+void ImagePopUp::MouseEnter(Point p, dword flags) {
+	ctrl->MouseEnter(Offset(p), flags);
+}
+
+void ImagePopUp::MouseMove(Point p, dword flags) {
+	ctrl->MouseMove(Offset(p), flags);
+}
+
+Image ImagePopUp::CursorImage(Point p, dword flags) {
+	return ctrl->CursorImage(Offset(p), flags);
+}
+
+void ImagePopUp::LostFocus() {
+	Close();
+}
+
+void ImagePopUp::PopUp(Ctrl *owner, int x, int y, int width, int height, Image &_image, int _angle, int _fit) {
+	if (width == 0 || height == 0 || IsNull(_image)) 
+		return;
+
+	Size imagesize = _image.GetSize();	
+	if (imagesize.cx == 0 || imagesize.cy == 0) 
+		return;
+	
+	Rect r(x, y, x + width, y + height);
+	if (fit == StaticImage::BestFit) {
+		r = FitInFrame(r.GetSize(), imagesize);
+		Size sz = r.GetSize();
+		r.left = x;
+		r.top = y;
+		r.SetSize(sz);
+	}
+	Size ssz = GetScreenSize();
+	if (ssz.cx < r.left + r.GetWidth()) {
+		r.left = ssz.cx - r.GetWidth();
+		r.right = ssz.cx;
+	}
+	if (ssz.cy < r.top + r.GetHeight()) {
+		r.top = ssz.cy - r.GetHeight();
+		r.bottom = ssz.cy;
+	}
+	if(r != GetRect())
+		SetRect(r);
+	
+	ctrl = owner;
+	image = ::GetRect(_image, _image.GetSize());
+	angle = _angle;
+	fit = _fit;
+	Ctrl::PopUp(owner, true, false, GUI_DropShadows());
+	SetAlpha(230);
+}
+
+void ImagePopUp::Close() {
+	Ctrl::Close();
+}
+
+void StaticImage::MouseEnter(Point pos, dword keyflags) {
+	if (isPopUp) { 
+		Point pt = GetScreenRect().TopLeft();		
+		popup.PopUp(this, pt.x, pt.y, szPopUp.cx, szPopUp.cy, origImage, angle, fit);
+	}
+}
+
+void StaticImage::MouseLeave() {
+	if (isPopUp) 
+		popup.Close();
+}
+
+void StaticImage::Layout() {
+   	if (useAsBackground) {
+  		//Ctrl *q = GetFirstChild(); 
+		SetFirstChild((Ctrl *)this);
+		SizePos();
+	}
 } 
+
+StaticImage& StaticImage::SetPopUpSize(Size sz) {
+	if (!IsNull(sz))
+		szPopUp = sz;	
+	else
+		szPopUp = origImage.GetSize();
+	return *this;
+}
 
 void StaticImage::Paint(Draw& w) {
 	Size sz = GetSize();
@@ -226,28 +400,28 @@ void StaticImage::Paint(Draw& w) {
 		return;
 	
 	Image *imageView;
-	if (angle == Angle_0)
+	if (angle == StaticImage::Angle_0)
 		imageView = &origImage;
 	else {
 		imageView = &image;
 		imagesize = imageView->GetSize();
 	}
 	switch (fit) {
-	case BestFit:
+	case StaticImage::BestFit:
 		w.DrawImage(FitInFrame(sz, imagesize), *imageView);
 		break;
-	case FillFrame:
+	case StaticImage::FillFrame:
 		w.DrawImage(0, 0, sz.cx, sz.cy, *imageView);
 		break;
-	case NoScale:
+	case StaticImage::NoScale:
 		w.DrawImage(0, 0, *imageView);
 		break;		
-	case RepeatToFill:
+	case StaticImage::RepeatToFill:
 		for (int left = 0; left < sz.cx; left += imagesize.cx) 
 			for (int top = 0; top < sz.cy; top += imagesize.cy) 
 				w.DrawImage(left, top, *imageView);
 		break;	
-	}
+	}	
 }
 
 bool StaticImage::Set(String _fileName) {
@@ -287,6 +461,28 @@ StaticImage& StaticImage::SetAngle(int _angle) {
 	return *this;
 }	
 	
+void  StaticImage::RightDown(Point pos, dword keyflags) {
+	if(!IsEditable())
+		return;
+
+	WhenRightDown();
+}
+
+void  StaticImage::LeftDown(Point pos, dword keyflags) {
+	if(!IsEditable())
+		return;
+
+	WhenLeftDown();
+}
+
+void  StaticImage::LeftDouble(Point pos, dword keyflags) {
+	if(!IsEditable())
+		return;
+
+	WhenLeftDouble();
+}
+
+
 StaticImage::StaticImage() {
 	Transparent();
 	NoWantFocus();
@@ -296,6 +492,78 @@ StaticImage::StaticImage() {
 	angle = Angle_0;
 	fit = BestFit;
 	useAsBackground = false;
+	isPopUp = false;
+	szPopUp = Size(300, 300);
+}
+
+void StaticImageSet::Paint(Draw& w) {
+	Size sz = GetSize();
+
+	w.DrawRect(sz, background);
+	if (sz.cx == 0 || sz.cy == 0) 
+		return;
+	Size imagesize = images[id].GetSize();	
+	if (imagesize.cx == 0 || imagesize.cy == 0) 
+		return;
+	
+	w.DrawImage(FitInFrame(sz, imagesize), images[id]);
+}
+
+void  StaticImageSet::LeftDown(Point pos, dword keyflags)
+{
+	if(!IsEditable())
+		return;
+	SetWantFocus();
+	
+	Next();
+	
+	SetCapture();
+	Refresh();	
+}
+
+void  StaticImageSet::LeftRepeat(Point pos, dword keyflags)
+{
+	if(!HasCapture())
+		LeftDown(pos, keyflags);
+}
+
+void  StaticImageSet::LeftUp(Point pos, dword keyflags)
+{
+	if (!HasCapture())
+		return;
+
+	Refresh();
+}
+
+void  StaticImageSet::MouseMove(Point pos, dword keyflags)
+{
+	if(!HasCapture()) 
+		return;
+}
+	
+void StaticImageSet::GotFocus() 	{Refresh();}
+void StaticImageSet::LostFocus() 	{Refresh();}
+
+bool  StaticImageSet::Add(String fileName)
+{
+	return Add(StreamRaster::LoadFileAny(fileName));	
+}
+
+bool  StaticImageSet::Add(Image image)
+{
+	if (IsNull(image))
+		return false;
+	images.Add(image);
+	return true;	
+}
+
+StaticImageSet::StaticImageSet() 
+{
+	Transparent();
+//	NoWantFocus();
+
+	background = Null;
+	id = 0;
 }
 
 void StaticRectangle::Paint(Draw& w) {
@@ -458,7 +726,7 @@ void StaticArrow::FramePaint(Draw& w, const Rect& rr) {
 	Rect r = rr;
 	r.Offset(off, off);
 		
-	Size sz = rr.GetSize();
+	//Size sz = rr.GetSize();
 	
 	sw.Clear(RGBAZero());
 	sw.LineCap(LINECAP_BUTT);
@@ -631,7 +899,7 @@ void StaticClock::Paint(Draw& ww) {
 	w.LineCap(LINECAP_BUTT);
 		
 	Rect r = GetRect();
-	Rect ro = GetRect();
+	//Rect ro = GetRect();
 	
 	Color letterColor, background;;
 	if (colorType == WhiteType) {
@@ -641,7 +909,7 @@ void StaticClock::Paint(Draw& ww) {
 		background = Black();
 		letterColor = White();
 	}	
-	double hs = 20;
+	//double hs = 20;
 	int width = min(r.right - r.left, r.bottom - r.top);
 	double bigF = width/200.;
 	if (image)
@@ -784,7 +1052,7 @@ struct StaticClocks {
 	}
 	void Add(StaticClock *clock) {
 		clocks.Add(clock);
-#ifdef _MULTITHREADED
+#ifdef flagMT
 		if (!running) {
 			AtomicInc(running);
 			Thread().Run(callback1(StaticClockThread, this));
@@ -810,6 +1078,7 @@ struct StaticClocks {
 	}
 	int GetCount() {return clocks.GetCount();}
 };
+
 
 StaticClocks clocks;
 
@@ -849,6 +1118,7 @@ StaticClock::StaticClock() {
 }
 
 StaticClock::~StaticClock() {
+	clocks.Remove(this);
 }
 
 void Meter::PaintMarks(BufferPainter &w, double cx, double cy, double R, double ang0, 
@@ -868,16 +1138,6 @@ void Meter::PaintMarks(BufferPainter &w, double cx, double cy, double R, double 
 		double y1 = cy - 0.93*R*sin(i);
 		w.Move(x0, y0).Line(x1, y1).Stroke(width, color);
 	}
-}
-
-double AngAdd(double ang, double val)
-{
-	ang += val;
-	while (ang >= 360)
-		ang -= 360;
-	while (ang < 0)
-		ang += 360;
-	return ang;
 }
 
 void Meter::PaintNumbers(BufferPainter &w, double cx, double cy, double R, double a0, 
@@ -961,7 +1221,7 @@ void Meter::Paint(Draw& ww) {
 	double miny = sina;
 	double maxy = sina;
 	double angminx = a;
-	double angminy = a;
+	//double angminy = a;
 	if (cosb < minx) {
 		minx = cosb;
 		angminx = b;
@@ -970,23 +1230,23 @@ void Meter::Paint(Draw& ww) {
 		maxx = cosb;
 	if (sinb > miny) {
 		miny = sinb;
-		angminy = b;
+		//angminy = b;
 	}
 	if (sinb < maxy)
 		maxy = sinb;
 	int maxgrad = 0;
-	double angmaxx = 0;
-	for (double ang = a; ang != b; ang = AngAdd(ang, direction)) {
+	//double angmaxx = 0;
+	for (double ang = a; ang != b; ang = AngleAdd360(ang, double(direction))) {
 		maxgrad++;
 		if (ang == 180) {
 			minx = -1;
 			angminx = 180;
 		} else if (ang == 0) {
 			maxx = 1;
-			angmaxx = 0; 
+			//angmaxx = 0; 
 		} else if (ang == 90) {
 			miny = 1;
-			angminy = 90;
+			//angminy = 90;
 		} else if (ang == 270)
 			maxy = -1;
 	}
@@ -1051,13 +1311,13 @@ void Meter::Paint(Draw& ww) {
 	ww.DrawImage(0, 0, ib);
 }
 
-#ifdef _MULTITHREADED
+#ifdef flagMT
 void MeterThread(Meter *gui, double newValue) {
 	double delta = Sign(newValue-gui->value)*(gui->max - gui->min)/gui->sensibility;
 	long deltaT = labs(long(1000.*delta*gui->speed/(gui->max - gui->min)));
 	int maxi = (int)(fabs((newValue-gui->value)/delta));
 	
-	long t0 = GetTickCount();
+	//long t0 = GetTickCount();
 	for (int i = 0; i < maxi; ++i, gui->value += delta) {
 		if (gui->kill) {
 			AtomicDec(gui->running);
@@ -1074,7 +1334,7 @@ void MeterThread(Meter *gui, double newValue) {
 
 void Meter::SetData(const Value& v)	{
 	double val = minmax(double(v), min, max) ;
-#ifdef _MULTITHREADED
+#ifdef flagMT
 	if (running) {	// Stop movement before changing value
 		AtomicInc(kill);	
 		while (running)
@@ -1192,7 +1452,7 @@ void Knob::Layout() {
 		dangle = angleBegin - dangle;
 	else
 		dangle = angleBegin + dangle;
-	double angle = ToRad(dangle);
+	//double angle = ToRad(dangle);
 	ImageBuffer ib(int(2*R), int(2*R));
 	BufferPainter sw(ib);	
 	sw.Clear(RGBAZero());
@@ -1244,8 +1504,8 @@ void Knob::Layout() {
 			if (colorType == WhiteType) {
 				sw.Circle(dx+rugg+R, dx+rugg+R, R).Fill(dx+R/2, dx+R/2, White(), dx+R, dx+R, R, LtGray());
 			} else if (colorType == BlackType) {
-				Color lineColor = (colorType == WhiteType) ? Black() : White();
-				Color almostColor = (colorType == WhiteType) ? Color(220, 220, 220) : Color(60, 60, 60);
+				//Color lineColor = (colorType == WhiteType) ? Black() : White();
+				//Color almostColor = (colorType == WhiteType) ? Color(220, 220, 220) : Color(60, 60, 60);
 				sw.Circle(dx+rugg+R, dx+rugg+R, R).Fill(fill);	
 				sw.Begin();
 					sw.BeginMask();
@@ -1304,11 +1564,11 @@ void Knob::Paint(Draw& w) {
 	BufferPainter sw(ib);	
 	sw.Clear(RGBAZero());
 	
-	int direction;
+/*	int direction;
 	if (clockWise)
 		direction = -1;
 	else
-		direction = 1;
+		direction = 1;*/
 
 	if (majorstep == 0)
 		majorstep = maxv - minv;
@@ -1327,8 +1587,8 @@ void Knob::Paint(Draw& w) {
 	//majorstep = (maxv-minv)/(nmajor+1);
 	nmajor = int((maxv-minv)/majorstep) - 1;
 	
-	double minorstepa = minorstep*maxgrad/(maxv - minv);	// Step in angle
-	double majorstepa = majorstep*maxgrad/(maxv - minv);	
+	//double minorstepa = minorstep*maxgrad/(maxv - minv);	// Step in angle
+	//double majorstepa = majorstep*maxgrad/(maxv - minv);	
 
 	if (HasFocus()) {
 		if (number)
@@ -1372,7 +1632,7 @@ void Knob::Paint(Draw& w) {
 			sw.Circle(cx+0.7*r*cos(angle), cy-0.7*r*sin(angle), 0.15*r).Stroke(1, lineColor).Fill(fill);
 	} else if (colorType == WhiteType || colorType == BlackType) {
 		Color lineColor = (colorType == WhiteType) ? Black() : White();
-		Color almostColor = (colorType == WhiteType) ? Color(220, 220, 220) : Color(60, 60, 60);
+		//Color almostColor = (colorType == WhiteType) ? Color(220, 220, 220) : Color(60, 60, 60);
 		if (mark == Line)
 			sw.Move(cx+realR*cos(angle), cy-realR*sin(angle))
 			  .Line(cx+0.5*r*cos(angle), cy-0.5*r*sin(angle)).Stroke(r/25., lineColor);
@@ -1588,7 +1848,7 @@ struct FileLenConvert : public Convert {
 };
 
 FileBrowser::FileBrowser() {
-	flags = USE_TRASH_BIN | BROWSE_LINKS | ASK_BEFORE_DELETE;
+	flags = EXT_FILE_FLAGS(USE_TRASH_BIN | BROWSE_LINKS);	// | ASK_BEFORE_DELETE;
 	readOnly = false;
 	acceptDragAndDrop = true;	
 	
@@ -1617,7 +1877,7 @@ FileBrowser::FileBrowser() {
 	folders.WhenLeftDouble = THISBACK(FoldersWhenLeftDouble);
 	folders.WhenClose 	   = THISBACK(FoldersWhenClose);
 
-	Array<String> ds = GetDriveList();
+	Vector<String> ds = GetDriveList();
 	String desktopFolder = GetDesktopFolder();	
 	if (!desktopFolder.IsEmpty())
 		folders.Add(0, NativePathIconX(desktopFolder, true, flags), desktopFolder, 
@@ -1678,10 +1938,9 @@ void FileBrowser::FilesWhenSel() {
 		WhenSelected();
 }
 
-void FileBrowser::FileNameWhenChanged() {
-	String kk = fileNameSelected;		// Nombre viejo path completo
-	String koko = textFileName;			// Nombre nuevo (solo nombre)
-	int de = 34;
+void FileBrowser::FileNameWhenChanged() { 
+//	fileNameSelected;		// Old name full path
+//	textFileName;			// New name just name
 }
 
 void FileBrowser::FoldersWhenOpen(int id) {
@@ -1840,7 +2099,7 @@ void FileBrowser::FolderWhenChange() {
 
 void FileBrowser::FilesEnterRow() {
 	Exclamation("DELETE");
-	int i = 1;
+	//int i = 1;
 }
 
 void FileBrowser::SortByColumn(int col) {
@@ -1867,3 +2126,14 @@ String FileBrowser::GetFolder() {
 	return ~folders;
 }
 
+
+AboutUpp::AboutUpp() {
+	about.SetQTF(GetTopic("topic://Controls4U/src/About$en-us"), Zoom(130, 1024));
+	about.SetZoom(Zoom(1, 1));
+	about.RightPos(0, 0).VSizePos();
+	about.HMargins(4);
+	about.SetFrame(NullFrame());
+	about.NoLazy();
+	Add(about.SizePos());
+}
+	

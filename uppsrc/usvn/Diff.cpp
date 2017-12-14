@@ -22,7 +22,7 @@ void SvnDiff::Execute(const String& f)
 		editfile = f;
 		String log = Sys("svn log " + f);
 		if(log.IsVoid()) {
-			Exclamation("Ошибка при выполнении 'svn log'");
+			Exclamation("Error executing 'svn log'");
 			return;
 		}
 		StringStream ss(log);
@@ -50,12 +50,13 @@ void SvnDiff::Execute(const String& f)
 			}
 		}
 		if(r.GetCount() == 0) {
-			Exclamation("Для файла нет парсируемой истории");
+			Exclamation("No parsable history for the file");
 			return;
 		}
 		r.SetIndex(0);
 		Load();
 	}
+	
 	DiffDlg::Execute(f);
 }
 

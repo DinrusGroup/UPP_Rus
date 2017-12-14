@@ -1,6 +1,6 @@
 #include "CtrlLib.h"
 
-NAMESPACE_UPP
+namespace Upp {
 
 FileSel& GFileSel()
 {
@@ -53,7 +53,7 @@ SelectFileIn::SelectFileIn(const char *types)
 		String p = SelectFileOpen(types);
 		if(p.GetCount() == 0 || Open(p))
 			return;
-		Exclamation(t_("Не удаётся открыть [* \1") + p + t_("\1] для чтения!"));
+		Exclamation(t_("Unable to open [* \1") + p + t_("\1] for reading!"));
 	}
 }
 
@@ -63,7 +63,7 @@ SelectFileOut::SelectFileOut(const char *types)
 		String p = SelectFileSaveAs(types);
 		if(p.GetCount() == 0 || Open(p))
 			return;
-		Exclamation(t_("Не удаётся открыть [* \1") + p + t_("\1]для записи!"));
+		Exclamation(t_("Unable to open [* \1") + p + t_("\1] for writing!"));
 	}
 }
 
@@ -76,7 +76,13 @@ String SelectLoadFile(const char *types)
 bool SelectSaveFile(const char *types, const String& data)
 {
 	String p = SelectFileSaveAs(types);
-	return p.GetCount() && SaveFile(p, data);
+	if(p.GetCount() == 0)
+		return false;
+	if(!SaveFile(p, data)) {
+		Exclamation(t_("Error saving the file!"));
+		return false;
+	}
+	return true;
 }
 
-END_UPP_NAMESPACE
+}

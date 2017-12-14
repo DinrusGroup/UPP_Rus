@@ -6,10 +6,10 @@ bool CheckSvn()
 	if(Sys("svn", h) >= 0)
 		return true;
 #ifdef PLATFORM_WIN32
-	Exclamation("Не удаётся выполнить svn.exe!&"
-	            "Клиент svn можно загрузить отсюда: [^http://www.sliksvn.com/en/download^ http://www.sliksvn.com/en/download]");
+	Exclamation("Unable to execute svn.exe!&"
+	            "You can download svn client here: [^http://www.sliksvn.com/en/download^ http://www.sliksvn.com/en/download]");
 #else
-	Exclamation("Не удаётся выполнить бинарник 'svn'!&Пожалуйста, установите клинт svn.");
+	Exclamation("Unable to execute 'svn' binary!&Please install svn client.");
 #endif
 	return false;
 }
@@ -19,13 +19,12 @@ SvnSync::SvnSync()
 	CtrlLayoutOKCancel(*this, "SvnSynchronize SVN repositories");
 	list.AddIndex();
 	list.AddIndex();
-	list.AddColumn("Действие");
-	list.AddColumn("Путь");
-	list.AddColumn("Изменения");
+	list.AddColumn("Action");
+	list.AddColumn("Path");
+	list.AddColumn("Changes");
 	list.ColumnWidths("220 500 100");
 	list.NoCursor().EvenRowColor();
 	list.SetLineCy(max(Draw::GetStdFontCy(), 20));
-	list.WhenLeftClick = THISBACK(Diff);
 	Sizeable().Zoomable();
 	setup <<= THISBACK(Setup);
 	BackPaint();
@@ -49,33 +48,37 @@ void SvnSync::SyncList()
 		SvnWork w = works[i];
 		String path = GetFullPath(w.working);
 		list.Add(REPOSITORY, path,
-		         AttrText("Рабочая папка").SetFont(StdFont().Bold()).Ink(White).Paper(Blue),
-		         AttrText(path).SetFont(Arial(20).Bold()).Paper(Blue).Ink(White),
-		         AttrText("").SetFont(Arial(20).Bold()).Paper(Blue).Ink(White));
-		list.SetLineCy(list.GetCount() - 1, 26);
+		         AttrText("Working directory").SetFont(StdFont().Bold()).Ink(White).Paper(Blue),
+		         AttrText(path).SetFont(ArialZ(20).Bold()).Paper(Blue).Ink(White),
+		         AttrText("").SetFont(ArialZ(20).Bold()).Paper(Blue).Ink(White));
+		list.SetLineCy(list.GetCount() - 1, Zy(26));
 		Vector<String> ln = Split(Sys("svn status " + path), CharFilterCrLf);
 		bool actions = false;
 		for(int pass = 0; pass < 2; pass++)
 			for(int i = 0; i < ln.GetCount(); i++) {
 				String h = ln[i];
 				if(h.GetCount() > 7) {
-					String file = TrimLeft(h.Mid(7));
+					String file = GetFullPath(TrimLeft(h.Mid(7)));
 					if(IsFullPath(file)) {
 						actions = true;
 						h.Trim(7);
 						bool simple = h.Mid(1, 6) == "      ";
-						int action = simple ? String("MC?!~").Find(h[0]) : -1;
+						int action = simple ? String("MC?!~").Find(h[0]) : SVN_IGNORE;
 						if(h == "    S  ")
 							action = REPLACE;
 						String an;
 						Color  color;
-						if(action < 0) {
+						if(action == SVN_IGNORE) {
 							color = Black;
-							if(simple && h[0] == 'A')
+							if(simple && h[0] == 'A') {
 								an = "svn add";
+								action = SVN_ACTION;
+							}
 							else
-							if(simple && h[0] == 'D')
+							if(simple && h[0] == 'D') {
 								an = "svn delete";
+								action = SVN_ACTION;
+							}
 							else {
 								an = h.Mid(0, 7);
 								color = Gray;
@@ -87,7 +90,7 @@ void SvnSync::SyncList()
 							   file[q + 1] == 'r' && IsDigit(file[q + 2]))
 							   && FileExists(file.Mid(0, q))) {
 								action = DELETEC;
-								an = "Delete";
+								an = "Delete (conflict resolved)";
 								color = Black;
 							}
 							else {
@@ -105,8 +108,8 @@ void SvnSync::SyncList()
 							         action < 0 ? Value(AttrText(an).Ink(color)) : Value(true),
 							         AttrText("  " + file.Mid(path.GetCount() + 1)).Ink(color));
 							if(action >= 0) {
-								list.SetCtrl(ii, 0, revert.Add().SetLabel("Вернуть\n" + an + "\nПропустить").NoWantFocus());
-								Ctrl& b = diff.Add().SetLabel("Изменения..").SizePos().NoWantFocus();
+								list.SetCtrl(ii, 0, revert.Add().SetLabel("Revert\n" + an + "\nSkip").NoWantFocus());
+								Ctrl& b = diff.Add().SetLabel("Changes..").SizePos().NoWantFocus();
 								b <<= THISBACK1(DoDiff, ii);
 								list.SetCtrl(ii, 2, b);
 							}
@@ -115,7 +118,7 @@ void SvnSync::SyncList()
 				}
 		}
 		if(actions) {
-			list.Add(MESSAGE, Null, AttrText("Передать сообщение:").SetFont(StdFont().Bold()));
+			list.Add(MESSAGE, Null, AttrText("Commit message:").SetFont(StdFont().Bold()));
 			list.SetLineCy(list.GetCount() - 1, (3 * EditField::GetStdHeight()) + 4);
 			list.SetCtrl(list.GetCount() - 1, 1, message.Add().SetFilter(CharFilterSvnMsg).VSizePos(2, 2).HSizePos());
 			int q = msgmap.Find(w.working);
@@ -125,7 +128,7 @@ void SvnSync::SyncList()
 			}
 		}
 		else
-			list.Add(-1, Null, "", AttrText("Делать нечего").SetFont(StdFont().Italic()));
+			list.Add(-1, Null, "", AttrText("Nothing to do").SetFont(StdFont().Italic()));
 	}
 }
 
@@ -134,13 +137,6 @@ void SvnSync::DoDiff(int ii)
 	String f = list.Get(ii, 1);
 	if(!IsNull(f))
 		RunSvnDiff(f);
-}
-
-void SvnSync::Diff()
-{
-	int cr = list.GetClickRow();
-	if(cr >= 0)
-		DoDiff(cr);
 }
 
 #ifdef PLATFORM_WIN32
@@ -233,11 +229,12 @@ void MoveSvn(const String& path, const String& tp)
 		String nm = ff.GetName();
 		String s = AppendFileName(path, nm);
 		String t = AppendFileName(tp, nm);
-		if(ff.IsFolder())
+		if(ff.IsFolder()) {
 			if(nm == ".svn")
 				FileMove(s, t);
 			else
 				MoveSvn(s, t);
+		}
 		ff.Next();
 	}
 }
@@ -247,20 +244,22 @@ void SvnSync::DoSync()
 	SyncList();
 	msgmap.Sweep();
 again:
-	if(Execute() != IDOK || list.GetCount() == 0) {
+	Enable();
+	if(Run() != IDOK || list.GetCount() == 0) {
 		int repoi = 0;
 		for(int i = 0; i < list.GetCount(); i++)
 			if(list.Get(i, 0) == MESSAGE)
 				msgmap.GetAdd(works[repoi++].working) = list.Get(i, 3);
 		return;
 	}
+	Disable();
 	bool changes = false;
 	for(int i = 0; i < list.GetCount(); i++) {
 		int action = list.Get(i, 0);
 		Value v = list.Get(i, 2);
 		if(action == MESSAGE) {
 			if(changes && IsNull(list.Get(i, 3))
-			&& !PromptYesNo("Передаваемое сообщение пустое.&Продолжить?"))
+			&& !PromptYesNo("Commit message is empty.&Do you want to continue?"))
 				goto again;
 			changes = false;
 		}
@@ -295,12 +294,15 @@ again:
 					DeleteFolderDeep(path);
 				if(action != ADD)
 					sys.CheckSystem("svn revert \"" + path + "\"");
-			}else if(IsNumber(v)&&(int)v==2||action==-1){
+			}
+			else
+			if(IsNumber(v) && (int)v==2 || action == SVN_IGNORE) {
 				l++;
 				continue;
 			}
 			else {
-				filelist << " \"" << path << "\"";   // <-- add the file to the list
+				if(action != DELETEC)
+					filelist << " \"" << path << "\"";   // <-- add the file to the list
 				commit = true;
 				switch(action) {
 				case ADD:
@@ -361,7 +363,19 @@ String SvnSync::GetMsgs()
 
 bool IsSvnDir(const String& p)
 {
-	return DirectoryExists(AppendFileName(p, ".svn")) || DirectoryExists(AppendFileName(p, "_svn"));
+	if(IsNull(p))
+		return false;
+	if(DirectoryExists(AppendFileName(p, ".svn")) || DirectoryExists(AppendFileName(p, "_svn")))
+		return true;
+	String path = p;
+	String path0;
+	while(path != path0) {
+		path0 = path;
+		DirectoryUp(path);
+		if(DirectoryExists(AppendFileName(path, ".svn")))
+			return true;
+	}
+	return false;
 }
 
 #ifdef flagMAIN

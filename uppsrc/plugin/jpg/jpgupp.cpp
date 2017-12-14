@@ -12,7 +12,7 @@ extern "C" {
 #undef XINT32
 
 
-NAMESPACE_UPP
+namespace Upp {
 
 #define LLOG(x)  // LOG(x)
 
@@ -224,7 +224,6 @@ private:
 	RGBA palette[256];
 
 	VectorMap<String, Value> metadata;
-	int                      thumboffset, thumblen;
 
 	jpeg_decompress_struct   cinfo;
 	jpeg_longjmp_error_mgr  *jerr;
@@ -340,6 +339,8 @@ int JPGRaster::Data::ExifDir(const char *begin, int offset, IFD_TYPE type)
 //		puts(NFormat("[%d]: tag %04x fmt %d, count %d, data %s",
 //			i, tag, fmt, count, BinHexEncode(data, data + len)));
 		if(type == BASE_IFD) {
+			if(tag == 0x112)
+				metadata.Add("orientation", Exif16(data));
 			if(tag == 0x8825) {
 				int offset = Exif32(data);
 	//			puts(NFormat("GPS IFD at %08x", offset));
@@ -459,7 +460,8 @@ bool JPGRaster::Data::Init()
 			}
 			break;
 		}
-		case 3: {
+		case 3:
+		case 4: {
 			format.Set24le(0xFF, 0xFF00, 0xFF0000);
 			break;
 		}
@@ -492,7 +494,7 @@ Raster::Info JPGRaster::Data::GetInfo()
 		info.bpp = 24;
 		info.colors = 0;
 		info.dots = dot_size;
-		info.hotspot = Null;
+		info.hotspot = Point(0, 0);
 		info.kind = IMAGE_OPAQUE;
 	}
 	catch(Exc e) {
@@ -521,6 +523,18 @@ Raster::Line JPGRaster::Data::GetLine(int line)
 	while(next_line++ < line)
 		jpeg_read_scanlines(&cinfo, rowptr, 1);
 	jpeg_read_scanlines(&cinfo, rowptr, 1);
+
+	if(cinfo.output_components == 4) { 
+		/* Convert CMYK scanline to RGB */
+		JSAMPLE k;
+		for(int i = 0, j = 0; i < row_bytes_4; i++){			
+			k = GETJSAMPLE(rowbuf[i+3]);
+			rowbuf[j++] = GETJSAMPLE(rowbuf[i++]) * k / 255;
+		    rowbuf[j++] = GETJSAMPLE(rowbuf[i++]) * k / 255;
+		    rowbuf[j++] = GETJSAMPLE(rowbuf[i++]) * k / 255;
+		}	
+	}
+
 	return Raster::Line(rowbuf, &owner, true);
 }
 
@@ -689,4 +703,9 @@ Image JPGRaster::GetExifThumbnail()
 	return StreamRaster::LoadStringAny(ss);
 }
 
-END_UPP_NAMESPACE
+INITIALIZER(JPGRaster)
+{
+	StreamRaster::Register<JPGRaster>();
+}
+
+}

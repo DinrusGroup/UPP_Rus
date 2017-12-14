@@ -2,7 +2,7 @@
 
 IdeCalc::IdeCalc()
 {
-	Highlight(HIGHLIGHT_CALC);
+	Highlight("calc");
 	NoHorzScrollbar();
 	HideBar();
 }
@@ -44,7 +44,7 @@ void IdeCalc::Execute()
 	}
 	catch(CParser::Error e) {
 		const char *x = strchr(e, ':');
-		txt << "ОШИБКА: " << (x ? x + 1 : ~e);
+		txt << "ERROR: " << (x ? x + 1 : ~e);
 	}
 	SetCursor(GetPos(li));
 	Paste("$");

@@ -9,6 +9,7 @@ public:
 	virtual void MouseLeave();
 	virtual void LeftUp(Point p, dword);
 	virtual void LeftRepeat(Point p, dword);
+	virtual void MouseWheel(Point p, int zdelta, dword keyflags);
 	virtual void CancelMode();
 
 	virtual void FrameLayout(Rect& r);
@@ -16,7 +17,7 @@ public:
 
 public:
 	struct Style : ChStyle<Style> {
-		int barsize, arrowsize, thumbmin, overthumb;
+		int barsize, arrowsize, thumbmin, overthumb, thumbwidth;
 		bool through;
 		Value vupper[4], vthumb[4], vlower[4];
 		Value hupper[4], hthumb[4], hlower[4];
@@ -43,6 +44,7 @@ private:
 	int     minthumb;
 	bool    autohide:1;
 	bool    autodisable:1;
+	bool    is_active:1;
 
 	const Style *style;
 
@@ -63,9 +65,9 @@ private:
 	int     ScrollBarSize() const                 { return style->barsize; }
 
 public:
-	Callback WhenScroll;
-	Callback WhenVisibility;
-	Callback WhenLeftClick;
+	Event<>  WhenScroll;
+	Event<>  WhenVisibility;
+	Event<>  WhenLeftClick;
 
 	bool    IsHorz() const                  { return horz; }
 	bool    IsVert() const                  { return !horz; }
@@ -75,6 +77,8 @@ public:
 	bool    Set(int pagepos);
 	void    SetPage(int pagesize);
 	void    SetTotal(int totalsize);
+	
+	bool    IsActive() const                { return is_active; }
 
 	bool    ScrollInto(int pos, int linesize);
 	bool    ScrollInto(int pos)             { return ScrollInto(pos, linesize); }
@@ -89,7 +93,8 @@ public:
 	void    Begin();
 	void    End();
 
-	void    Wheel(int zdelta, int lines = 3);
+	void    Wheel(int zdelta, int lines);
+	void    Wheel(int zdelta);
 
 	Size    GetViewSize() const;
 	Size    GetReducedViewSize() const;
@@ -160,7 +165,10 @@ public:
 
 protected:
 	Ctrl      *box;
-	StaticRect the_box;
+	ParentCtrl the_box;
+	
+	
+	StaticRect box_bg;
 	int        box_type;
 	SizeGrip   grip;
 
@@ -170,8 +178,8 @@ public:
 	HScrollBar x;
 	VScrollBar y;
 
-	Callback   WhenScroll;
-	Callback   WhenLeftClick;
+	Event<>    WhenScroll;
+	Event<>    WhenLeftClick;
 
 	void    Set(Point pos, Size page, Size total);
 	bool    Set(Point pos);
@@ -216,8 +224,8 @@ public:
 	void    HorzBegin()                              { x.Begin(); }
 	void    HorzEnd()                                { x.End(); }
 
-	void    WheelX(int zdelta, int lines = 3)        { x.Wheel(zdelta, lines); }
-	void    WheelY(int zdelta, int lines = 3)        { y.Wheel(zdelta, lines); }
+	void    WheelX(int zdelta)                       { x.Wheel(zdelta); }
+	void    WheelY(int zdelta)                       { y.Wheel(zdelta); }
 
 	Size    GetViewSize() const;
 	Size    GetReducedViewSize() const;
@@ -254,7 +262,7 @@ public:
 	ScrollBars& FixedBox();
 
 	ScrollBars& Box(Ctrl& box);
-	ScrollBars& WithSizeGrip()                       { the_box.Add(grip); return *this; }
+	ScrollBars& WithSizeGrip();
 
 	ScrollBars& SetStyle(const ScrollBar::Style& s)  { x.SetStyle(s); y.SetStyle(s); return *this; }
 

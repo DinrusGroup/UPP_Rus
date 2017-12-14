@@ -1,6 +1,6 @@
 #include "dbf.h"
 
-NAMESPACE_UPP
+namespace Upp {
 
 #define LLOG(x) // LOG(x)
 #define LTIMING(x) // RTIMING(x)
@@ -90,7 +90,7 @@ static double scan_dbl(const char *p, const char *e = 0)
 		else
 			exp++;
 	int raise = exp;
-	if(p != e && *p == '.') // decimal part
+	if(p != e && *p == '.') { // decimal part
 		while(++p != e && (byte)((c = *p) - '0') < 10)
 			if(c != '0') {
 				if(raise) { mantissa *= ipow10(raise); exp -= raise; raise = 0; }
@@ -99,6 +99,7 @@ static double scan_dbl(const char *p, const char *e = 0)
 			}
 			else
 				raise++;
+	}
 	if(p != e && (*p == 'E' || *p == 'e')) { // exponent
 		int vexp = scan_int(p + 1, e);
 		if(!IsNull(vexp))
@@ -121,7 +122,7 @@ static int StrBool(char c)
 }
 
 DbfStream::Field::Field(const char *_name, char type, byte width, byte decimal)
-: type(type), width(width), decimal(decimal), offset(0)
+: offset(0), type(type), width(width), decimal(decimal)
 {
 	if(_name) {
 		const char *p = reinterpret_cast<const char *>(memchr(_name, 0, 11));
@@ -233,8 +234,9 @@ String DbfStream::Field::Format(Value value, byte charset) const
 
 		case 'L': {
 			int cond = value;
-			return cond && !IsNull(cond) ? "A" : "N";
-			}
+			if(IsNull(cond)) return "?";
+			return cond ? "T" : "F";
+		}
 
 		default:  {
 			NEVER();
@@ -303,10 +305,12 @@ void DbfStream::Field::Serialize(Stream& stream)
 
 DbfStream::DbfStream()
 {
+	version = 0x03;
 }
 
 DbfStream::DbfStream(const char *_file, bool write, byte _charset, bool _delete_share)
 {
+	version = 0x03;
 	Open(_file, write, _charset, _delete_share);
 }
 
@@ -361,14 +365,17 @@ bool DbfStream::StreamHeader(bool full)
 	data_offset = 32 + fields.GetCount() * 32 + 1;
 	if(dbf.IsStoring()) {
 		ASSERT(!IsReadOnly());
-		dbf.Put(0x03); // #0: version number - 03 without a DBT file
+		dbf.Put(version); // #0: version number - 03 without a DBT file
 		Date date = GetSysDate();
 		dbf.Put(date.year - 1900); // #1 - 3: date of last update
 		dbf.Put(date.month);
 		dbf.Put(date.day);
 	}
-	else
-		dbf.Get32le();
+	else {
+		version = dbf.Get8();
+		dbf.Get8();
+		dbf.Get16();
+	}
 	sStreamIL(dbf, rows);
 	if(!full)
 		return true;
@@ -462,7 +469,7 @@ bool DbfStream::StreamHeader(bool full)
 			}
 		}
 		if(fpt.IsOpen() && fpt.IsLoading()) { // read FPT header
-			int nextfree = fpt.Get32be();
+			// int nextfree = fpt.Get32be();
 			fpt_block_size = fpt.Get32be();
 			if(fpt_block_size <= 0 || fpt_block_size >= 1 << 24)
 				fpt.Close(); // has_memo = false;
@@ -860,7 +867,7 @@ Value DbfStream::GetItemDateShort(int i) const
 {
 	const byte *p = record.Begin() + fields[i].offset;
 	Date date;
-	if(IsDigit(*p))
+	if(IsDigit(*p)) {
 		if(p[2] == '.') {
 			date.day = 10 * p[0] + p[1] - 11 * '0';
 			date.month = 10 * p[3] + p[4] - 11 * '0';
@@ -871,6 +878,7 @@ Value DbfStream::GetItemDateShort(int i) const
 			date.month = 10 * p[4] + p[5] - 11 * '0';
 			date.day = 10 * p[6] + p[7] - 11 * '0';
 		}
+	}
 	return date;
 }
 
@@ -927,8 +935,8 @@ Value DbfStream::GetItemMemo(int i, bool binary) const
 					return Value();
 				if(!binary) {
 					byte *p;
-					if(p = (byte *)memchr(buffer, '\0', len)) len = (unsigned)(p - buffer);
-					if(p = (byte *)memchr(buffer, '\x1A', len)) len = (unsigned)(p - buffer);
+					if((p = (byte *)memchr(buffer, '\0', len))) len = (unsigned)(p - buffer);
+					if((p = (byte *)memchr(buffer, '\x1A', len))) len = (unsigned)(p - buffer);
 				}
 				out = String(buffer, len);
 			}
@@ -958,7 +966,7 @@ Value DbfStream::GetItemMemo(int i, bool binary) const
 			if(pos >= fpt.GetSize())
 				return Value();
 			fpt.Seek(pos);
-			int fieldtype = fpt.Get32be();
+			// int fieldtype = fpt.Get32be();
 			int len = fpt.Get32be();
 			if(len > 0) {
 				StringBuffer outbuf(len);
@@ -979,4 +987,4 @@ Value DbfStream::GetItemEmpty(int i) const
 	return Value();
 }
 
-END_UPP_NAMESPACE
+}

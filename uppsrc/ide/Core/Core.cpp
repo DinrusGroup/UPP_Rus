@@ -1,7 +1,10 @@
 #include "Core.h"
 
-typedef VectorMap<String, Builder *(*)()> BuilderMapType;
-GLOBAL_VAR(BuilderMapType, BuilderMap)
+VectorMap<String, Builder *(*)()>& BuilderMap()
+{
+	static VectorMap<String, Builder *(*)()> h;
+	return h;
+}
 
 void RegisterBuilder(const char *name, Builder *(*create)())
 {
@@ -75,7 +78,7 @@ String AdjustMakePath(const char *fn)
 	String out;
 	for(; *fn; fn++)
 		if(*fn == '$')
-			out << '$' << '$';
+			out << "$(Dollar)";
 		else
 			out << *fn;
 	return out;
@@ -86,8 +89,16 @@ static IdeContext *the_ide;
 IdeContext *TheIde() { return the_ide; }
 void        TheIde(IdeContext *context) { the_ide = context; }
 
+bool IsVerbose()               { return the_ide ? the_ide->IsVerbose() : false; }
 void PutConsole(const char *s) { if(the_ide) the_ide->PutConsole(s); }
 void PutVerbose(const char *s) { if(the_ide) the_ide->PutVerbose(s); }
+void PutLinking()              { if(the_ide) the_ide->PutLinking(); }
+void PutLinkingEnd(bool ok)    { if(the_ide) the_ide->PutLinkingEnd(ok); }
+
+bool IsHeaderExt(const String& ext)
+{
+	return findarg(ext, ".h", ".hpp", ".hh", ".hxx") >= 0;
+}
 
 const Workspace& GetIdeWorkspace()
 {
@@ -105,10 +116,14 @@ String IdeContext::GetDefaultMethod()
 VectorMap<String, String> IdeContext::GetMethodVars(const String& method)
 {
 	VectorMap<String, String> map;
-	LoadVarFile(ConfigFile((String)~method + ".bm"), map);
+	LoadVarFile(ConfigFile(GetMethodName(method)), map);
 	return map;
 }
 
+String IdeContext::GetMethodName(const String& method)
+{
+	return (String)~method + ".bm";
+}
 
 String GetDefaultMethod()
 {
@@ -118,6 +133,11 @@ String GetDefaultMethod()
 VectorMap<String, String> GetMethodVars(const String& method)
 {
 	return the_ide ? the_ide->GetMethodVars(method) : VectorMap<String, String>();
+}
+
+String GetMethodPath(const String& method)
+{
+	return the_ide ? the_ide->GetMethodName(method) : "";
 }
 
 bool IdeIsBuilding()
@@ -136,19 +156,19 @@ String IdeGetOneFile()
 	return the_ide ? the_ide->IdeGetOneFile() : String(Null);
 }
 
-int IdeConsoleExecute(const char *cmdline, Stream *out, const char *envptr, bool quiet)
+int IdeConsoleExecute(const char *cmdline, Stream *out, const char *envptr, bool quiet, bool noconvert)
 {
-	return the_ide ? the_ide->IdeConsoleExecute(cmdline, out, envptr, quiet) : -1;
+	return the_ide ? the_ide->IdeConsoleExecute(cmdline, out, envptr, quiet, noconvert) : -1;
 }
 
-int IdeConsoleExecuteWithInput(const char *cmdline, Stream *out, const char *envptr, bool quiet)
+int IdeConsoleExecuteWithInput(const char *cmdline, Stream *out, const char *envptr, bool quiet, bool noconvert)
 {
-	return the_ide ? the_ide->IdeConsoleExecuteWithInput(cmdline, out, envptr, quiet) : -1;
+	return the_ide ? the_ide->IdeConsoleExecuteWithInput(cmdline, out, envptr, quiet, noconvert) : -1;
 }
 
-int IdeConsoleExecute(One<SlaveProcess> process, const char *cmdline, Stream *out, bool quiet)
+int IdeConsoleExecute(One<AProcess> process, const char *cmdline, Stream *out, bool quiet)
 {
-	return the_ide ? the_ide->IdeConsoleExecute(process, cmdline, out, quiet) : -1;
+	return the_ide ? the_ide->IdeConsoleExecute(pick(process), cmdline, out, quiet) : -1;
 }
 
 int IdeConsoleAllocSlot()
@@ -161,9 +181,9 @@ bool IdeConsoleRun(const char *cmdline, Stream *out, const char *envptr, bool qu
 	return the_ide && the_ide->IdeConsoleRun(cmdline, out, envptr, quiet, slot, key, blitz_count);
 }
 
-bool IdeConsoleRun(One<SlaveProcess> process, const char *cmdline, Stream *out, bool quiet, int slot, String key, int blitz_count)
+bool IdeConsoleRun(One<AProcess> pick_ process, const char *cmdline, Stream *out, bool quiet, int slot, String key, int blitz_count)
 {
-	return the_ide && the_ide->IdeConsoleRun(process, cmdline, out, quiet, slot, key, blitz_count);
+	return the_ide && the_ide->IdeConsoleRun(pick(process), cmdline, out, quiet, slot, key, blitz_count);
 }
 
 void IdeConsoleFlush()
@@ -184,6 +204,16 @@ void IdeConsoleEndGroup()
 bool IdeConsoleWait()
 {
 	return the_ide && the_ide->IdeConsoleWait();
+}
+
+bool IdeConsoleWait(int slot)
+{
+	return the_ide && the_ide->IdeConsoleWait(slot);
+}
+
+void IdeConsoleOnFinish(Event<>  cb)
+{
+	if(the_ide) the_ide->IdeConsoleOnFinish(cb);
 }
 
 void IdeGotoCodeRef(String s)
@@ -271,7 +301,7 @@ String IdeGetLine(int i)
 
 bool SaveChangedFile(const char *path, String data, bool delete_empty)
 {
-	if(LoadFile(path) == data)
+	if(LoadFile(path) == data && (FileExists(path) || delete_empty))
 		return true;
 	if(delete_empty && IsNull(data))
 		return FileDelete(path);
@@ -283,7 +313,7 @@ static int sReadCharc(CParser& p)
 {
 	p.PassChar('\'');
 	if(!IsAlpha(p.PeekChar()))
-		p.ThrowError("ожидался алфавитный символ языкового кода");
+		p.ThrowError("language code alphabetic character expected");
 	char c = p.GetChar();
 	p.PassChar('\'');
 	return c;
@@ -323,7 +353,7 @@ int ReadLNG(CParser& p) {
 		return l;
 	}
 	else
-		p.ThrowError("неверный код языка");
+		p.ThrowError("invalid language code");
 	return 0;
 }
 
@@ -390,8 +420,123 @@ bool IsDoc(String s)
 	       s.Find("authors") >= 0;
 }
 
-void CopyFolder(const char *_dst, const char *_src, Index<String>& used, bool all)
+static void WriteByteArray(StringBuffer& fo, const String& data)
 {
+	int pos = 0;
+	for(int p = 0; p < data.GetLength(); p++) {
+		if(pos >= 70) {
+			fo << '\n';
+			pos = 0;
+		}
+		if(pos == 0)
+			fo << '\t';
+		String part = FormatInt((byte)data[p]);
+		fo << part << ", ";
+		pos += part.GetLength() + 2;
+	}
+}
+
+String BrcToC(CParser& binscript, String basedir)
+{
+	BinObjInfo info;
+	info.Parse(binscript, basedir);
+	StringBuffer fo;
+	for(int i = 0; i < info.blocks.GetCount(); i++) {
+		String ident = info.blocks.GetKey(i);
+		ArrayMap<int, BinObjInfo::Block>& belem = info.blocks[i];
+		if(belem[0].flags & (BinObjInfo::Block::FLG_ARRAY | BinObjInfo::Block::FLG_MASK)) {
+			int count = Max(belem.GetKeys()) + 1;
+			Vector<BinObjInfo::Block *> blockref;
+			blockref.SetCount(count, 0);
+			for(int a = 0; a < belem.GetCount(); a++) {
+				BinObjInfo::Block& b = belem[a];
+				blockref[b.index] = &b;
+			}
+			for(int i = 0; i < blockref.GetCount(); i++)
+				if(blockref[i]) {
+					BinObjInfo::Block& b = *blockref[i];
+					fo << "static unsigned char " << ident << "_" << i << "[] = {\n";
+					String data = ::LoadFile(b.file);
+					if(data.IsVoid())
+						throw Exc(NFormat("Error reading file '%s'", b.file));
+					if(data.GetLength() != b.length)
+						throw Exc(NFormat("length of file '%s' changed (%d -> %d) during object creation",
+							b.file, b.length, data.GetLength()));
+					b.Compress(data);
+					b.length = data.GetLength();
+					data.Cat('\0');
+					WriteByteArray(fo, data);
+					fo << "\n};\n\n";
+//					fo << AsCString(data, 70, "\t", ASCSTRING_OCTALHI | ASCSTRING_SMART) << ";\n\n";
+				}
+
+			fo << "int " << ident << "_count = " << blockref.GetCount() << ";\n\n"
+			"int " << ident << "_length[] = {\n";
+			for(int i = 0; i < blockref.GetCount(); i++)
+				fo << '\t' << (blockref[i] ? blockref[i]->length : -1) << ",\n";
+			fo << "};\n\n"
+			"unsigned char *" << ident << "[] = {\n";
+			for(int i = 0; i < blockref.GetCount(); i++)
+				if(blockref[i])
+					fo << '\t' << ident << '_' << i << ",\n";
+				else
+					fo << "\t0,\n";
+			fo << "};\n\n";
+			if(belem[0].flags & BinObjInfo::Block::FLG_MASK) {
+				fo << "char *" << ident << "_files[] = {\n";
+				for(int i = 0; i < blockref.GetCount(); i++)
+					fo << '\t' << AsCString(blockref[i] ? GetFileName(blockref[i]->file) : String(Null)) << ",\n";
+				fo << "\n};\n\n";
+			}
+		}
+		else {
+			BinObjInfo::Block& b = belem[0];
+			fo << "static unsigned char " << ident << "_[] = {\n";
+			String data = ::LoadFile(b.file);
+			if(data.IsVoid())
+				throw Exc(NFormat("Error reading file '%s'", b.file));
+			if(data.GetLength() != b.length)
+				throw Exc(NFormat("length of file '%s' changed (%d -> %d) during object creation",
+					b.file, b.length, data.GetLength()));
+			b.Compress(data);
+			int b_length = data.GetLength();
+			data.Cat('\0');
+			WriteByteArray(fo, data);
+			fo << "\n};\n\n"
+			<< "unsigned char *" << ident << " = " << ident << "_;\n\n"
+//			fo << AsCString(data, 70) << ";\n\n"
+			"int " << ident << "_length = " << b_length << ";\n\n";
+		}
+	}
+	return fo;
+}
+
+void CopyFile(const String& d, const String& s, bool brc)
+{
+	FindFile ff(s);
+	if(ff) {
+		String ext = ToLower(GetFileExt(s));
+		if(brc && ext == ".brc") {
+			try {
+				String brcdata = LoadFile(s);
+				if(brcdata.IsVoid())
+					throw Exc(Format("error reading file '%s'", s));
+				CParser parser(brcdata, s);
+				Upp::SaveFile(d + "c", BrcToC(parser, GetFileDirectory(s)));
+			}
+			catch(Exc e) {
+				PutConsole(e);
+			}
+		}
+		SaveFile(d, LoadFile(s));
+		SetFileTime(d, ff.GetLastWriteTime());
+	}
+}
+
+void CopyFolder(const char *_dst, const char *_src, Index<String>& used, bool all, bool brc)
+{
+	if(GetFileName(_src) == ".svn")
+		return;
 	String dst = NativePath(_dst);
 	String src = NativePath(_src);
 	if(dst == src)
@@ -402,16 +547,70 @@ void CopyFolder(const char *_dst, const char *_src, Index<String>& used, bool al
 		String s = AppendFileName(src, ff.GetName());
 		String d = AppendFileName(dst, ff.GetName());
 		if(ff.IsFolder())
-			CopyFolder(d, s, used, all);
+			CopyFolder(d, s, used, all, brc);
 		else
 		if(ff.IsFile() && (all || IsDoc(s) || used.Find(s) >= 0)) {
 			if(realize) {
 				RealizeDirectory(dst);
 				realize = false;
 			}
-			SaveFile(d, LoadFile(s));
-			SetFileTime(d, ff.GetLastWriteTime());
+			CopyFile(d, s, brc);
 		}
 		ff.Next();
 	}
+}
+
+String Join(const String& a, const String& b, const char *sep)
+{
+	String h = a;
+	if(a.GetCount() && b.GetCount())
+		h << sep;
+	h << b;
+	return h;
+}
+
+String GetExeExt()
+{
+#if defined(PLATFORM_WIN32) || defined(PLATFORM_WIN64)
+	return ".exe";
+#else
+	return "";
+#endif
+}
+
+String NormalizeExePath(String exePath)
+{
+	if(exePath.Find(" ") >= 0) {
+	#if defined(PLATFORM_WIN32) || defined(PLATFORM_WIN64)
+		exePath = "\"" + exePath + "\"";
+	#else
+		exePath.Replace(" ", "\\ ");
+	#endif
+	}
+	
+	return exePath;
+}
+
+String NormalizePathSeparator(String path)
+{
+	#if defined(PLATFORM_WIN32) || defined(PLATFORM_WIN64)
+		path.Replace("/", DIR_SEPS);
+	#else
+		path.Replace("\\", DIR_SEPS);
+	#endif
+	
+	return path;
+}
+
+Index<String> pch_files;
+
+void RegisterPCHFile(const String& pch_file)
+{
+	pch_files.FindAdd(pch_file);
+}
+
+void DeletePCHFiles()
+{
+	for(int i = 0; i < pch_files.GetCount(); i++)
+		FileDelete(pch_files[i]);
 }

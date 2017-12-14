@@ -10,7 +10,7 @@
 #endif
 
 
-NAMESPACE_UPP
+namespace Upp {
 
 #ifdef GUI_WIN
 
@@ -32,7 +32,7 @@ FileSelector& FileSelector::Type(const char *name, const char *ext) {
 }
 
 FileSelector& FileSelector::AllFilesType() {
-	return Type(t_("Все файлы"), "*.*");
+	return Type(t_("All files"), "*.*");
 }
 
 void FileSelector::Serialize(Stream& s) {
@@ -149,9 +149,9 @@ bool FileSelector::Execute(bool open, const char *dlgtitle) {
 	if(dlgtitle)
 		title = ToSystemCharset(dlgtitle);
 	else if(open)
-		title = ToSystemCharset(t_("Открыть.."));
+		title = ToSystemCharset(t_("Open.."));
 	else
-		title = ToSystemCharset(t_("Сохранить как"));
+		title = ToSystemCharset(t_("Save as"));
 	ofn.lpstrTitle = ~title;
 	if(!defext.IsEmpty())
 		ofn.lpstrDefExt = defext;
@@ -192,4 +192,4 @@ bool FileSelector::Execute(bool open, const char *dlgtitle) {
 #endif
 #endif
 
-END_UPP_NAMESPACE
+}

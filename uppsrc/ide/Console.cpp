@@ -21,6 +21,7 @@ Console::Console() {
 	input.SetFrame(Single<TopTextFrame>());
 	AddFrame(input);
 	input.Hide();
+	serial = 0;
 }
 
 void Console::LeftDouble(Point p, dword) {
@@ -42,31 +43,40 @@ static int sCharFilterNoCr(int c) {
 
 void Console::Append(const String& s) {
 	if(s.IsEmpty()) return;
-/*	if(console) {
+	if(console) {
 		String t = Filter(s, sCharFilterNoCr);
 		if(*t.Last() == '\n')
 			t.Trim(t.GetCount() - 1);
 		Puts(t);
-
 		return;
-	}*/
+	}
 	int l, h;
 	GetSelection(l, h);
 	if(GetCursor() == GetLength()) l = -1;
 	EditPos p = GetEditPos();
 	SetEditable();
 	MoveTextEnd();
-	String t = Filter(s, sAppf);
-	if(wrap_text) {
-		int mg = sb.GetReducedViewSize().cx / GetFont().Info().GetAveWidth();
-		for(const char *q = t; *q; q++) {
-			if(mg > 2 && GetColumnLine(GetCursor()).x >= mg - 1)
-				Paste(ToUnicode("\n\t", CHARSET_WIN1251));
-			Paste(String(*q, 1).ToWString());
+	WString t = Filter(s, sAppf).ToWString();
+	int mg = sb.GetReducedViewSize().cx / GetFont().GetAveWidth();
+	if(wrap_text && mg > 4) {
+		int x = GetColumnLine(GetCursor()).x;
+		WStringBuffer tt;
+		const wchar *q = t;
+		while(*q) {
+			if(x > mg - 1) {
+				tt.Cat('\n');
+				tt.Cat("    ");
+				x = 4;
+			}
+			x++;
+			if(*q == '\n')
+				x = 0;
+			tt.Cat(*q++);
 		}
+		Paste(tt);
 	}
 	else
-		Paste(t.ToWString());
+		Paste(t);
 	SetReadOnly();
 	if(l >= 0) {
 		SetEditPos(p);
@@ -90,6 +100,25 @@ bool Console::Key(dword key, int count) {
 		return true;
 	}
 	return LineEdit::Key(key, count);
+}
+
+void Console::ToErrors(const String& s)
+{
+	for(const char *q = s; *q; q++) {
+		if(*q == '\n') {
+			WhenLine(line);
+			line.Clear();
+		}
+		else
+		if((byte)*q >= ' ')
+			line.Cat(*q);
+	}
+}
+
+void Console::AppendOutput(const String& s)
+{
+	Append(s);
+	ToErrors(s);
 }
 
 int Console::Flush()
@@ -123,10 +152,9 @@ int Console::Flush()
 			if(slot.outfile)
 				slot.outfile->Put(s);
 			if(!slot.quiet) {
-				s = FromSystemCharset(s);
 				if(console_lock < 0 || console_lock == i) {
 					console_lock = i;
-					Append(s);
+					AppendOutput(s);
 				}
 				else
 					slot.output.Cat(s);
@@ -135,7 +163,7 @@ int Console::Flush()
 		if(!slot.process->IsRunning()) {
 			Kill(i);
 			if(slot.exitcode != 0 && verbosebuild)
-				spooled_output.Cat("Ошибка при выполнении " + slot.cmdline + "\n");
+				spooled_output.Cat("Error executing " + slot.cmdline + "\n");
 			if(console_lock == i)
 				console_lock = -1;
 			FlushConsole();
@@ -147,41 +175,43 @@ int Console::Flush()
 	return !running ? -1 : done_output ? 1 : 0;
 }
 
-int Console::Execute(One<SlaveProcess> p, const char *command, Stream *out, bool q)
+int Console::Execute(One<AProcess> pick_ p, const char *command, Stream *out, bool q)
 {
 	Wait();
-	if(!Run(p, command, out, q, 0))
+	if(!Run(pick(p), command, out, q, 0))
 		return -1;
 	Wait();
 	return processes[0].exitcode;
 }
 
-int Console::Execute(const char *command, Stream *out, const char *envptr, bool q)
+int Console::Execute(const char *command, Stream *out, const char *envptr, bool q, bool noconvert)
 {
 	try {
 		Wait();
-		return Execute(StartProcess(command, envptr, REMOTE_TIMEOUT), command, out, q);
+		One<AProcess> p;
+		if(p.Create<LocalProcess>().ConvertCharset(!noconvert).Start(command, envptr))
+			return Execute(pick(p), command, out, q);
 	}
 	catch(Exc e) {
-		ProcessEvents();
-		return Null;
 	}
+	ProcessEvents();
+	return Null;
 }
 
 int Console::AllocSlot()
 {
-	int sleep = 0;
+	int ms0 = msecs();
+	
 	for(;;) {
 		for(int i = 0; i < processes.GetCount(); i++)
 			if(!IsRunning(i))
 				return i;
-		switch(Flush()) {
-			case -1: break;
-			case  0: sleep = min(sleep + 5, 20); break;
-			case +1: sleep = 0; break;
+		Flush();
+		Sleep(0);
+		if(ms0 != msecs()) {
+			ProcessEvents();
+			ms0 = msecs();
 		}
-		Sleep(sleep);
-		ProcessEvents();
 	}
 }
 
@@ -189,21 +219,22 @@ bool Console::Run(const char *cmdline, Stream *out, const char *envptr, bool qui
 {
 	try {
 		Wait(slot);
-		One<SlaveProcess> sproc = StartProcess(cmdline, envptr, REMOTE_TIMEOUT);
-		return !!sproc && Run(sproc, cmdline, out, quiet, slot, key, blitz_count);
+		One<AProcess> sproc;
+		return sproc.Create<LocalProcess>().Start(cmdline, envptr) &&
+		       Run(pick(sproc), cmdline, out, quiet, slot, key, blitz_count);
 	}
 	catch(Exc e) {
 		Append(e);
-		ProcessEvents();
-		return false;
 	}
+	ProcessEvents();
+	return false;
 }
 
-bool Console::Run(One<SlaveProcess> process, const char *cmdline, Stream *out, bool quiet, int slot, String key, int blitz_count)
+bool Console::Run(One<AProcess> pick_ process, const char *cmdline, Stream *out, bool quiet, int slot, String key, int blitz_count)
 {
 	if(!process) {
 		if(verbosebuild)
-			spooled_output << "Ошибка при запуске " << cmdline << "\n";
+			spooled_output << "Error running " << cmdline << "\n";
 		FlushConsole();
 		return false;
 	}
@@ -211,7 +242,7 @@ bool Console::Run(One<SlaveProcess> process, const char *cmdline, Stream *out, b
 		spooled_output << cmdline << "\n";
 	Wait(slot);
 	Slot& pslot = processes[slot];
-	pslot.process = process;
+	pslot.process = pick(process);
 	pslot.cmdline = cmdline;
 	pslot.outfile = out;
 	pslot.output = Null;
@@ -219,10 +250,18 @@ bool Console::Run(One<SlaveProcess> process, const char *cmdline, Stream *out, b
 	pslot.key = key;
 	pslot.group = current_group;
 	pslot.last_msecs = msecs();
+	pslot.serial = ++serial;
 	groups.GetAdd(pslot.group).count += blitz_count;
 	if(processes.GetCount() == 1)
 		Wait(slot);
 	return true;
+}
+
+void Console::OnFinish(Event<>  cb)
+{
+	Finisher& f = finisher.Add();
+	f.serial = serial;
+	f.cb = cb;
 }
 
 void Console::FlushConsole()
@@ -265,29 +304,30 @@ bool Console::IsRunning(int slot)
 
 void Console::Wait(int slot)
 {
-	int sleep = 0;
+	int ms0 = msecs();
 	while(processes[slot].process) {
-		ProcessEvents();
-		switch(Flush()) {
-			case -1: return;
-			case  0: sleep = min(sleep + 5, 20); break;
-			case +1: sleep = 0; break;
+		if(ms0 != msecs()) {
+			ProcessEvents();
+			ms0 = msecs();
 		}
-		Ctrl::GuiSleep(sleep);
+		if(Flush() == -1)
+			return;
+		Sleep(0);
 	}
 }
 
 bool Console::Wait()
 {
-	int sleep = 0;
+	int ms0 = msecs();
 	for(;;) {
-		ProcessEvents();
-		switch(Flush()) {
-			case -1: return error_keys.IsEmpty();
-			case  0: sleep = min(sleep + 5, 20); break;
-			case +1: sleep = 0; break;
+		if(ms0 != msecs()) {
+			ProcessEvents();
+			ms0 = msecs();
 		}
-		Ctrl::GuiSleep(sleep);
+		if(Flush() == -1) {
+			return error_keys.IsEmpty();
+		}
+		Sleep(0);
 	}
 }
 
@@ -301,17 +341,35 @@ void Console::Kill(int islot)
 {
 	Slot& slot = processes[islot];
 	if(slot.process) {
-		slot.process->Kill();
+		if(slot.process->IsRunning())
+			slot.process->Kill();
 		slot.exitcode = slot.process->GetExitCode();
+		slot.serial = INT_MAX;
 		if(slot.exitcode != 0 && !IsNull(slot.key))
 			error_keys.Add(slot.key);
 		slot.process.Clear();
+		ToErrors(slot.output);
+		WhenRunEnd();
 		spooled_output.Cat(slot.output);
 		if(console_lock == islot)
 			console_lock = -1;
 		FlushConsole();
 	}
 	CheckEndGroup();
+
+	int minserial = INT_MAX;
+	for(int i = 0; i < processes.GetCount(); i++)
+		minserial = min(processes[i].serial, minserial);
+	int i = 0;
+	while(i < finisher.GetCount()) {
+		const Finisher& f = finisher[i];
+		if(f.serial > minserial)
+			i++;
+		else {
+			f.cb();
+			finisher.Remove(i);
+		}
+	}
 }
 
 void Console::SetSlots(int s)
@@ -332,11 +390,11 @@ void Console::CheckEndGroup()
 			if(p < 0) {
 				if(group.count > 0) {
 					int duration = msecs(group.start_time);
-					String msg = NFormat("%s: %d файлов построено за %s, %d мсек / файл, длительность = %d мсек",
+					String msg = NFormat("%s: %d file(s) built in %s, %d msecs / file, duration = %d msecs",
 						gname, group.count, PrintTime(group.msecs), group.msecs / group.count, duration);
 					if(processes.GetCount() > 1) {
 						int k = 100 * processes.GetCount() / (processes.GetCount() - 1);
-						msg << NFormat(", параллелизация %d%%", minmax(k - group.msecs * k / max(group.raw_msecs, 1), 0, 100));
+						msg << NFormat(", parallelization %d%%", minmax(k - group.msecs * k / max(group.raw_msecs, 1), 0, 100));
 					}
 					msg << '\n';
 					spooled_output.Cat(msg);

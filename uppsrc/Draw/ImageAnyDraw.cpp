@@ -1,6 +1,6 @@
 #include "Draw.h"
 
-NAMESPACE_UPP
+namespace Upp {
 
 dword ImageAnyDraw::GetInfo() const
 {
@@ -134,6 +134,11 @@ void ImageAnyDrawSystem(Draw *(*f)(Size sz), Image (*e)(Draw *w))
 	}
 }
 
+bool ImageAnyDraw::IsAvailable()
+{
+	return sCreateImageDraw;
+}
+
 void ImageAnyDraw::Init(Size sz)
 {
 	ASSERT(sCreateImageDraw);
@@ -161,4 +166,4 @@ ImageAnyDraw::~ImageAnyDraw()
 	delete draw;
 }
 
-END_UPP_NAMESPACE
+}

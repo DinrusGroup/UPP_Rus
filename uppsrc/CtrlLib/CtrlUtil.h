@@ -5,9 +5,18 @@ bool CtrlLibDisplayError(const Value& ev);
 
 bool EditText(String& s, const char *title, const char *label, int (*filter)(int), int maxlen = 0);
 bool EditText(String& s, const char *title, const char *label, int maxlen = 0);
+bool EditTextNotNull(String& s, const char *title, const char *label, int (*filter)(int), int maxlen = 0);
+bool EditTextNotNull(String& s, const char *title, const char *label, int maxlen = 0);
 
 bool EditText(WString& s, const char *title, const char *label, int (*filter)(int), int maxlen = 0);
 bool EditText(WString& s, const char *title, const char *label, int maxlen = 0);
+bool EditTextNotNull(WString& s, const char *title, const char *label, int (*filter)(int), int maxlen = 0);
+bool EditTextNotNull(WString& s, const char *title, const char *label, int maxlen = 0);
+
+bool EditNumber(int& n, const char *title, const char *label, int min = INT_MIN, int max = INT_MAX, bool notnull = false);
+bool EditNumber(double& n, const char *title, const char *label, double min = -DBL_MAX, double max = DBL_MAX, bool notnull = false);
+
+bool EditDateDlg(Date& d, const char *title, const char *label, Date min = Date::Low(), Date max = Date::High(), bool notnull = false);
 
 void Show2(Ctrl& ctrl1, Ctrl& ctrl, bool show = true);
 void Hide2(Ctrl& ctrl1, Ctrl& ctrl);
@@ -22,16 +31,16 @@ void WindowsList();
 void WindowsMenu(Bar& bar);
 
 class DelayCallback : public Pte<DelayCallback> {
-	Callback target;
+	Event<>  target;
 	int      delay;
 
 public:
 	void     Invoke();
-	void     operator<<=(Callback x)  { target = x; }
+	void     operator<<=(Event<> x)   { target = x; }
 	void     SetDelay(int ms)         { delay = ms; }
-	Callback Get()                    { return callback(this, &DelayCallback::Invoke); }
-	Callback operator~()              { return Get(); }
-	operator Callback()               { return Get(); }
+	Event<>  Get()                    { return callback(this, &DelayCallback::Invoke); }
+	Event<>  operator~()              { return Get(); }
+	operator Event<>()                { return Get(); }
 
 	DelayCallback()                   { delay = 2000; }
 	~DelayCallback()                  { KillTimeCallback(this); }
@@ -43,15 +52,16 @@ struct Win32PrintDlg_;
 
 #ifndef PLATFORM_WINCE
 
-#if defined(GUI_WIN) || defined(GUI_X11)
+#if defined(GUI_WIN) || defined(PLATFORM_X11)
 
 class PrinterJob {
 #ifdef GUI_WIN
 	One<Win32PrintDlg_> pdlg;
+	bool Execute0(bool dodlg);
 #endif
-#ifdef GUI_X11
+#ifdef PLATFORM_X11
 	Size                pgsz;
-	Size                GetDefaultPageSize();
+	Size                GetDefaultPageSize(String *name = NULL);
 #endif
 	One<Draw>           draw;
 	Vector<int>         page;
@@ -59,8 +69,9 @@ class PrinterJob {
 	bool                landscape;
 	String              name;
 	String              options;
-	bool                Execute0(bool dodlg);
-
+	bool                dlgSuccess;
+	bool                Execute0();
+	
 public:
 	Draw&               GetDraw();
 	operator            Draw&()                         { return GetDraw(); }
@@ -113,14 +124,14 @@ public:
 	virtual void    BalloonHide();
 	virtual void    BalloonTimeout();
 
-	Callback        WhenLeftDown;
-	Callback        WhenLeftUp;
-	Callback        WhenLeftDouble;
-	Callback1<Bar&> WhenBar;
-	Callback        WhenBalloonLeftDown;
-	Callback        WhenBalloonShow;
-	Callback        WhenBalloonHide;
-	Callback        WhenBalloonTimeout;
+	Event<>         WhenLeftDown;
+	Event<>         WhenLeftUp;
+	Event<>         WhenLeftDouble;
+	Event<Bar&> WhenBar;
+	Event<>         WhenBalloonLeftDown;
+	Event<>         WhenBalloonShow;
+	Event<>         WhenBalloonHide;
+	Event<>         WhenBalloonTimeout;
 
 	void            Break()                                { EndLoop(0); }
 	void            Run()                                  { EventLoop(this); }
@@ -139,6 +150,61 @@ public:
 	typedef TrayIcon CLASSNAME;
 
 	TrayIcon();
+};
+
+#endif
+
+#ifdef GUI_GTK
+
+class TrayIcon {
+private:
+	GtkStatusIcon *tray_icon;
+	String         tooltip;
+	ImageGdk       image;
+	bool           active;
+
+	static gboolean DoButtonPress(GtkStatusIcon *, GdkEventButton *e, gpointer user_data);
+	static gboolean DoButtonRelease(GtkStatusIcon *, GdkEventButton *e, gpointer user_data);
+	static void     PopupMenu(GtkStatusIcon *, guint, guint32, gpointer user_data);
+	static void     DoActivate(GtkStatusIcon *, gpointer user_data);
+
+	void DoMenu(Bar& bar);
+	void ExecuteMenu();
+
+	void Sync();
+
+	void Message(int type, const char *title, const char *text, int timeout);
+
+public:
+	virtual void    Menu(Bar& bar);
+	virtual void    LeftDown();
+	virtual void    LeftUp();
+	virtual void    LeftDouble();
+
+	Event<>         WhenLeftDown;
+	Event<>         WhenLeftUp;
+	Event<>         WhenLeftDouble;
+	Event<Bar&> WhenBar;
+
+	void            Break();
+	void            Run();
+
+	void            Show(bool b = true);
+	void            Hide()                                 { Show(false); }
+	bool            IsVisible() const;
+
+	// Not implemented by GTK:
+	void            Info(const char *title, const char *text, int timeout = 10)    { Message(1, title, text, timeout); }
+	void            Warning(const char *title, const char *text, int timeout = 10) { Message(2, title, text, timeout); }
+	void            Error(const char *title, const char *text, int timeout = 10)   { Message(3, title, text, timeout); }
+
+	TrayIcon&  Icon(const Image &img)                      { if(image.Set(img)) Sync(); return *this; }
+	TrayIcon&  Tip(const char *text)                       { if(tooltip != text) tooltip = text; Sync(); return *this; }
+
+	typedef TrayIcon CLASSNAME;
+
+	TrayIcon();
+	~TrayIcon();
 };
 
 #endif
@@ -194,14 +260,14 @@ public:
 	virtual void    BalloonHide();
 	virtual void    BalloonTimeout();
 
-	Callback        WhenLeftDown;
-	Callback        WhenLeftUp;
-	Callback        WhenLeftDouble;
-	Callback1<Bar&> WhenBar;
-	Callback        WhenBalloonLeftDown;
-	Callback        WhenBalloonShow;
-	Callback        WhenBalloonHide;
-	Callback        WhenBalloonTimeout;
+	Event<>         WhenLeftDown;
+	Event<>         WhenLeftUp;
+	Event<>         WhenLeftDouble;
+	Event<Bar&> WhenBar;
+	Event<>         WhenBalloonLeftDown;
+	Event<>         WhenBalloonShow;
+	Event<>         WhenBalloonHide;
+	Event<>         WhenBalloonTimeout;
 
 	void            Show(bool b = true);
 	void            Hide()                                 { Show(false); }
@@ -285,6 +351,46 @@ public:
 typedef FileSel FileSelector;
 #endif
 
+#ifdef GUI_GTK
+class FileSelector {
+	Vector<String> path;
+	Vector< Tuple2<String, String> > type;
+	
+	String ipath;
+	bool   confirm;
+	bool   multi;
+	bool   hidden;
+	int    activetype;
+
+public:
+	bool   Execute(bool open, const char *title = NULL);
+	bool   ExecuteOpen(const char *title = NULL)          { return Execute(true, title); }
+	bool   ExecuteSaveAs(const char *title = NULL)        { return Execute(false, title); }
+
+	String Get() const                                    { return path.GetCount() ? path[0] : String::GetVoid(); }
+	operator String() const                               { return Get(); }
+	String operator~() const                              { return Get(); }
+	
+	void   Set(const String& s)                           { ipath = s; }
+	void   operator=(const String& s)                     { Set(s); }
+	void   operator<<=(const String& s)                   { Set(s); }
+
+	int    GetCount() const                               { return path.GetCount(); }
+	const  String& operator[](int i) const                { return path[i]; }
+
+	FileSelector& Type(const char *name, const char *ext) { type.Add(MakeTuple(String(name), String(ext))); return *this; }
+	FileSelector& AllFilesType();
+	FileSelector& Asking(bool b = true)                   { confirm = b; return *this; }
+	FileSelector& NoAsking()                              { return Asking(false); }
+	FileSelector& Multi(bool b = true)                    { multi = b; return *this; }
+	FileSelector& ShowHidden(bool b = true)               { hidden = b; return *this; }
+	FileSelector& ActiveDir(const String& dir)            { ipath = dir; return *this; }
+	FileSelector& ActiveType(int i)                       { activetype = i; return *this; }
+
+	FileSelector();
+};
+#endif
+
 class CtrlRetriever {
 public:
 	struct Item {
@@ -318,7 +424,13 @@ public:
 
 	void Retrieve();
 
-	Callback operator<<=(Callback cb);
+	Event<>  operator^=(Event<> cb);
+	Event<>  operator<<(Event<> cb);
+	
+	void Reset()                                  { item.Clear(); }
+
+// Backward compatibility
+	Event<>  operator<<=(Event<> cb)              { return *this ^= cb; }
 };
 
 template <class T>
@@ -332,6 +444,7 @@ void CtrlRetriever::Put(Ctrl& ctrl, T& val)
 }
 
 class IdCtrls {
+protected:
 	struct Item {
 		Id    id;
 		Ctrl *ctrl;
@@ -341,13 +454,54 @@ class IdCtrls {
 public:
 	void        Reset()                              { item.Clear(); }
 
-	void        Add(Id id, Ctrl& ctrl);
-	IdCtrls&    operator()(Id id, Ctrl& ctrl)        { Add(id, ctrl); return *this; }
-	int         GetCount() const                     { return item.GetCount(); }
-	Ctrl&       operator[](int i)                    { return *item[i].ctrl; }
-	const Ctrl& operator[](int i) const              { return *item[i].ctrl; }
-	Id          operator()(int i) const              { return item[i].id; }
+	void            Add(Id id, Ctrl& ctrl);
+	IdCtrls&        operator()(Id id, Ctrl& ctrl)    { Add(id, ctrl); return *this; }
+	int             GetCount() const                 { return item.GetCount(); }
+	Ctrl&           operator[](int i)                { return *item[i].ctrl; }
+	const Ctrl&     operator[](int i) const          { return *item[i].ctrl; }
+	Id              GetKey(int i) const              { return item[i].id; }
+	Id              operator()(int i) const          { return item[i].id; }
+
+	bool            Accept();
+	void            ClearModify();
+	bool            IsModified();
+	void            Enable(bool b = true);
+	void            Disable()                        { Enable(false); }
+	void            SetNull();
+	
+	Event<>         operator<<(Event<> action);
+	Event<>         operator^=(Event<> action);
+
+	ValueMap        Get() const;
+	void            Set(const ValueMap& m);
+	ValueMap        operator~() const                { return Get(); }
+	const ValueMap& operator<<=(const ValueMap& m)   { Set(m); return m; }
 };
+
+class FileSelButton : public FileSel
+{
+public:
+	typedef FileSelButton CLASSNAME;
+	enum MODE { MODE_OPEN, MODE_SAVE, MODE_DIR };
+	FileSelButton(MODE mode = MODE_OPEN, const char *title = NULL);
+
+	void               Attach(Ctrl& parent) { parent.AddFrame(button); }
+	void               Detach();
+	void               Title(String t)      { title = t; }
+	String             GetTitle() const     { return title; }
+
+private:
+	void               OnAction();
+
+private:
+	FrameRight<Button> button;
+	String             title;
+	MODE               mode;
+};
+
+struct OpenFileButton  : FileSelButton { OpenFileButton(const char *title = NULL) : FileSelButton(MODE_OPEN, title) {} };
+struct SaveFileButton  : FileSelButton { SaveFileButton(const char *title = NULL) : FileSelButton(MODE_SAVE, title) {} };
+struct SelectDirButton : FileSelButton { SelectDirButton(const char *title = NULL) : FileSelButton(MODE_DIR,  title) {} };
 
 void Set(ArrayCtrl& array, int ii, IdCtrls& m);
 void Get(ArrayCtrl& array, int ii, IdCtrls& m);

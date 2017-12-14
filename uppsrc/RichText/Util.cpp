@@ -1,6 +1,6 @@
 #include "RichText.h"
 
-NAMESPACE_UPP
+namespace Upp {
 
 Draw& SimplePageDraw::Page(int)
 {
@@ -73,7 +73,12 @@ void QTFDisplayCls::Paint(Draw& draw, const Rect& r, const Value& v, Color ink, 
 	rtext.ApplyZoom(GetRichTextStdScreenZoom());
 	draw.DrawRect(r, paper);
 	draw.Clipoff(r);
-	rtext.Paint(Zoom(1, 1), draw, 0, 0, r.Width());
+	PaintInfo pi;
+	pi.highlightpara = false;
+	pi.zoom = Zoom(1, 1);
+	if(style & (CURSOR|SELECT|READONLY))
+		pi.textcolor = ink;
+	rtext.Paint(draw, 0, 0, r.Width(), pi);
 	draw.End();
 }
 
@@ -111,14 +116,6 @@ RichText AsRichText(const wchar *s, const RichPara::Format& f)
 	RichPara p;
 	p.format = f;
 	p.part.Add().format = f;
-	RichStyle cs;
-	cs.format = f;
-	cs.format.sscript = 0;
-	cs.format.link.Clear();
-	cs.format.indexentry.Clear();
-	cs.format.language = LNG_ENGLISH;
-	cs.format.label.Clear();
-	clip.SetStyle(f.styleid, cs);
 	WString& part = p.part.Top().text;
 	while(*s) {
 		if(*s == '\n') {
@@ -133,4 +130,58 @@ RichText AsRichText(const wchar *s, const RichPara::Format& f)
 	return clip;
 }
 
-END_UPP_NAMESPACE
+struct DrawingPageDraw__ : public DrawingDraw, public PageDraw {
+	virtual Draw& Page(int i);
+
+	Array<Drawing>  page;
+	int             pagei;
+	Size            size;
+
+	void  Flush();
+
+	DrawingPageDraw__() { pagei = -1; }
+};
+
+Draw& DrawingPageDraw__::Page(int i)
+{
+	ASSERT(i >= 0);
+	if(i != pagei) {
+		Flush();
+		pagei = i;
+		Create(size);
+	}
+	return *this;
+}
+
+void DrawingPageDraw__::Flush()
+{
+	if(pagei >= 0) {
+		Drawing dw = GetResult();
+		page.At(pagei).Append(dw);
+		Create(size);
+	}
+}
+
+Array<Drawing> RenderPages(const RichText& txt, Size pagesize)
+{
+	DrawingPageDraw__ pd;
+	pd.size = pagesize;
+	PaintInfo paintinfo;
+	paintinfo.top = PageY(0, 0);
+	paintinfo.bottom = PageY(INT_MAX, INT_MAX);
+	paintinfo.indexentry = Null;
+	paintinfo.hyperlink = Null;
+	txt.Paint(pd, pagesize, paintinfo);
+	pd.Flush();
+	return pick(pd.page);
+}
+
+String Pdf(const RichText& txt, Size pagesize, int margin, bool pdfa, const PdfSignatureInfo *sign)
+{
+	ASSERT_(GetDrawingToPdfFn(), "Pdf requires PdfDraw package");
+	Array<Drawing> pages = RenderPages(txt, pagesize);
+	return GetDrawingToPdfFn() && pages.GetCount() ? (*GetDrawingToPdfFn())(pages, pagesize, margin, pdfa, sign)
+	                                               : String();
+}
+
+}

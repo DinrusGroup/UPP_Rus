@@ -1,7 +1,6 @@
 #include "GeomCoords.h"
-#pragma hdrstop
 
-NAMESPACE_UPP
+namespace Upp {
 
 #define LLOG(x) // RLOG(x)
 
@@ -278,7 +277,7 @@ double GisInverse::Get(double y) const
 		else if(ymap[sec] > y && ymap[sec + 1] < y)
 		{
 			double lx = rawxmin + xstep * sec, hx = lx + xstep;
-			double ly = ymap[sec], hy = ymap[sec + 1];
+//			double ly = ymap[sec], hy = ymap[sec + 1];
 			while(hx - lx > epsilon)
 			{
 /*				double dh = hy - ly, mx, my;
@@ -291,12 +290,12 @@ double GisInverse::Get(double y) const
 				if(my > y)
 				{
 					lx = mx;
-					ly = my;
+//					ly = my;
 				}
 				else
 				{
 					hx = mx;
-					hy = my;
+//					hy = my;
 				}
 			}
 			return (lx + hx) / 2;
@@ -368,9 +367,9 @@ String GisInverseTiming(double xmin, double xmax, const GisFunction& fn, int sec
 	do
 	{
 		count++;
-		double x;
+//		double x;
 		for(int i = 0; i < 1000; i++)
-			x = inverse(yval[i]);
+			/*x = */inverse(yval[i]);
 	}
 	while((duration = msecs(start)) < 500);
 	double nsecs = duration * 1000.0 / double(count);
@@ -697,7 +696,7 @@ String GisInterpolatorTiming(double xmin, double xmax, const GisFunction& fn, in
 	String dump = interpolator.CreateDump(xmin, xmax, fn, buckets, sections, samples, check);
 	double dmax = 0;
 	double step_check = (xmax - xmin) / check;
-	double step_64K = (xmax - xmin) / 65536;
+//	double step_64K = (xmax - xmin) / 65536;
 	Buffer<double> check_table(1000);
 	for(int c = 0; c < 1000; c++)
 		check_table[c] = xmin + c / 999.0;
@@ -1337,4 +1336,52 @@ PlanarSegmentTree CreatePlanarTree(const LinearSegmentTree& left, const LinearSe
 	return out;
 }
 
-END_UPP_NAMESPACE
+GisCoordsGaussLatitude::GisCoordsGaussLatitude()
+{
+}
+
+double SphericalLatitudeFunction::Get(double phi) const
+{
+//	RTIMING("SphericalLatitudeFunction::Get");
+	phi *= DEGRAD;
+	double esx = e * sin(phi);
+	double eps = pow((1 - esx) / (1 + esx), e * alpha / 2) / k;
+	double dpi = M_PI / 4 - phi / 2;
+	if(dpi <= 0.001)
+	{
+//		RLOG("first dpi = " << FormatDouble(x, 5));
+//		RLOG("saturation: " << dpi);
+		return 90 - 2 / DEGRAD * (pow(fabs(dpi), alpha) / (dpi >= 0 ? eps : -eps));
+	}
+	else
+	{
+		double rho = phi / 2 + M_PI / 4;
+		return 2 / DEGRAD * atan(pow(fabs(tan(rho)), alpha) * (rho >= 0 ? eps : -eps)) - 90;
+	}
+}
+
+void GisCoordsGaussLatitude::Create(double a, double e2, double base_parallel)
+{
+	double e = sqrt(e2);
+	double phi0 = base_parallel * DEGRAD;
+	double alpha = sqrt(1 + (e2 * sqr(sqr(cos(phi0)))) / (1 - e2));
+	double sinphi = sin(phi0);
+	double U0 = asin(sinphi / alpha);
+	double k = exp(alpha * (log(tan(phi0 / 2 + M_PI / 4)) + e / 2 * log((1 - e * sinphi) / (1 + e * sinphi))))
+		/ tan(U0 / 2 + M_PI / 4);
+//	k = pow(tan(base_parallel / 2 + M_PI / 4), alpha)
+//		* pow((1 - e * sinphi) / (1 + e * sinphi), alpha * e / 2)
+//		/ tan(U0 / 2 + M_PI / 4);
+	radius = a * sqrt(1 - e2) / (1 - e2 * sqr(sinphi));
+	gauss_projected.Clear();
+	gauss_latitude.Clear();
+
+	SphericalLatitudeFunction gslf(alpha, k, radius, e, U0);
+	//gslf.Dump(-1.58, +1.58, 1000);
+	//gslf.Dump(-1.58, -1.56, 1000);
+	//gslf.Dump(+1.56, +1.58, 1000);
+	gauss_projected.Create(base_parallel - 30, base_parallel + 30, gslf, 300, 5000, 4);
+	gauss_latitude.CreateInverse(base_parallel - 30, base_parallel + 30, gslf, 300, 5000, 4);
+}
+
+}

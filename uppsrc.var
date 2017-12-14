@@ -1,3 +1,2 @@
-UPP = "d:\\dinrus\\upp\\uppsrc";
-COMMON = "d:\\dinrus\\upp\\common";
-OUTPUT = "d:\\dinrus\\upp\\out";
+UPP = "D:\\dinrus\\upp\\uppsrc";
+OUTPUT = "D:\\dinrus\\upp\\out";

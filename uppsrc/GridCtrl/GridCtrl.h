@@ -5,7 +5,7 @@
 #include <Sql/Sql.h>
 #endif
 
-NAMESPACE_UPP
+namespace Upp {
 
 #include "GridUtils.h"
 #include "GridDisplay.h"
@@ -31,7 +31,7 @@ class GridFind : public EditString
 
 		GridFind();
 
-		Callback WhenEnter;
+		Event<> WhenEnter;
 		Callback1<Bar &> WhenBar;
 
 		virtual bool Key(dword key, int count);
@@ -100,7 +100,7 @@ class GridResizePanel : public FrameBottom<Ctrl>
 		bool MouseOnGrip(const Point &p);
 		void SetMinSize(Size sz);
 
-		Callback WhenClose;
+		Event<> WhenClose;
 };
 
 class GridPopUp : public Ctrl
@@ -172,7 +172,7 @@ class GridOperation
 		}
 
 		void Clear()        { operation = NONE; }
-		void ClearVersion() { version = 0;      }		
+		void ClearVersion() { version = 0;      }
 		int  GetVersion()   { return version;   }
 
 		GridOperation& operator=(const int op)
@@ -231,14 +231,46 @@ class CtrlsHolder : public Ctrl
 class GridClipboard : Moveable<GridClipboard>
 {
 	public:
+		rval_default(GridClipboard);
+		GridClipboard() {}
+
 		struct ClipboardData : Moveable<ClipboardData>
 		{
 			int col, row;
 			Value v;
+			
+			void SerializeAttrText(Stream& s, AttrText& a)
+			{
+				s % a.text;
+				s % a.font;
+				s % a.ink;
+				s % a.normalink;
+				s % a.paper;
+				s % a.align;
+				s % a.img;
+				s % a.imgspc;
+			}
+			
 			virtual void Serialize(Stream &s)
 			{
 				s % col % row;
-				s % v;
+				dword type = IsType<AttrText>(v) ? 1 : 0;
+				s / type;
+				if(type == 1)
+				{
+					if(s.IsStoring())
+					{
+						SerializeAttrText(s, (AttrText&) ValueTo<AttrText>(v));
+					}
+					else
+					{
+						AttrText a;
+						SerializeAttrText(s, a);
+						v = RawToValue<AttrText>(a);
+					}
+				}
+				else
+					s % v;
 			}
 		};
 
@@ -477,6 +509,13 @@ class GridCtrl : public Ctrl
 		typedef Vector< Vector<Item> > Items;
 		typedef Vector< Edit > Edits;
 
+		struct JoinRect : Moveable<JoinRect>
+		{
+			Rect r;
+			int group;
+			int idx, idy;
+		};
+
 		public: class ItemRect : public Moveable<ItemRect>
 		{
 			friend class GridCtrl;
@@ -486,7 +525,7 @@ class GridCtrl : public Ctrl
 				{
 					min = 5; max = 1000000;
 					pos = npos = 0;
-					id  = uid = n = 0;
+					id = uid = n = 0;
 					prop = 1;
 					size = nsize = 0;
 					tsize = 0;
@@ -543,7 +582,7 @@ class GridCtrl : public Ctrl
 				Convert     *convert;
 				GridDisplay *display;
 
-				Callback1<One<Ctrl>&> factory;				
+				Callback1<One<Ctrl>&> factory;
 				
 				static VectorMap<Id, int> *aliases;
 
@@ -600,7 +639,7 @@ class GridCtrl : public Ctrl
 				double Right(int scroll = 0)   { return pos + size - scroll;   }
 				double Top(int scroll = 0)     { return pos - scroll;          }
 				double Bottom(int scroll = 0)  { return pos + size - scroll;   }
-				double Width()                 { return size; 				   }
+				double Width()                 { return size;                  }
 				double Height()                { return size;				   }
 
 				bool   InvertSelect()          { return BitInverse(style, GD::SELECT); }
@@ -620,7 +659,7 @@ class GridCtrl : public Ctrl
 				int    nRight(int scroll = 0)  { return npos + nsize - scroll; }
 				int    nTop(int scroll = 0)    { return npos - scroll;         }
 				int    nBottom(int scroll = 0) { return npos + nsize - scroll; }
-				int    nWidth()                { return nsize; 				   }
+				int    nWidth()                { return nsize;                 }
 				int    nHeight()               { return nsize;				   }
 
 				ItemRect& Size(int n, bool hv = false);
@@ -630,18 +669,18 @@ class GridCtrl : public Ctrl
 				bool IsFixed() { return ismin && ismax; }
 
 				void ChangeSortMode(bool idsort = true);
-
+				
 				friend bool operator<(const ItemRect& a, const ItemRect& b)
 				{
 					if(sortMode)
-						return (StdValueCompare((*a.items)[a.id][sortCol].val, (*b.items)[b.id][sortCol].val, 0) < 0);
+						return (StdValueCompare(a.ExtractValue(a.id, sortCol), b.ExtractValue(b.id, sortCol), 0) < 0);
 					else
 						return a.id < b.id;
 				}
 				friend bool operator>(const ItemRect& a, const ItemRect& b)
 				{
 					if(sortMode)
-						return (StdValueCompare((*a.items)[a.id][sortCol].val, (*b.items)[b.id][sortCol].val, 0) > 0);
+						return (StdValueCompare(a.ExtractValue(a.id, sortCol), b.ExtractValue(b.id, sortCol), 0) > 0);
 					else
 						return a.id > b.id;
 				}
@@ -751,11 +790,11 @@ class GridCtrl : public Ctrl
 
 				ItemRect& Skip(bool b)                           { skip = b;          return *this; }
 				
-				ItemRect& DoAvg(const char *s = NULL)            { sop = SOP_AVG; sopfrm = s; return *this; }
-				ItemRect& DoSum(const char *s = NULL)            { sop = SOP_SUM; sopfrm = s; return *this; }
-				ItemRect& DoMin(const char *s = NULL)            { sop = SOP_MIN; sopfrm = s; return *this; }
-				ItemRect& DoMax(const char *s = NULL)            { sop = SOP_MAX; sopfrm = s; return *this; }
-				ItemRect& DoCount(const char *s = NULL)          { sop = SOP_CNT; sopfrm = s; return *this; }
+				ItemRect& DoAvg(const char *s = "")              { sop = SOP_AVG; sopfrm = s; return *this; }
+				ItemRect& DoSum(const char *s = "")              { sop = SOP_SUM; sopfrm = s; return *this; }
+				ItemRect& DoMin(const char *s = "")              { sop = SOP_MIN; sopfrm = s; return *this; }
+				ItemRect& DoMax(const char *s = "")              { sop = SOP_MAX; sopfrm = s; return *this; }
+				ItemRect& DoCount(const char *s = "")            { sop = SOP_CNT; sopfrm = s; return *this; }
 
 				int  GetId()                                     { return id;                       }
 				int  GetNumber()                                 { return id - parent->fixed_cols;  }
@@ -767,6 +806,8 @@ class GridCtrl : public Ctrl
 				bool IsSortAsc() const                           { return sortmode == 1; }
 				bool IsSortDsc() const                           { return sortmode == 2; }
 
+				Value ExtractValue(int r, int c) const;
+
 				void Serialize(Stream &s);
 				void Clear();
 		};
@@ -774,12 +815,14 @@ class GridCtrl : public Ctrl
 		typedef Vector<ItemRect> RectItems;
 		typedef Vector<ItemRect> VItems;
 		typedef Vector<ItemRect> HItems;
+		typedef Vector<JoinRect> JItems;
 
 		typedef GridCtrl CLASSNAME;
 
 		Items  items;
 		HItems hitems;
 		VItems vitems;
+		JItems joins;
 		
 		Vector<Item> summary;
 		Vector<Value> rowbkp;
@@ -833,6 +876,7 @@ class GridCtrl : public Ctrl
 		int  resize_row_mode;
 		int  edit_mode;
 		bool one_click_edit:1;
+		bool goto_first_edit:1;
 
 		bool inserting:1;
 		bool appending:1;
@@ -850,6 +894,9 @@ class GridCtrl : public Ctrl
 		bool clipboard:1;
 		bool extra_paste:1;
 		bool fixed_paste:1;
+		bool copy_allowed:1;
+		bool cut_allowed:1;
+		bool paste_allowed:1;
 		bool copy_column_names:1;
 		bool draw_focus:1;
 		bool cancel_all:1;
@@ -879,6 +926,9 @@ class GridCtrl : public Ctrl
 		bool search_move_cursor:1;
 		bool search_display:1;
 		int  find_offset;
+		
+		static bool index_as_column;
+		static bool reverse_sort_icon;
 
 		/* States */
 
@@ -925,7 +975,7 @@ class GridCtrl : public Ctrl
 		bool fixed_click;
 		bool fixed_top_click;
 		bool fixed_left_click;
-		bool fixed_size_changed;
+		bool size_changed;
 		bool top_click;
 		bool just_clicked;
 		bool synced;
@@ -1006,7 +1056,8 @@ class GridCtrl : public Ctrl
 		int dx, dy;
 
 		GridPopUpHeader pophdr;
-
+		FrameRight<StaticRect> scrollbox;
+		
 		int sortCol;		
 		Vector<int> sortOrder;
 
@@ -1057,6 +1108,7 @@ class GridCtrl : public Ctrl
 		GridCtrl& EditRow()         			  { edit_mode           = GE_ROW;  return *this; }
 		GridCtrl& EditCell()         			  { edit_mode           = GE_CELL; return *this; }
 		GridCtrl& OneClickEdit(bool b = true)     { one_click_edit      = b; return *this; }
+		GridCtrl& GotoFirstEdit(bool b = true)    { goto_first_edit     = b; return *this; }
 		GridCtrl& Absolute()					  { return ResizeColMode(0);               }
 		GridCtrl& Proportional()				  { return ResizeColMode(1);               }
 		GridCtrl& SelectRow(bool b = true)        { select_row          = b; return *this; }
@@ -1105,6 +1157,9 @@ class GridCtrl : public Ctrl
 		GridCtrl& Clipboard(bool b = true)          { clipboard            = b;  return *this; }
 		GridCtrl& ExtraPaste(bool b = true)         { extra_paste          = b;  return *this; }
 		GridCtrl& FixedPaste(bool b = true)         { fixed_paste          = b;  return *this; }
+		GridCtrl& ClipboardCopy(bool b = true)		{ copy_allowed         = b;  return *this; }
+		GridCtrl& ClipboardCut(bool b = true)		{ cut_allowed          = b;  return *this; }
+		GridCtrl& ClipboardPaste(bool b = true)		{ paste_allowed        = b;  return *this; }
 		GridCtrl& CopyColumnNames(bool b = true)    { copy_column_names    = b;  return *this; }
 		GridCtrl& AskRemove(bool b = true)          { ask_remove           = b;  return *this; }
 		GridCtrl& RowChanging(bool b = true)        { row_changing         = b;  return *this; }
@@ -1129,6 +1184,8 @@ class GridCtrl : public Ctrl
 		GridCtrl& SearchImmediate(bool b = true)    { search_immediate     = b;  return *this; }
 		GridCtrl& SearchHideRows(bool b = true)     { search_hide          = b;  return *this; }
 		GridCtrl& SearchDisplay(bool b = true)      { search_display       = b;  return *this; }
+		static void IndexAsColumn(bool b = true)	{ index_as_column      = b;                }
+		static void ReverseSortIcon(bool b = true)	{ reverse_sort_icon    = b;                }
 
 		GridCtrl& SetToolBar(bool b = true, int align = BarCtrl::BAR_BOTTOM, int frame = 1);
 		ToolBar&  GetToolBar() { return bar; }
@@ -1180,10 +1237,10 @@ class GridCtrl : public Ctrl
 
 		/* Methods */
 
-		ItemRect& InsertColumn(int pos, const char *name = NULL, int size = -1, bool idx = false);
-		ItemRect& AddColumn(const Id id, const char *name = NULL, int size = -1, bool idx = false);
+		ItemRect& InsertColumn(int pos, const char *name = "", int size = -1, bool idx = false);
+		ItemRect& AddColumn(const Id id, const char *name = "", int size = -1, bool idx = false);
 		ItemRect& AddColumn(const String& name, int size = -1, bool idx = false);
-		ItemRect& AddColumn(const char *name = NULL, int size = -1, bool idx = false);
+		ItemRect& AddColumn(const char *name = "", int size = -1, bool idx = false);
 
 		void RemoveColumn(int n, int count = 1);
 
@@ -1191,7 +1248,7 @@ class GridCtrl : public Ctrl
 		ItemRect& AddHiddenColumn(const char *name) { return AddColumn(name, 0); }
 		ItemRect& AddHiddenColumn(String &name)     { return AddColumn(name, 0); }
 
-		ItemRect& AddIndex()                        { return AddColumn(0, 0, true);    }
+		ItemRect& AddIndex()                        { return AddColumn("", 0, true);    }
 		ItemRect& AddIndex(Id id)                   { return AddColumn(id, ~id, 0, true); }
 		ItemRect& AddIndex(const char *name)        { return AddColumn(name, 0, true); }
 		ItemRect& AddIndex(String &name)            { return AddColumn(name, 0, true); }
@@ -1241,6 +1298,9 @@ class GridCtrl : public Ctrl
 		void Set(Id id, const Value &val);
 		void Set(int r, const Vector<Value> &v, int data_offset = 0, int column_offset = 0);
 		void Set(const Vector<Value> &v, int data_offset = 0, int column_offset = 0);
+		void SetAny(int r, int c, const Value &val);
+		void SetRaw(int r, int c, const Value &val);
+		void SetIndicator(int r, const Value &val);
 
 		void SetCtrl(int r, int c, Ctrl& ctrl);
 		void SetCtrl(int r, int c, Ctrl* ctrl);
@@ -1262,9 +1322,12 @@ class GridCtrl : public Ctrl
 		Value  Get() const;
 		Value  Get(const char * alias) const;
 		Value  Get(int r, const char * alias) const;
+		Value  GetRaw(int r, int c) const;
 		Value  GetNew(int c) const;
 		Value  GetFirst(int c) const;
 		Value  GetLast(int c) const;
+		Value  GetPrev(Id id) const;
+		Value  GetPrev(int c) const;
 		Value& operator() (int r, int c);
 		Value& operator() (int c);
 		Value& operator() (Id id);
@@ -1527,8 +1590,9 @@ class GridCtrl : public Ctrl
 
 		void Serialize(Stream &s);
 
-		Ctrl * GetCtrl(int r, int c);
-		Ctrl * GetCtrl(int c);
+		Ctrl * GetCtrl(int r, int c); // checks visibility - if widget is out of view, returns NULL
+		Ctrl * GetCtrlAt(int r, int c); // does not check visibility
+		Ctrl * GetCtrl(int c); // checks visibility - if widget is out of view, returns NULL
 
 		static int GetStdHeight() { return Draw::GetStdFontCy() + 4; }
 
@@ -1539,6 +1603,7 @@ class GridCtrl : public Ctrl
 		void JoinFixedCells(int left, int top, int right, int bottom);
 		void JoinRow(int n, int left, int right);
 		void JoinRow(int left = -1, int right = -1);
+		void UpdateJoins(int row, int col, int cnt = 1);
 
 		GridCtrl& Sort(int sort_col, int sort_mode = SORT_UP, bool multisort = false, bool repaint = true);
 		GridCtrl& Sort(Id id, int sort_mode = SORT_UP, bool multisort = false, bool repaint = true);
@@ -1555,7 +1620,7 @@ class GridCtrl : public Ctrl
 		ScrollBar& HorzScroll() { return sbx; }
 		ScrollBar& VertScroll() { return sby; }
 
-		Value GetStdConvertedValue(const Value& v);
+		Value GetStdConvertedValue(const Value& v) const;
 		Value GetConvertedColumn(int col, const Value& v) const;
 		Value GetStdConvertedColumn(int col, const Value& v) const;
 		String GetString(Id id) const;
@@ -1719,70 +1784,76 @@ class GridCtrl : public Ctrl
 		int  GetIdCol(int id, bool checkall = false) const;
 		int  GetIdRow(int id, bool checkall = false) const;
 		Value GetItemValue(const Item& it, int id, const ItemRect& hi, const ItemRect& vi);
-		void  GetItemAttrs(const Item& it, int r, int c, const ItemRect& vi, const ItemRect& hi, dword& style, GridDisplay*& gd, Color& fg, Color& bg, Font& fnt);
+		void  GetItemAttrs(const Item& it, const Value& val, int r, int c, const ItemRect& vi, const ItemRect& hi, dword& style, GridDisplay*& gd, Color& fg, Color& bg, Font& fnt);
 		Item& GetItemSize(int &r, int &c, int &x, int &y, int &cx, int &cy, bool &skip, bool relx = true, bool rely = true);
+		Value GetAttrTextVal(const Value& val);
+		
+		Image HorzPosImage();
+		Image VertPosImage();
 
 	private:
 		bool WhenInsertRow0();
 
 	public:
 
-		Callback1<Bar&> WhenMenuBar;
-		Callback1<Bar&> WhenToolBar;
+		Event<Bar&> WhenMenuBar;
+		Event<Bar&> WhenToolBar;
 
-		Callback WhenLeftDouble;
-		Callback WhenLeftClick;
-		Callback WhenEnter;
-		Callback WhenEscape;
+		Event<> WhenLeftDouble;
+		Event<> WhenLeftClick;
+		Event<> WhenEnter;
+		Event<> WhenEscape;
 
-		Callback WhenStartEdit;
-		Callback WhenEndEdit;
+		Event<> WhenStartEdit;
+		Event<> WhenEndEdit;
 
-		Callback WhenCreateRow;
+		Event<> WhenCreateRow;
 
-		Callback WhenAcceptRow;
-		Callback WhenAcceptedRow;
+		Event<> WhenAcceptRow;
+		Event<> WhenAcceptedRow;
 
-		Callback WhenInsertRow;
-		Callback WhenUpdateRow;
-		Callback WhenRemoveRow;
-		Callback WhenRemovedRow;
-		Callback WhenDuplicateRow;
+		Event<> WhenInsertRow;
+		Event<> WhenUpdateRow;
+		Event<> WhenRemoveRow;
+		Event<> WhenRemovedRow;
+		Event<> WhenDuplicateRow;
 		
 		Callback2<int, int> WhenMoveRow;
 
-		Callback WhenCancelNewRow;
+		Event<> WhenCancelNewRow;
 
-		Callback WhenUpdateCell;
+		Event<> WhenUpdateCell;
 		
-		Callback WhenUpdateSummary;
+		Event<> WhenUpdateSummary;
 
-		Callback WhenNewRow;
-		Callback WhenChangeCol;
-		Callback WhenBeforeChangeCol;
-		Callback WhenChangeRow;
-		Callback WhenBeforeChangeRow;
-		Callback WhenCursor;
-		Callback WhenEmpty;
+		Event<> WhenNewRow;
+		Event<> WhenChangeCol;
+		Event<> WhenBeforeChangeCol;
+		Event<> WhenChangeRow;
+		Event<> WhenBeforeChangeRow;
+		Event<> WhenCursor;
+		Event<> WhenEmpty;
 
-		Callback WhenCtrlAction;
-		Callback WhenCtrlsAction;
+		Event<> WhenCtrlAction;
+		Event<> WhenCtrlsAction;
 
-		Callback WhenSearchCursor;
-		Callback WhenClose;
-		Callback WhenChangeOrder;
+		Event<> WhenSearchCursor;
+		Event<> WhenClose;
+		Event<> WhenChangeOrder;
 
-		Callback StdInsert;
-		Callback StdAppend;
-		Callback StdRemove;
-		Callback StdDuplicate;
-		Callback StdEdit;
+		Event<> StdInsert;
+		Event<> StdAppend;
+		Event<> StdRemove;
+		Event<> StdDuplicate;
+		Event<> StdEdit;
 		
-		Callback WhenSort;
+		Event<> WhenSort;
+		Event<> WhenSorted;
 		
-		Callback1<Value&> ProcessSummaryValue;
+		Event<Value&> ProcessSummaryValue;
 
-		Callback3<int, int, Value&> WhenPasteCell;
+		Event<int, int, Value&> WhenPasteCell;
+		Event<> WhenPaste;
 };
 
 class GridText : Ctrl
@@ -1793,7 +1864,6 @@ class GridText : Ctrl
 		const Id* column;
 		Color fg, bg;
 		Font fnt;
-		int align;
 
 	public:
 
@@ -1811,8 +1881,9 @@ class GridText : Ctrl
 		void Column(const Id& c) { column = &c; }
 };
 
-template<> void Xmlize(XmlIO xml, GridCtrl& g);
+template<> void Xmlize(XmlIO& xml, GridCtrl& g);
+template<> void Jsonize(JsonIO& json, GridCtrl& g);
 
-END_UPP_NAMESPACE
+}
 
 #endif

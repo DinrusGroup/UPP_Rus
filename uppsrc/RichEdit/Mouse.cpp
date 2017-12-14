@@ -1,6 +1,13 @@
 #include "RichEdit.h"
 
-NAMESPACE_UPP
+namespace Upp {
+
+Size RichEdit::GetPhysicalSize(const RichObject& obj)
+{
+	if(ignore_physical_size)
+		return 600 * obj.GetPixelSize() / 96;
+	return obj.GetPhysicalSize();
+}
 
 void RichEdit::CancelMode()
 {
@@ -11,7 +18,12 @@ void RichEdit::CancelMode()
 
 void RichEdit::MouseWheel(Point p, int zdelta, dword keyflags)
 {
-	sb.Wheel(zdelta);
+	if(keyflags == K_CTRL && !IsNull(floating_zoom)) {
+		floating_zoom = minmax(floating_zoom + zdelta / 480.0, 0.5, 10.0);
+		RefreshLayoutDeep();
+	}
+	else
+		sb.Wheel(zdelta);
 }
 
 RichHotPos RichEdit::GetHotPos(Point p)
@@ -26,9 +38,12 @@ void RichEdit::SetObjectPercent(int p)
 {
 	if(objectpos >= 0) {
 		RichObject obj = GetObject();
-		obj.SetSize(obj.GetPhysicalSize() * p / 100);
-		obj.KeepRatio(true);
-		ReplaceObject(obj);
+		Size sz = GetPhysicalSize(obj) * p / 100;
+		if(sz.cx > 0 && sz.cy > 0) {
+			obj.SetSize(sz);
+			obj.KeepRatio(true);
+			ReplaceObject(obj);
+		}
 	}
 }
 
@@ -47,7 +62,6 @@ void RichEdit::SetObjectPos(int pos)
 	Rect rr = r.Offseted(GetTextRect().left, -sb);
 	objectrect = GetObjectRect(pos);
 	objectpos = cursor;
-	PageRect pr = text.GetCaret(cursor, pagesz);
 	PlaceCaret();
 	Refresh(rr);
 	ReadFormat();
@@ -138,13 +152,13 @@ void RichEdit::MouseMove(Point p, dword flags)
 			RichTable::Format fmt = text.GetTableFormat(tabmove.table);
 			if(tabmove.column >= fmt.column.GetCount() - 1)
 				return;
-			int sum = Sum0(fmt.column);
+			int sum = Sum(fmt.column);
 			int nl = 0;
 			for(int i = 0; i < tabmove.column; i++)
 				nl += fmt.column[i];
 			int xn = fmt.column[tabmove.column] + fmt.column[tabmove.column + 1];
-			int xl = tabmove.left + tabmove.cx * nl / sum + 120;
-			int xh = tabmove.left + tabmove.cx * (nl + xn) / sum - 120;
+			int xl = tabmove.left + tabmove.cx * nl / sum + 12;
+			int xh = tabmove.left + tabmove.cx * (nl + xn) / sum - 12;
 			if(xl >= xh)
 				return;
 			int xx = minmax(GetSnapX(p.x) - tabmove.delta, xl, xh) - tabmove.left;
@@ -154,15 +168,17 @@ void RichEdit::MouseMove(Point p, dword flags)
 			Finish();
 		}
 		else
-		if(tabmove.table && tabmove.column == -1) {
+		if(tabmove.table && tabmove.column == RICHHOT_LM) {
 			RichTable::Format fmt = text.GetTableFormat(tabmove.table);
-			fmt.lm = minmax(GetSnapX(p.x) - tabmove.textleft, 0, max(tabmove.textcx - fmt.rm - 120, 0));
+			fmt.rm = clamp(fmt.rm, 0, tabmove.textcx - fmt.lm - 120);
+			fmt.lm = clamp(GetSnapX(p.x) - tabmove.textleft, 0, max(tabmove.textcx - fmt.rm - 120, 0));
 			text.SetTableFormat(tabmove.table, fmt);
 			Finish();
 		}
 		else
-		if(tabmove.table && tabmove.column == -2) {
+		if(tabmove.table && tabmove.column == RICHHOT_RM) {
 			RichTable::Format fmt = text.GetTableFormat(tabmove.table);
+			fmt.lm = clamp(fmt.lm, 0, max(tabmove.textcx - fmt.rm - 120, 0));
 			fmt.rm = minmax(tabmove.textcx - GetSnapX(p.x) + tabmove.textleft, 0, tabmove.textcx - fmt.lm - 120);
 			text.SetTableFormat(tabmove.table, fmt);
 			Finish();
@@ -182,17 +198,26 @@ void RichEdit::MouseMove(Point p, dword flags)
 	}
 }
 
+static bool IsObjectPercent(Sizef percent, int p)
+{
+	return fabs(percent.cx - p) < 1 && fabs(percent.cy - p) < 1;
+}
+
+static bool IsObjectDelta(int delta, int d)
+{
+	return d * 25 / 3 == delta;
+}
+
 void RichEdit::StdBar(Bar& menu)
 {
 	int l, h;
-	int fieldpos = -1;
 	Id field;
 	String fieldparam;
 	String ofieldparam;
 	RichObject object;
 	if(GetSelection(l, h)) {
-		CopyTool(menu);
 		CutTool(menu);
+		CopyTool(menu);
 		PasteTool(menu);
 	}
 	else {
@@ -202,22 +227,30 @@ void RichEdit::StdBar(Bar& menu)
 			bar_object.Menu(menu, context);
 			if(!menu.IsEmpty())
 				menu.Separator();
+			Size sz = GetPhysicalSize(bar_object);
+			Sizef percent = bar_object.GetSize();
+			percent = 100.0 * percent / Sizef(sz);
+			bool b = sz.cx || sz.cy;
 			menu.Add(t_("Object position.."), THISBACK(AdjustObjectSize));
 			menu.Separator();
-			menu.Add("20 %", THISBACK1(SetObjectPercent, 20));
-			menu.Add("40 %", THISBACK1(SetObjectPercent, 40));
-			menu.Add("60 %", THISBACK1(SetObjectPercent, 60));
-			menu.Add("80 %", THISBACK1(SetObjectPercent, 80));
-			menu.Add("90 %", THISBACK1(SetObjectPercent, 90));
-			menu.Add("100 %", THISBACK1(SetObjectPercent, 100));
+			menu.Add(b, "20 %", THISBACK1(SetObjectPercent, 20)).Check(IsObjectPercent(percent, 20));
+			menu.Add(b, "30 %", THISBACK1(SetObjectPercent, 30)).Check(IsObjectPercent(percent, 30));
+			menu.Add(b, "40 %", THISBACK1(SetObjectPercent, 40)).Check(IsObjectPercent(percent, 40));
+			menu.Add(b, "50 %", THISBACK1(SetObjectPercent, 50)).Check(IsObjectPercent(percent, 50));
+			menu.Add(b, "60 %", THISBACK1(SetObjectPercent, 60)).Check(IsObjectPercent(percent, 60));
+			menu.Add(b, "70 %", THISBACK1(SetObjectPercent, 70)).Check(IsObjectPercent(percent, 70));
+			menu.Add(b, "80 %", THISBACK1(SetObjectPercent, 80)).Check(IsObjectPercent(percent, 80));
+			menu.Add(b, "90 %", THISBACK1(SetObjectPercent, 90)).Check(IsObjectPercent(percent, 90));
+			menu.Add(b, "100 %", THISBACK1(SetObjectPercent, 100)).Check(IsObjectPercent(percent, 100));
 			menu.Break();
-			menu.Add(t_("3 pt up"), THISBACK1(SetObjectYDelta, -3));
-			menu.Add(t_("2 pt up"), THISBACK1(SetObjectYDelta, -2));
-			menu.Add(t_("1 pt up"), THISBACK1(SetObjectYDelta, -1));
-			menu.Add(t_("Baseline"), THISBACK1(SetObjectYDelta, 0));
-			menu.Add(t_("1 pt down"), THISBACK1(SetObjectYDelta, 1));
-			menu.Add(t_("2 pt down"), THISBACK1(SetObjectYDelta, 2));
-			menu.Add(t_("3 pt down"), THISBACK1(SetObjectYDelta, 3));
+			int delta = bar_object.GetYDelta();
+			menu.Add(t_("3 pt up"), THISBACK1(SetObjectYDelta, -3)).Check(IsObjectDelta(delta, -3));
+			menu.Add(t_("2 pt up"), THISBACK1(SetObjectYDelta, -2)).Check(IsObjectDelta(delta, -2));
+			menu.Add(t_("1 pt up"), THISBACK1(SetObjectYDelta, -1)).Check(IsObjectDelta(delta, -1));
+			menu.Add(t_("Baseline"), THISBACK1(SetObjectYDelta, 0)).Check(IsObjectDelta(delta, 0));
+			menu.Add(t_("1 pt down"), THISBACK1(SetObjectYDelta, 1)).Check(IsObjectDelta(delta, 1));
+			menu.Add(t_("2 pt down"), THISBACK1(SetObjectYDelta, 2)).Check(IsObjectDelta(delta, 2));
+			menu.Add(t_("3 pt down"), THISBACK1(SetObjectYDelta, 3)).Check(IsObjectDelta(delta, 3));
 			menu.Separator();
 			CopyTool(menu);
 			CutTool(menu);
@@ -228,7 +261,6 @@ void RichEdit::StdBar(Bar& menu)
 			bar_fieldparam = p.fieldparam;
 			RichPara::FieldType *ft = RichPara::fieldtype().Get(field, NULL);
 			if(ft) {
-				fieldpos = cursor;
 				ft->Menu(menu, &bar_fieldparam);
 				if(!menu.IsEmpty())
 					menu.Separator();
@@ -257,7 +289,6 @@ void RichEdit::RightDown(Point p, dword flags)
 	MenuBar menu;
 	int l, h;
 	Rect ocr = GetCaretRect();
-	int c = GetMousePos(p);
 	int fieldpos = -1;
 	Id field;
 	String ofieldparam;
@@ -375,7 +406,7 @@ Image RichEdit::CursorImage(Point p, dword flags)
 				return Image::SizeHorz();
 			else {
 				int c = GetMousePos(p);
-				return InSelection(c) && !HasCapture() ? Image::Arrow() : CtrlImg::ibeam0;
+				return InSelection(c) && !HasCapture() ? Image::Arrow() : Image::IBeam();
 			}
 		}
 	}
@@ -393,4 +424,4 @@ void RichEdit::LeftRepeat(Point p, dword flags)
 	}
 }
 
-END_UPP_NAMESPACE
+}

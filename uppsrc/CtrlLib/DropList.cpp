@@ -1,6 +1,6 @@
 #include "CtrlLib.h"
 
-NAMESPACE_UPP
+namespace Upp {
 
 int DropList::FindKey(const Value& k) const
 {
@@ -18,7 +18,7 @@ void DropList::Sync() {
 	MultiButton::SetDisplay(d);
 	MultiButton::SetValueCy(list.GetLineCy());
 	v = valueconvert->Format(v);
-	Set(v);
+	Set(v, false);
 }
 
 void DropList::Change(int q) {
@@ -28,7 +28,7 @@ void DropList::Change(int q) {
 		i += q;
 		if(i >= key.GetCount()) i = key.GetCount() - 1;
 		if(i < 0) i = 0;
-		if(list.IsLineEnabled(i)) {
+		if(list.IsLineEnabled(i) && list.GetLineCy(i) > 0) {
 			if(value != key[i]) {
 				value = key[i];
 				Sync();
@@ -67,7 +67,8 @@ bool DropList::Key(dword k, int) {
 
 void DropList::MouseWheel(Point, int zdelta, dword)
 {
-	Change(zdelta < 0 ? 1 : -1);
+	if(usewheel)
+		Change(zdelta < 0 ? 1 : -1);
 }
 
 void DropList::Drop() {
@@ -117,10 +118,12 @@ void DropList::Clear() {
 	Update();
 }
 
-DropList& DropList::Add(const Value& _key, const Value& text)
+DropList& DropList::Add(const Value& _key, const Value& text, bool enable)
 {
 	key.Add(_key);
 	list.Add(text);
+	if(!enable)
+		list.SetLineCy(list.GetCount() - 1, 0);
 	list.Refresh();
 	EnableDrop();
 	Sync();
@@ -179,12 +182,17 @@ void  DropList::SetValue(const Value& v) {
 	Sync();
 }
 
-DropList& DropList::SetConvert(const Convert& cv)
+DropList& DropList::SetValueConvert(const Convert& cv)
 {
-	list.ColumnAt(0).SetConvert(cv);
 	valueconvert = &cv;
 	Sync();
 	return *this;
+}
+
+DropList& DropList::SetConvert(const Convert& cv)
+{
+	list.ColumnAt(0).SetConvert(cv);
+	return SetValueConvert(cv);
 }
 
 DropList& DropList::SetDisplay(int i, const Display& d)
@@ -219,11 +227,12 @@ DropList& DropList::ValueDisplay(const Display& d)
 void  DropList::Adjust()
 {
 	int i = FindKey(value);
-	if(i < 0)
+	if(i < 0) {
 		if(GetCount())
 			SetIndex(0);
 		else
 			SetData(Null);
+	}
 }
 
 void DropList::Adjust(const Value& k)
@@ -261,26 +270,69 @@ DropList::DropList()
 	list.WhenSelect = THISBACK(Select);
 	list.WhenCancel = THISBACK(Cancel);
 	dropwidth = 0;
+	usewheel = true;
 }
 
 DropList::~DropList() {}
 
-void Add(DropList& list, const VectorMap<Value, Value>& values)
+void Append(DropList& list, const VectorMap<Value, Value>& values)
 {
 	for(int i = 0; i < values.GetCount(); i++)
 		list.Add(values.GetKey(i), values[i]);
 }
 
-void Add(MapConvert& convert, const VectorMap<Value, Value>& values)
+void Append(MapConvert& convert, const VectorMap<Value, Value>& values)
 {
 	for(int i = 0; i < values.GetCount(); i++)
 		convert.Add(values.GetKey(i), values[i]);
 }
 
-void Add(DropList& list, const MapConvert& convert)
+void Append(DropList& list, const VectorMap<int, String>& values)
+{
+	for(int i = 0; i < values.GetCount(); i++)
+		list.Add(values.GetKey(i), values[i]);
+}
+
+void Append(MapConvert& convert, const VectorMap<int, String>& values)
+{
+	for(int i = 0; i < values.GetCount(); i++)
+		convert.Add(values.GetKey(i), values[i]);
+}
+
+void Append(DropList& list, const MapConvert& convert)
 {
 	for(int i = 0; i < convert.GetCount(); i++)
 		list.Add(convert.GetKey(i), convert.GetValue(i));
 }
 
-END_UPP_NAMESPACE
+void operator*=(DropList& list, const VectorMap<Value, Value>& values)
+{
+	list.ClearList();
+	Append(list, values);
+}
+
+void operator*=(MapConvert& convert, const VectorMap<Value, Value>& values)
+{
+	convert.Clear();
+	Append(convert, values);
+}
+
+void operator*=(DropList& list, const VectorMap<int, String>& values)
+{
+	list.ClearList();
+	Append(list, values);
+}
+
+void operator*=(MapConvert& convert, const VectorMap<int, String>& values)
+{
+	convert.Clear();
+	Append(convert, values);
+}
+
+void operator*=(DropList& list, const MapConvert& convert)
+{
+	list.ClearList();
+	Append(list, convert);
+}
+
+}

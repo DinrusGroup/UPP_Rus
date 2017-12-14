@@ -1,6 +1,6 @@
 #include "IconDes.h"
 
-NAMESPACE_UPP
+namespace Upp {
 
 class AlphaImageInfo
 {
@@ -91,15 +91,13 @@ void ScanIML(CParser& parser, Array<ImlImage>& out_images,
 			}
 			AlphaImageInfo image;
 			bool accepted = false;
-			if(parser.Char('(') && parser.ReadId() == name && parser.Char(','))
+			if(parser.Char('(') && parser.ReadId() == name && parser.Char(',')) {
 				if(id == "IMAGE_END"
 				&& (image.size.cx = parser.ReadInt()) > 0 && parser.Char(',')
-				&& (image.size.cy = parser.ReadInt()) > 0 && parser.Char(')'))
-				{
+				&& (image.size.cy = parser.ReadInt()) > 0 && parser.Char(')')) {
 					accepted = true;
 				}
-				else if(id == "IMAGE_PACKED" && parser.IsChar('\"'))
-				{
+				else if(id == "IMAGE_PACKED" && parser.IsChar('\"')) {
 					String d = parser.ReadOneString();
 					if(parser.Char(')'))
 					{
@@ -109,12 +107,11 @@ void ScanIML(CParser& parser, Array<ImlImage>& out_images,
 							accepted = true;
 					}
 				}
-
+			}
 			if(name.GetLength() >= 6 && !memcmp(name, "_java_", 6))
 				accepted = false;
 
-			if(accepted)
-			{
+			if(accepted) {
 				if(name.GetLength() >= 4 && !memcmp(name, "im__", 4))
 					name = Null;
 
@@ -199,12 +196,19 @@ bool LoadIml(const String& data, Array<ImlImage>& img, int& format)
 		while(p.Id("IMAGE_ID")) {
 			p.PassChar('(');
 			String n;
-			if(p.IsId())
+			if(p.IsId()) {
 				n = p.ReadId();
-			if(n.StartsWith("im__", 4))
-				n = Null;
+				if(n.StartsWith("im__", 4))
+					n = Null;
+				p.PassChar(')');
+			}
+			else
+				while(!p.IsEof()) {
+					if(p.Char(')'))
+						break;
+					p.SkipTerm();
+				}
 			name.Add(n);
-			p.PassChar(')');
 			bool e = false;
 			if(p.Id("IMAGE_META")) {
 				p.PassChar('(');
@@ -366,4 +370,4 @@ String SaveIml(const Array<ImlImage>& iml, int format) {
 	return out.GetResult();
 }
 
-END_UPP_NAMESPACE
+}

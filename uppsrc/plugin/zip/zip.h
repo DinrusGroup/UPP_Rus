@@ -3,42 +3,57 @@
 
 #include <Core/Core.h>
 
-NAMESPACE_UPP
+namespace Upp {
 
 class UnZip {
-	Stream *zip;
+	struct File : Moveable<File> {
+		word   bit;
+		String path;
+		dword  time;
+		int    method;
+		dword  crc;
+		dword  csize;
+		dword  usize;
+		int64  offset;
+	};
 	
-	bool   error;
-	bool   eof;
-	String path;
-	word   bit;
-	word   method;
-	Time   time;
-	dword  crc32;
-	dword  csize;
-	dword  usize;
-	dword  done;
+	Stream      *zip;
+	bool         error;
+	Vector<File> file;
+	int          current;
 
-	void   Init();	
-	void   ReadHeader();
-	void   SetError()           { error = true; }
+	void   ReadDir();
+
+	static Time   GetZipTime(dword time);
 
 public:
-	bool   IsEof() const;
-	operator bool() const       { return !IsEof(); }
+	bool   IsEof() const          { return current >= file.GetCount(); }
+	operator bool() const         { return !IsEof() && !IsError(); }
 	
-	bool   IsError() const      { return error; }
+	bool   IsError() const        { return error; }
+	void   ClearError()           { error = false; }
 
-	bool   IsFolder() const;
-	String GetPath() const      { return path; }
-	int    GetLength() const    { return usize; }
-	Time   GetTime() const      { return time; }
+	int    GetCount() const       { return file.GetCount(); }
+	String GetPath(int i) const   { return file[i].path; }
+	bool   IsFolder(int i) const  { return *file[i].path.Last() == '/'; }
+	int    GetLength(int i) const { return file[i].usize; }
+	Time   GetTime(int i) const   { return GetZipTime(file[i].time); }
 
-	void   SkipFile();
-	bool   ReadFile(Stream& out, Gate2<int, int> progress = false);
-	String ReadFile(Gate2<int, int> progress = false);
+	void   Seek(int i)            { ASSERT(i >= 0 && i < file.GetCount()); current = i; }
+
+	bool   IsFolder() const       { return IsFolder(current); }
+	String GetPath() const        { return GetPath(current); }
+	int    GetLength() const      { return GetLength(current); }
+	Time   GetTime() const        { return GetTime(current); }
+
+	void   Skip()                 { current++; }
+	void   SkipFile()             { current++; }
+	bool   ReadFile(Stream& out, Gate<int, int> progress = Null);
+	String ReadFile(Gate<int, int> progress = Null);
+
+	String ReadFile(const char *path, Gate<int, int> progress = Null);
 	
-	dword  GetPos()             { return done; }
+	dword  GetPos() const;
 
 	void   Create(Stream& in);
 
@@ -80,6 +95,8 @@ class Zip {
 	struct File {
 		String path;
 		dword  time;
+		int    version;
+		int    gpflag;
 		int    method;
 		dword  crc;
 		dword  csize;
@@ -89,12 +106,30 @@ class Zip {
 
 	dword   done;
 
-	void WriteFile0(const void *ptr, int size, const char *path, Gate2<int, int> progress, Time tm, int method);
+	One<Zlib> pipeZLib;
+	Crc32Stream crc32; // for uncompressed files
+	bool        uncompressed;
+
+	void WriteFile0(const void *ptr, int size, const char *path, Gate<int, int> progress, Time tm, int method);
+
+	void FileHeader(const char *path, Time tm);
+
+	void PutCompressed(const void *data, int size);
+	
+	typedef Zip CLASSNAME;
 
 public:
+	Callback WhenError;
+
+	void BeginFile(const char *path, Time tm = GetSysTime(), bool deflate = true);
+	void BeginFile(OutFilterStream& oz, const char *path, Time tm = GetSysTime(), bool deflate = true);
+	void Put(const void *data, int size);
+	void EndFile();
+	bool IsFileOpened() const                 { return pipeZLib || uncompressed; }
+
 	void WriteFolder(const char *path, Time tm);
-	void WriteFile(const void *ptr, int size, const char *path, Gate2<int, int> progress = false, Time tm = GetSysTime());
-	void WriteFile(const String& s, const char *path, Gate2<int, int> progress = false, Time tm = GetSysTime());
+	void WriteFile(const void *ptr, int size, const char *path, Gate<int, int> progress = Null, Time tm = GetSysTime(), bool deflate = true);
+	void WriteFile(const String& s, const char *path, Gate<int, int> progress = Null, Time tm = GetSysTime(), bool deflate = true);
 
 	void Create(Stream& out);
 	void Finish();
@@ -129,6 +164,6 @@ public:
 	StringZip()                               { Create(); }
 };
 
-END_UPP_NAMESPACE
+}
 
 #endif

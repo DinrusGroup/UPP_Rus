@@ -89,6 +89,7 @@ public:
 		Color invalid;
 		Color text, textdisabled;
 		Color selected, selectedtext;
+		Color selected0, selectedtext0; // If does not have focus...
 		Value edge[4];
 		bool  activeedge;
 		int   vfm;
@@ -97,13 +98,14 @@ public:
 	struct Highlight : Moveable<Highlight> {
 		Color ink;
 		Color paper;
+		Color underline;
 
-		bool operator!=(const Highlight& b) const { return ink != b.ink || paper != b.paper; }
+		bool operator!=(const Highlight& b) const { return ink != b.ink || paper != b.paper || underline != b.underline; }
 	};
 
 protected:
 	const Style *style;
-
+	
 	ActiveEdgeFrame edge;
 
 	WString    text;
@@ -117,6 +119,7 @@ protected:
 	const Convert  *convert;
 	const Convert  *inactive_convert;
 	Font            font;
+	Color           textcolor;
 
 	WString         nulltext;
 	Color           nullink;
@@ -125,6 +128,7 @@ protected:
 	int             maxlen;
 	int             autosize;
 	byte            charset;
+	int             fsell, fselh; // used to hold selection after LostFocus for X11 middle mouse copy
 
 	int        dropcursor;
 	Rect       dropcaret;
@@ -138,13 +142,17 @@ protected:
 	bool       nobg:1;
 	bool       alignright:1;
 	bool       errorbg:1;
+	bool       showspaces:1;
+	bool       no_internal_margin:1;
 
 	bool    FrameIsEdge();
 	void    SetEdge(int i);
 	void    SyncEdge();
+	int     LowChar(int c) const { return 0x25af /*c + 0x2400*/; }
+	int     GetCharWidth(int c) const { return font[c < 32 ? LowChar(c) : c]; }
 	int     GetTextCx(const wchar *text, int n, bool password, Font fnt) const;
 	void    Paints(Draw& w, int& x, int fcy, const wchar *&txt,
-		           Color ink, Color paper, int n, bool pwd, Font fnt);
+		           Color ink, Color paper, int n, bool pwd, Font fnt, Color underline, bool showspaces);
 	int     GetStringCx(const wchar *text, int n);
 	int     GetCaret(int cursor) const;
 	int     GetCursor(int posx);
@@ -153,13 +161,17 @@ protected:
 	void    SaveUndo();
 	void    DoAutoFormat();
 	int     GetTy() const;
+	void    StdPasteFilter(WString&);
+	void    SelSource();
 
 protected:
 	virtual void  HighlightText(Vector<Highlight>& hl);
 
 public:
-	Callback1<Bar&>   WhenBar;
-	Callback          WhenEnter;
+	Event<Bar&>               WhenBar;
+	Event<>                       WhenEnter;
+	Event<WString&>           WhenPasteFilter;
+	Event<Vector<Highlight>&> WhenHighlight;
 
 	static const Style& StyleDefault();
 	EditField&  SetStyle(const Style& s);
@@ -198,9 +210,8 @@ public:
 	void           SetText(const char *t)    { SetText(WString(t)); }
 	const WString& GetText() const           { return text; }
 
-	operator const WString&() const          { return text; }
-	operator String() const                  { return text.ToString(); }
-	void operator=(const WString& s)         { SetText(s); }
+	operator const WString&() const          { return text; } // Deprecated, use ~
+	void operator=(const WString& s)         { SetText(s); } // Deprecated, use operator<<=
 	int     GetLength() const                { return text.GetLength(); }
 	int     GetChar(int i) const             { return text[i]; }
 
@@ -210,7 +221,7 @@ public:
 	void    Clear();
 	void    Reset();
 	
-	void    Error(bool error = true)         { errorbg = error; }
+	void    Error(bool error = true)         { if(errorbg != error) { errorbg = error; Refresh(); } }
 	
 	EditField& Password(bool pwd = true)     { password = pwd; Finish(); return *this; }
 	bool       IsPassword() const            { return password; }
@@ -222,6 +233,7 @@ public:
 	bool       IsAutoFormat() const          { return autoformat; }
 	EditField& SetCharset(byte cs)           { charset = cs; return *this; }
 	EditField& SetFont(Font _font);
+	EditField& SetColor(Color c);
 	EditField& ClickSelect(bool b = true)    { clickselect = b; return *this; }
 	bool       IsClickSelect() const         { return clickselect; }
 	EditField& InitCaps(bool b = true)       { initcaps = b; return *this; }
@@ -237,6 +249,8 @@ public:
 	EditField& AlignRight(bool b = true)     { alignright = b; Refresh(); return *this; }
 	bool       IsNoBackground() const        { return nobg; }
 	bool       IsAlignRight() const          { return alignright; }
+	EditField& ShowSpaces(bool b = true)     { showspaces = b; Refresh(); return *this; }
+	EditField& NoInternalMargin(bool b = true) { no_internal_margin = b; return *this; }
 
 	CharFilter     GetFilter() const         { return filter; }
 	const Convert& GetConvert() const        { return *convert; }
@@ -251,8 +265,8 @@ public:
 template <class DataType, class Cv>
 class EditValue : public EditField, public Cv {
 public:
-	EditValue& operator=(const DataType& t)  { EditField::SetData(t); return *this; }
-	operator DataType() const                { return EditField::GetData(); }
+	EditValue& operator=(const DataType& t)  { EditField::SetData(t); return *this; }  // Deprecated, use operator<<=
+	operator DataType() const                { return EditField::GetData(); } // Deprecated, use ~
 
 	EditValue()                              { SetConvert(*this); }
 };
@@ -260,7 +274,7 @@ public:
 template <class DataType, class Cv>
 class EditMinMax : public EditValue<DataType, Cv> {
 public:
-	EditMinMax& operator=(const DataType& t)          { EditField::SetData(t); return *this; }
+	EditMinMax& operator=(const DataType& t)          { EditField::SetData(t); return *this; }  // Deprecated, use operator<<=
 
 	EditMinMax() {}
 	EditMinMax(DataType min, DataType max)            { Cv::MinMax(min, max); }
@@ -274,7 +288,7 @@ public:
 template <class DataType, class Base>
 class EditMinMaxNotNull : public Base {
 public:
-	EditMinMaxNotNull& operator=(const DataType& t)   { EditField::SetData(t); return *this; }
+	EditMinMaxNotNull& operator=(const DataType& t)   { EditField::SetData(t); return *this; }  // Deprecated, use operator<<=
 
 	EditMinMaxNotNull()                               { Base::NotNull(); }
 	EditMinMaxNotNull(DataType min, DataType max)     { Base::NotNull(); Base::MinMax(min, max); }
@@ -298,72 +312,73 @@ typedef EditMinMaxNotNull<Time, EditTime>        EditTimeNotNull;
 
 class EditString : public EditValue<WString, ConvertString> {
 public:
-	operator const WString&() const                  { return GetText(); }
+	operator const WString&() const                  { return GetText(); }  // Deprecated, use ~
 
-	EditString& operator=(const WString& data)       { SetData(data); return *this; }
-	EditString& operator=(const String& data)        { SetData(data); return *this; }
+	EditString& operator=(const WString& data)       { SetData(data); return *this; } // Deprecated, use operator<<=
+	EditString& operator=(const String& data)        { SetData(data); return *this; } // Deprecated, use operator<<=
 
 	EditString() {}
 	EditString(int maxlen)                           { MaxLen(maxlen); }
 
 	EditString& MaxLen(int maxlen)                   { ConvertString::MaxLen(maxlen); Ctrl::Refresh(); return *this; }
 	EditString& NotNull(bool nn = true)              { ConvertString::NotNull(nn); Ctrl::Refresh(); return *this; }
-	EditString& TrimLeft(bool b)                     { ConvertString::TrimLeft(b); Ctrl::Refresh(); return *this; }
-	EditString& TrimRight(bool b)                    { ConvertString::TrimRight(b); Ctrl::Refresh(); return *this; }
-	EditString& TrimBoth(bool b)                     { ConvertString::TrimBoth(b); Ctrl::Refresh(); return *this; }
+	EditString& TrimLeft(bool b = true)              { ConvertString::TrimLeft(b); Ctrl::Refresh(); return *this; }
+	EditString& TrimRight(bool b = true)             { ConvertString::TrimRight(b); Ctrl::Refresh(); return *this; }
+	EditString& TrimBoth(bool b = true)              { ConvertString::TrimBoth(b); Ctrl::Refresh(); return *this; }
 };
 
 class EditStringNotNull : public EditString {
 public:
-	EditStringNotNull& operator=(const WString& data) { SetData(data); return *this; }
-	EditStringNotNull& operator=(const String& data)  { SetData(data); return *this; }
+	EditStringNotNull& operator=(const WString& data) { SetData(data); return *this; } // Deprecated, use operator<<=
+	EditStringNotNull& operator=(const String& data)  { SetData(data); return *this; } // Deprecated, use operator<<=
 
 	EditStringNotNull()                               { NotNull(); }
 	EditStringNotNull(int maxlen)                     { NotNull(); MaxLen(maxlen); }
 };
 
-class EditIntSpin : public EditInt {
-public:
-	virtual void MouseWheel(Point p, int zdelta, dword keyflags);
-	virtual bool Key(dword key, int repcnt);
+template <class IncType> IncType WithSpin_DefaultIncValue() { return 1; }
+template <> inline       double  WithSpin_DefaultIncValue() { return 0.1; }
 
+template <class IncType> IncType WithSpin_DefaultStartValue() { return 0; }
+template <> inline       Date    WithSpin_DefaultStartValue() { return GetSysDate(); }
+template <> inline       Time    WithSpin_DefaultStartValue() { return GetSysTime(); }
 
-protected:
-	SpinButtons sb;
-	int         inc;
-
-	void   Inc();
-	void   Dec();
-	void   Init();
-	
-	typedef EditIntSpin CLASSNAME;
-
-public:
-	EditIntSpin&    SetInc(int _inc)             { inc = _inc; return *this; }
-	int             GetInc() const               { return inc; }
-	EditIntSpin&    OnSides(bool b = true)       { sb.OnSides(b); return *this; }
-	bool            IsOnSides() const            { return sb.IsOnSides(); } 
-
-	EditIntSpin&    ShowSpin(bool s = true)      { sb.Show(s); return *this; }
-	bool            IsSpinVisible() const        { return sb.IsVisible(); }
-
-	SpinButtons&    SpinButtonsObject()          { return sb; }
-	const SpinButtons& SpinButtonsObject() const { return sb; }
-
-	EditIntSpin(int inc = 1);
-	EditIntSpin(int min, int max, int inc = 1);
-	virtual ~EditIntSpin();
-};
-
-class EditIntNotNullSpin : public EditIntSpin
+template <class DataType, class IncType>
+void WithSpin_Add(DataType& value, IncType inc, DataType min, bool roundfrommin)
 {
-public:
-	EditIntNotNullSpin(int inc = 1) : EditIntSpin(inc)                             { NotNull(); }
-	EditIntNotNullSpin(int min, int max, int inc = 1) : EditIntSpin(min, max, inc) { NotNull(); }
-};
+	value += inc;
+}
 
-class EditDoubleSpin : public EditDouble
-{
+template <> inline
+void WithSpin_Add(int& value, int inc, int min, bool roundfrommin) {
+	if(roundfrommin)
+		value -= min;
+	if(inc < 0) {
+		inc = -inc;
+		value = (value - inc) / inc * inc;
+	}
+	else
+		value = (value + inc) / inc * inc;
+	if(roundfrommin)
+		value += min;
+}
+
+template <> inline
+void WithSpin_Add(double& value, double inc, double min, bool roundfrommin) {
+	if(roundfrommin)
+		value -= min;
+	if(inc < 0) {
+		inc = -inc;
+		value = (ceil(value / inc - inc / 100) - 1) * inc;
+	}
+	else
+		value = (floor(value / inc + inc / 100) + 1) * inc;
+	if(roundfrommin)
+		value += min;
+}
+
+template <class DataType, class Base, class IncType = DataType>
+class WithSpin : public Base {
 public:
 	virtual void MouseWheel(Point p, int zdelta, dword keyflags);
 	virtual bool Key(dword key, int repcnt);
@@ -375,70 +390,144 @@ protected:
 
 private:
 	SpinButtons     sb;
-	double          inc;
+	IncType         inc;
+	bool            roundfrommin;
 
-	typedef EditDoubleSpin CLASSNAME;
+	typedef WithSpin CLASSNAME;
 public:
 
-	EditDoubleSpin& SetInc(double _inc = 0.1)    { inc = _inc; return *this; }
-	double          GetInc() const               { return inc; }
+	WithSpin&          SetInc(IncType _inc = 1)     { inc = _inc; return *this; }
+	DataType           GetInc() const               { return inc; }
 
-	EditDoubleSpin& OnSides(bool b = true)       { sb.OnSides(b); return *this; }
-	bool            IsOnSides() const            { return sb.IsOnSides(); }
+	WithSpin&          OnSides(bool b = true)       { sb.OnSides(b); return *this; }
+	bool               IsOnSides() const            { return sb.IsOnSides(); }
 	
-	EditDoubleSpin& ShowSpin(bool s = true)      { sb.Show(s); return *this; }
-	bool            IsSpinVisible() const        { return sb.IsVisible(); }
+	WithSpin&          ShowSpin(bool s = true)      { sb.Show(s); return *this; }
+	bool               IsSpinVisible() const        { return sb.IsVisible(); }
+	
+	WithSpin&          RoundFromMin(bool b = true)  { roundfrommin = b; return *this; }
 
-	SpinButtons&       SpinButtonsObject()       { return sb; }
-	const SpinButtons& SpinButtonsObject() const { return sb; }
+	SpinButtons&       SpinButtonsObject()          { return sb; }
+	const SpinButtons& SpinButtonsObject() const    { return sb; }
 
-	EditDoubleSpin(double inc = 0.1);
-	EditDoubleSpin(double min, double max, double inc = 0.1);
-	virtual ~EditDoubleSpin();
+	WithSpin();
+	WithSpin(IncType inc); // deprecated
+	WithSpin(DataType min, DataType max, IncType inc); // deprecated
+	virtual ~WithSpin() {}
 };
 
-class EditDoubleNotNullSpin : public EditDoubleSpin
+template <class DataType, class Base, class IncType>
+WithSpin<DataType, Base, IncType>::WithSpin()
+:	inc(WithSpin_DefaultIncValue<IncType>())
 {
-public:
-	EditDoubleNotNullSpin(double inc = 0.1) : EditDoubleSpin(inc) { NotNull(); }
-	EditDoubleNotNullSpin(double min, double max, double inc = 0.1) : EditDoubleSpin(min, max, inc) { NotNull(); }
-};
+	Init();
+}
 
-class EditInt64Spin : public EditInt64 {
-public:
-	virtual void MouseWheel(Point p, int zdelta, dword keyflags);
-	virtual bool Key(dword key, int repcnt);
-
-protected:
-	SpinButtons sb;
-	int64       inc;
-
-	void   Inc();
-	void   Dec();
-	void   Init();
-
-	typedef EditInt64Spin CLASSNAME;
-
-public:
-	EditInt64Spin&  SetInc(int64 _inc)           { inc = _inc; return *this; }
-	int64           GetInc() const               { return inc; }
-	EditInt64Spin&  OnSides(bool b = true)       { sb.OnSides(b); return *this; }
-	bool            IsOnSides() const            { return sb.IsOnSides(); } 
-
-	EditInt64Spin&  ShowSpin(bool s = true)      { sb.Show(s); return *this; }
-	bool            IsSpinVisible() const        { return sb.IsVisible(); }
-
-	SpinButtons&    SpinButtonsObject()          { return sb; }
-	const SpinButtons& SpinButtonsObject() const { return sb; }
-
-	EditInt64Spin(int64 inc = 1);
-	EditInt64Spin(int64 min, int64 max, int64 inc = 1);
-	virtual ~EditInt64Spin();
-};
-
-class EditInt64NotNullSpin : public EditInt64Spin
+template <class DataType, class Base, class IncType>
+WithSpin<DataType, Base, IncType>::WithSpin(IncType inc)
+:	inc(inc)
 {
-public:
-	EditInt64NotNullSpin(int inc = 1) : EditInt64Spin(inc) { NotNull(); }
-	EditInt64NotNullSpin(int min, int max, int inc = 1) : EditInt64Spin(min, max, inc) { NotNull(); }
-};
+	Init();
+}
+
+template <class DataType, class Base, class IncType>
+WithSpin<DataType, Base, IncType>::WithSpin(DataType min, DataType max, IncType inc)
+:	inc(WithSpin_DefaultIncValue<IncType>())
+{
+	Base::MinMax(min, max);
+	Init();
+}
+
+template <class DataType, class Base, class IncType>
+void WithSpin<DataType, Base, IncType>::Init()
+{
+	Ctrl::AddFrame(sb);
+	sb.inc.WhenRepeat = sb.inc.WhenAction = THISBACK(Inc);
+	sb.dec.WhenRepeat = sb.dec.WhenAction = THISBACK(Dec);
+	roundfrommin = false;
+}
+
+template <class DataType, class Base, class IncType>
+void WithSpin<DataType, Base, IncType>::Inc()
+{
+	if(Ctrl::IsReadOnly()) {
+		BeepExclamation();
+		return;
+	}
+	DataType d = Base::GetData();
+	if(!IsNull(d)) {
+		WithSpin_Add(d, inc, Base::GetMin(), roundfrommin);
+		if(IsNull(Base::GetMax()) || d <= Base::GetMax()) {
+			Base::SetData(d);
+			Ctrl::Action();
+		}
+	}
+	else {
+		DataType min = Base::GetMin();
+		if(IsNull(min) || min <= Base::GetDefaultMin())
+			Base::SetData(WithSpin_DefaultStartValue<DataType>());
+		else
+			Base::SetData(min);
+	}
+	Ctrl::SetFocus();
+}
+
+template <class DataType, class Base, class IncType>
+void WithSpin<DataType, Base, IncType>::Dec()
+{
+	if(Ctrl::IsReadOnly()) {
+		BeepExclamation();
+		return;
+	}
+	DataType d = Base::GetData();
+	if(!IsNull(d)) {
+		WithSpin_Add(d, -inc, Base::GetMin(), roundfrommin);
+		if(IsNull(Base::GetMin()) || d >= Base::GetMin()) {
+			Base::SetData(d);
+			Ctrl::Action();
+		}
+	}
+	else {
+		DataType max = Base::GetMax();
+		if(IsNull(max) || max >= Base::GetDefaultMax())
+			Base::SetData(WithSpin_DefaultStartValue<DataType>());
+		else
+			Base::SetData(max);
+	}
+	Ctrl::SetFocus();
+}
+
+template <class DataType, class Base, class IncType>
+bool WithSpin<DataType, Base, IncType>::Key(dword key, int repcnt)
+{
+	if(key == K_UP) {
+		Inc();
+		return true;
+	}
+	if(key == K_DOWN) {
+		Dec();
+		return true;
+	}
+	return Base::Key(key, repcnt);
+}
+
+template <class DataType, class Base, class IncType>
+void WithSpin<DataType, Base, IncType>::MouseWheel(Point, int zdelta, dword)
+{
+	if(zdelta < 0)
+		Dec();
+	else
+		Inc();
+}
+
+typedef WithSpin<int, EditInt>               EditIntSpin;
+typedef WithSpin<int64, EditInt64>           EditInt64Spin;
+typedef WithSpin<double, EditDouble>         EditDoubleSpin;
+typedef WithSpin<Date, EditDate, int>        EditDateSpin;
+typedef WithSpin<Time, EditTime, int>        EditTimeSpin;
+
+typedef WithSpin<int, EditIntNotNull>        EditIntNotNullSpin;
+typedef WithSpin<int64, EditInt64NotNull>    EditInt64NotNullSpin;
+typedef WithSpin<double, EditDoubleNotNull>  EditDoubleNotNullSpin;
+typedef WithSpin<Date, EditDateNotNull, int> EditDateNotNullSpin;
+typedef WithSpin<Time, EditTimeNotNull, int> EditTimeNotNullSpin;

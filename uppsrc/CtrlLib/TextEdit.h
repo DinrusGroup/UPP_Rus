@@ -30,22 +30,28 @@ public:
 		PAPER_NORMAL,
 		PAPER_READONLY,
 		PAPER_SELECTED,
+		WHITESPACE,
+		WARN_WHITESPACE,
 		COLOR_COUNT,
 	};
 
 protected:
-	virtual void   DirtyFrom(int line);
-	virtual void   SelectionChanged();
-	virtual void   ClearLines();
-	virtual void   InsertLines(int line, int count);
-	virtual void   RemoveLines(int line, int count);
-	virtual void   PreInsert(int pos, const WString& text);
-	virtual void   PostInsert(int pos, const WString& text);
-	virtual void   PreRemove(int pos, int size);
-	virtual void   PostRemove(int pos, int size);
-	virtual void   SetSb();
-	virtual void   PlaceCaret(int newcursor, bool sel = false);
-	virtual void   InvalidateLine(int i);
+	virtual void    DirtyFrom(int line);
+	virtual void    SelectionChanged();
+	virtual void    ClearLines();
+	virtual void    InsertLines(int line, int count);
+	virtual void    RemoveLines(int line, int count);
+	virtual void    PreInsert(int pos, const WString& text);
+	virtual void    PostInsert(int pos, const WString& text);
+	virtual void    PreRemove(int pos, int size);
+	virtual void    PostRemove(int pos, int size);
+	virtual void    SetSb();
+	virtual void    PlaceCaret(int newcursor, bool sel = false);
+	virtual void    InvalidateLine(int i);
+	virtual int     RemoveRectSelection();
+	virtual WString CopyRectSelection();
+	virtual int     PasteRectSelection(const WString& s);
+	virtual String  GetPasteText();
 
 	struct Ln : Moveable<Ln> {
 		int    len;
@@ -63,6 +69,7 @@ protected:
 	int              cline, cpos;
 	int              cursor, anchor;
 	int              undoserial;
+	bool             rectsel;
 	bool             incundoserial;
 	int              undosteps;
 	BiArray<UndoRec> undo;
@@ -70,6 +77,7 @@ protected:
 	int              dirty;
 	int              undo_op;
 	byte             charset;
+	bool             truncated;
 
 	bool             selclick;
 	Point            dropcaret;
@@ -79,6 +87,8 @@ protected:
 
 	bool             processtab, processenter;
 	bool             nobg;
+	int              max_total;
+	int              max_line_len;
 
 	void   IncDirty();
 	void   DecDirty();
@@ -91,20 +101,24 @@ protected:
 	void   DoPaste() { Paste(); }
 	void   DoRemoveSelection() { RemoveSelection(); }
 	void   RefreshLines(int l1, int l2);
+	static bool   IsUnicodeCharset(byte charset);
 
 public:
 	virtual void   RefreshLine(int i);
 
-	Callback1<Bar&> WhenBar;
-	Callback        WhenState;
-	Callback        WhenSel;
+	Event<Bar&> WhenBar;
+	Event<>     WhenState;
+	Event<>     WhenSel;
 
 	void   CachePos(int pos);
+	void   CacheLinePos(int linei);
 
-	enum { CHARSET_UTF8_BOM = 250 };
+	enum CS { CHARSET_UTF8_BOM = 250, CHARSET_UTF16_LE, CHARSET_UTF16_BE, CHARSET_UTF16_LE_BOM, CHARSET_UTF16_BE_BOM };
+	enum LE { LE_DEFAULT, LE_CRLF, LE_LF };
 
-	void   Load(Stream& s, byte charset = CHARSET_DEFAULT);
-	void   Save(Stream& s, byte charset = CHARSET_DEFAULT, bool crlf = false) const;
+	int    Load(Stream& s, byte charset = CHARSET_DEFAULT);
+	bool   IsTruncated() const                                { return truncated; }
+	void   Save(Stream& s, byte charset = CHARSET_DEFAULT, int line_endings = LE_DEFAULT) const;
 
 	int    GetInvalidCharPos(byte charset = CHARSET_DEFAULT) const;
 	bool   CheckCharset(byte charset = CHARSET_DEFAULT) const { return GetInvalidCharPos(charset) < 0; }
@@ -133,6 +147,7 @@ public:
 
 	int    GetLineCount() const               { return line.GetCount(); }
 	int    GetChar(int pos) const;
+	int    GetChar() const                    { return cursor < total ? GetChar(cursor) : 0; }
 	int    operator[](int pos) const          { return GetChar(pos); }
 	int    GetLength() const                  { return total; }
 
@@ -140,13 +155,15 @@ public:
 	int     GetCursorLine()                   { return GetLine(GetCursor()); }
 
 	void    SetSelection(int anchor = 0, int cursor = INT_MAX);
-	bool    IsSelection() const               { return anchor >= 0; }
+	bool    IsSelection() const               { return IsAnySelection() && !rectsel; }
+	bool    IsRectSelection() const           { return IsAnySelection() && rectsel; }
+	bool    IsAnySelection() const            { return anchor >= 0 && anchor != cursor; }
 	bool    GetSelection(int& l, int& h) const;
 	String  GetSelection(byte charset = CHARSET_DEFAULT) const;
 	WString GetSelectionW() const;
 	void    ClearSelection();
 	bool    RemoveSelection();
-	void    SetCursor(int cursor)             { PlaceCaret(cursor); }
+	void    SetCursor(int cursor)                { PlaceCaret(cursor); }
 	int     Paste(const WString& text);
 
 	int     Insert(int pos, const WString& txt)  { return Insert(pos, txt, false); }
@@ -160,9 +177,10 @@ public:
 	bool      IsUndo() const                  { return undo.GetCount(); }
 	bool      IsRedo() const                  { return redo.GetCount(); }
 	void      ClearUndo()                     { undo.Clear(); redo.Clear(); }
+	void      ClearRedo()                     { redo.Clear(); }
 	bool      IsUndoOp() const                { return undo_op; }
 	UndoData  PickUndoData();
-	void      SetPickUndoData(pick_ UndoData& data);
+	void      SetPickUndoData(UndoData&& data);
 
 	void      Cut();
 	void      Copy();
@@ -184,6 +202,7 @@ public:
 	TextCtrl& ProcessEnter(bool b = true)      { processenter = b; return *this; }
 	TextCtrl& NoProcessEnter()                 { return ProcessEnter(false); }
 	TextCtrl& NoBackground(bool b = true)      { nobg = b; Transparent(); Refresh(); return *this; }
+	TextCtrl& MaxLength(int len, int linelen)  { max_total = len; max_line_len = linelen; return *this; }
 	bool      IsNoBackground() const           { return nobg; }
 	bool      IsProcessTab() const             { return processtab; }
 	bool      IsProcessEnter() const           { return processenter; }
@@ -215,18 +234,30 @@ public:
 	virtual void   RefreshLine(int i);
 
 protected:
-	virtual void  SetSb();
-	virtual void  PlaceCaret(int newcursor, bool sel = false);
+	virtual void    SetSb();
+	virtual void    PlaceCaret(int newcursor, bool sel = false);
+	virtual int     RemoveRectSelection();
+	virtual WString CopyRectSelection();
+	virtual int     PasteRectSelection(const WString& s);
 
 public:
+	enum Flags {
+		SHIFT_L = 1,
+		SHIFT_R = 2,
+		SPELLERROR = 4,
+	};
+
 	struct Highlight : Moveable<Highlight> {
 		Color paper;
 		Color ink;
 		Font  font;
+		word  flags;
 		wchar chr;
 
 		bool operator==(const Highlight& h) const
 		     { return paper == h.paper && ink == h.ink && font == h.font; }
+		
+		Highlight() { flags = 0; }
 	};
 
 	struct EditPos : Moveable<EditPos> {
@@ -252,13 +283,18 @@ protected:
 	int              tabsize;
 	int              bordercolumn;
 	Color            bordercolor;
+	Color            hline;
+	Scroller         scroller;
+	Point            caretpos;
 	bool             nohbar;
 	bool             showtabs;
 	bool             cutline;
 	bool             overwrite;
-	Scroller         scroller;
-	Point            caretpos;
 	bool             showspaces;
+	bool             showlines;
+	bool             showreadonly;
+	bool             warnwhitespace;
+	bool             dorectsel; // TODO: Refactor this ugly hack!
 
 	void   Paint0(Draw& w);
 
@@ -273,8 +309,10 @@ protected:
 	void   SetHBar();
 	Rect   DropCaret();
 	void   RefreshDropCaret();
+	void   DoPasteColumn() { PasteColumn(); }
 
 	struct RefreshDraw;
+	friend class TextCtrl;
 
 public:
 	Size   GetFontSize() const;
@@ -285,8 +323,17 @@ public:
 	Point  GetIndexLine(int pos) const;
 	int    GetIndexLinePos(Point pos) const;
 
+	void   SetRectSelection(int l, int h);
+	void   SetRectSelection(const Rect& rect);
+	Rect   GetRectSelection() const;
+	bool   GetRectSelection(const Rect& rect, int line, int& l, int &h);
+
 	void   ScrollUp()                         { sb.LineUp(); }
 	void   ScrollDown()                       { sb.LineDown(); }
+	void   ScrollPageUp()                     { sb.PageUp(); }
+	void   ScrollPageDown()                   { sb.PageDown(); }
+	void   ScrollBegin()                      { sb.VertBegin(); }
+	void   ScrollEnd()                        { sb.VertEnd(); }
 
 	Rect   GetLineScreenRect(int line) const;
 
@@ -312,6 +359,11 @@ public:
 	void   DeleteLine();
 	void   CutLine();
 
+	void   PasteColumn(const WString& text);
+	void   PasteColumn();
+	
+	void   Sort();
+
 	Point   GetScrollPos() const              { return sb; }
 	Size    GetPageSize()                     { return sb.GetPage(); }
 	void    SetScrollPos(Point p)             { sb.Set(p); }
@@ -334,6 +386,7 @@ public:
 	LineEdit& TabSize(int n);
 	int       GetTabSize() const              { return tabsize; }
 	LineEdit& BorderColumn(int col, Color c = SColorFace());
+	int       GetBorderColumn() const         { return bordercolumn; }
 	LineEdit& SetFont(Font f);
 	Font      GetFont() const                 { return font; }
 	LineEdit& NoHorzScrollbar(bool b = true)  { nohbar = b; ScrollIntoCursor(); return *this; }
@@ -341,11 +394,19 @@ public:
 	LineEdit& ShowTabs(bool st = true)        { showtabs = st; Refresh(); return *this; }
 	bool      IsShowTabs() const              { return showtabs; }
 	LineEdit& ShowSpaces(bool ss = true)      { showspaces = ss; Refresh(); return *this; }
-	bool      IsShowSpacess() const           { return showspaces; }
+	bool      IsShowSpaces() const            { return showspaces; }
+	LineEdit& ShowLineEndings(bool sl = true) { showlines = sl; Refresh(); return *this; }
+	bool      IsShowLineEndings() const       { return showlines; }
+	LineEdit& WarnWhiteSpace(bool b = true)   { warnwhitespace = b; Refresh(); return *this; }
+	bool      IsWantWhiteSpace() const        { return warnwhitespace; }
 	LineEdit& WithCutLine(bool b)             { cutline = b; return *this; }
 	LineEdit& NoCutLine()                     { return WithCutLine(false); }
 	bool      IsWithCutLine() const           { return cutline; }
 	LineEdit& SetFilter(int (*f)(int c))      { filter = f; return *this; }
+	LineEdit& ShowReadOnly(bool b)            { showreadonly = b; Refresh(); return *this; }
+	LineEdit& NoShowReadOnly()                { return ShowReadOnly(false); }
+	bool      IsShowReadOnly()                { return showreadonly; }
+	LineEdit& ShowCurrentLine(Color color)    { hline = color; Refresh(); return *this; }
 	
 	LineEdit& SetScrollBarStyle(const ScrollBar::Style& s)   { sb.SetStyle(s); return *this; }
 

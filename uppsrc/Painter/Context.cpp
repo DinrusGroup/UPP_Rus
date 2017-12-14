@@ -1,6 +1,6 @@
 #include "Painter.h"
 
-NAMESPACE_UPP
+namespace Upp {
 
 void BufferPainter::BeginOp()
 {
@@ -22,7 +22,7 @@ void BufferPainter::EndOp()
 		FinishMask();
 	if(attr.onpath) {
 		attr.onpath = false;
-		onpath = onpathstack.Top();
+		onpath = pick(onpathstack.Top());
 		onpathstack.Drop();
 		pathlen = pathlenstack.Pop();
 	}
@@ -136,6 +136,16 @@ BufferPainter::BufferPainter(ImageBuffer& ib, int mode)
 	pathattr = attr;
 	
 	gradientn = Null;
+	
+	dopreclip = false;
 }
 
-END_UPP_NAMESPACE
+BufferPainter::BufferPainter(PainterTarget& t, double tolerance)
+:	BufferPainter(dummy, MODE_ANTIALIASED)
+{
+	alt = &t;
+	alt_tolerance = tolerance;
+	dummy.Create(1, 1);
+}
+
+}

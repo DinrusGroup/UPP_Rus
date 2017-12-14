@@ -1,15 +1,15 @@
 #include "CtrlCore.h"
 
-NAMESPACE_UPP
-
-ClipData::ClipData(const Value& data, String (*render)(const Value& data))
-:	data(data), render(render)
-{}
+namespace Upp {
 
 String sRawClipData(const Value& data)
 {
 	return data;
 }
+
+ClipData::ClipData(const Value& data, String (*render)(const Value& data))
+:	data(data), render(render ? render : sRawClipData)
+{}
 
 ClipData::ClipData(const String& data)
 :	data(data), render(sRawClipData)
@@ -136,7 +136,6 @@ Image MakeDragImage(const Image& arrow, Image sample)
 	else {
 		b.Create(128, 128);
 		memset(~b, 0, sizeof(RGBA) * b.GetLength());
-		Size ssz = sample.GetSize();
 		Over(b, Point(2, 22), sample, sample.GetSize());
 		Unmultiply(b);
 		for(int y = 20; y < 96; y++) {
@@ -225,7 +224,7 @@ void Ctrl::DnD(Point p, PasteClip& clip)
 	Ptr<Ctrl> ctrl = this;
 	while(ctrl && ctrl->IsEnabled()) {
 		Rect view = ctrl->GetScreenView();
-		if(ctrl->IsMouseActive())
+		if(ctrl->IsMouseActive()) {
 			if(view.Contains(p)) {
 				dndpos = p - view.TopLeft();
 				dndframe = false;
@@ -240,6 +239,7 @@ void Ctrl::DnD(Point p, PasteClip& clip)
 				if(clip.IsAccepted())
 					break;
 			}
+		}
 		ctrl = ctrl->ChildFromPoint(hp);
 	}
 	if(ctrl != dndctrl) {
@@ -269,6 +269,17 @@ Ctrl *Ctrl::GetDragAndDropTarget()
 	return dndctrl;
 }
 
+void AppendClipboard(const char *format, const ClipData& data)
+{
+	AppendClipboard(format, data.data, data.render);
+}
+
+void AppendClipboard(const VectorMap<String, ClipData>& data)
+{
+	for(int i = 0; i < data.GetCount(); i++)
+		AppendClipboard(data.GetKey(i), data[i]);
+}
+
 void InitRichImage(String      (*fGetImageClip)(const Image& img, const String& fmt),
                    bool        (*fAcceptImage)(PasteClip& clip),
                    Image       (*fGetImage)(PasteClip& clip),
@@ -278,4 +289,4 @@ INITBLOCK {
 	InitRichImage(GetImageClip, AcceptImage, GetImage, ClipFmtsImage);
 }
 
-END_UPP_NAMESPACE
+}

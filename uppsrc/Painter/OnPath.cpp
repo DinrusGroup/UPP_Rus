@@ -1,6 +1,6 @@
 #include "Painter.h"
 
-NAMESPACE_UPP
+namespace Upp {
 
 void BufferPainter::BeginOnPathOp(double q, bool abs)
 {
@@ -24,10 +24,10 @@ void BufferPainter::BeginOnPathOp(double q, bool abs)
 		}
 	}
 	attrstack.Top().onpath = true;
-	onpathstack.Add() = onpath;
+	onpathstack.Add() = pick(onpath);
 	pathlenstack.Add(pathlen);
 	onpath.Clear();
 	pathlen = 0;
 }
 
-END_UPP_NAMESPACE
+}

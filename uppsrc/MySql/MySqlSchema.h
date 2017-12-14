@@ -33,10 +33,16 @@
 #define STRING_(x, n)              COLUMN_(MySqlTextType(n), String, x, n, 0)
 #define STRING_ARRAY_(x, n, items) COLUMN_ARRAY_(MySqlTextType(n), String, x, n, 0, items)
 
-#define BLOB(x)                    COLUMN("longblob", String, x, 0, 0)
-#define BLOB_(x)                   COLUMN_("longblob", String, x, 0, 0)
+#define BLOB(x)                    COLUMN("longblob", String, x, INT_MAX/2, 0)
+#define BLOB_(x)                   COLUMN_("longblob", String, x, INT_MAX/2, 0)
 
+#define CLOB(x)                    COLUMN("text", String, x, INT_MAX/2, 0)
+#define CLOB_(x)                   COLUMN_("text", String, x, INT_MAX/2, 0)
+
+#ifndef PRIMARY_KEY
 #define PRIMARY_KEY                INLINE_ATTRIBUTE("primary key")
+#endif
+
 #define AUTO_INCREMENT             INLINE_ATTRIBUTE("auto_increment")
 #define KEY                        INLINE_ATTRIBUTE("key")
 #define NOT_NULL                   INLINE_ATTRIBUTE("not null")
@@ -47,6 +53,11 @@
 #define UNIQUE                     ATTRIBUTE("alter table @t add unique UNQ_@x (@c);", \
 	                                         "alter table @t drop index UNQ_@x;")
 
+#define DUAL_UNIQUE(k1, k2)        ATTRIBUTE("alter table @t add unique index DQ_@t$" #k1 #k2 " (" #k1 ", " #k2 ");",\
+                                             "alter table @t drop index DQ_@t$" #k1 #k2 ";")
+
+#define UNIQUE_LIST(u, l)          ATTRIBUTE("alter table @t add unique index UQ_@t$" #u " (" l ");",\
+                                             "alter table @t drop index UQ_@t$" #u ";")
 #ifndef REFERENCES
 #define REFERENCES(x)              ATTRIBUTE("alter table @t add (constraint FK_@x foreign key "\
                                              "(@c) references " #x ");",\
@@ -59,12 +70,28 @@
 
 #define INNODB                     TABLE_SUFFIX(" type=InnoDB")
 
+#define DUAL_PRIMARY_KEY(k1, k2)   INLINE_ATTRIBUTE("primary key (" #k1 ", " #k2 ")")
+
+#define INDEX_LIST(u, l)           ATTRIBUTE("create index IDXL_@t$" #u " on @t  "\
+                                             "(" l ");",\
+                                             "drop index IDXL_@t$" #u ";")
+
+
 #include <Sql/sch_model.h>
 
 #undef INT
 #undef INT_ARRAY
 #undef INT_
 #undef INT_ARRAY_
+
+#undef INT64
+#undef INT64_ARRAY
+#undef INT64_
+#undef INT64_ARRAY_
+#undef BOOL
+#undef BOOL_ARRAY
+#undef BOOL_
+#undef BOOL_ARRAY_
 
 #undef DOUBLE
 #undef DOUBLE_ARRAY
@@ -97,7 +124,15 @@
 
 #undef INDEX
 
+#undef DUAL_PRIMARY_KEY
+#undef INDEX_LIST
+
 #undef UNIQUE
+#undef DUAL_UNIQUE
+#undef UNIQUE_LIST
+
+#undef REFERENCES
 
 #undef TIMESTAMP
 #undef COMMENT
+#undef INNODB

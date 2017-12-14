@@ -1,47 +1,35 @@
 #include "RichEdit.h"
 
-NAMESPACE_UPP
+namespace Upp {
 
 #define RTFS "Rich Text Format;text/rtf;application/rtf"
 
 void RichEdit::InsertImage()
 {
-	if(!imagefs.ExecuteOpen())
+	if(!imagefs.ExecuteOpen(t_("Open image from file")))
 		return;
 	String fn = ~imagefs;
-	if(GetFileLength(fn) >= 10 * 1024 * 1024) {
+	if(GetFileLength(fn) > 17000000) {
 		Exclamation("Image is too large!");
 		return;
 	}
-	String data = LoadFile(~imagefs);
+	String data = LoadFile(fn);
 	StringStream ss(data);
 	if(!StreamRaster::OpenAny(ss)) {
-		Exclamation("Invalid file format!");
+		Exclamation(NFormat(t_("Unsupported image format in file [* \1%s\1]."), ~imagefs));
 		return;
 	}
 	RichText clip;
 	RichPara p;
 	p.Cat(CreateRawImageObject(data), formatinfo);
 	clip.Cat(p);
-	ClipPaste(clip);
+	ClipPaste(clip, "image/raw");
 }
 
-bool RichEdit::Accept(PasteClip& d, RichText& clip)
+bool RichEdit::Accept(PasteClip& d, RichText& clip, String& fmt)
 {
 	if(IsReadOnly())
 		return false;
-	for(int i = 0; i < RichObject::GetTypeCount(); i++) {
-		RichObjectType& rt = RichObject::GetType(i);
-		if(rt.Accept(d)) {
-			Value data = rt.Read(d);
-			if(!IsNull(data)) {
-				RichPara p;
-				p.Cat(RichObject(&rt, data, pagesz), formatinfo);
-				clip.Cat(p);
-			}
-			return true;
-		}
-	}
 	if(AcceptFiles(d)) {
 		Vector<String> s = GetFiles(d);
 		if(s.GetCount()) {
@@ -53,6 +41,7 @@ bool RichEdit::Accept(PasteClip& d, RichText& clip)
 						RichPara p;
 						p.Cat(CreateRawImageObject(LoadFile(fn)), formatinfo);
 						clip.Cat(p);
+						fmt = "files";
 					}
 					return true;
 				}
@@ -61,23 +50,42 @@ bool RichEdit::Accept(PasteClip& d, RichText& clip)
 		}
 		d.Reject();
 	}
-	if(d.Accept("text/QTF"))
+	if(d.Accept("text/QTF")) {
+		fmt = "text/QTF";
 		clip = ParseQTF(~d, 0, context);
-	else
-	if(d.Accept(RTFS))
+		return true;
+	}
+	if(d.Accept(RTFS)) {
+		fmt = RTFS;
 		clip = ParseRTF(~d);
-	else
-	if(AcceptText(d))
+		return true;
+	}
+	for(int i = 0; i < RichObject::GetTypeCount(); i++) {
+		RichObjectType& rt = RichObject::GetType(i);
+		if(rt.Accept(d)) {
+			Value data = rt.Read(d);
+			if(!IsNull(data)) {
+				RichPara p;
+				RichObject o = RichObject(&rt, data, pagesz);
+				p.Cat(o, formatinfo);
+				clip.Cat(p);
+				fmt = o.GetTypeName();
+			}
+			return true;
+		}
+	}
+	if(AcceptText(d)) {
+		fmt = "text/plain";
 		clip = AsRichText(GetWString(d), formatinfo);
-	else
-		return false;
-	return true;
+		return true;
+	}
+	return false;
 }
 
-void RichEdit::ClipPaste(RichText& clip)
+void RichEdit::ClipPaste(RichText& clip, const String& fmt)
 {
 	clip.ApplyZoom(clipzoom.Reciprocal());
-	Filter(clip);
+	PasteFilter(clip, fmt);
 	NextUndo();
 	if(clip.GetPartCount() == 1 && clip.IsTable(0)) {
 		CancelSelection();
@@ -98,12 +106,14 @@ void RichEdit::DragAndDrop(Point p, PasteClip& d)
 	int dropcursor = GetMousePos(p);
 	if(dropcursor >= 0) {
 		RichText clip;
-		if(Accept(d, clip)) {
+		String fmt;
+		if(Accept(d, clip, fmt)) {
 			NextUndo();
 			int a = sb;
 			int c = dropcursor;
 			if(InSelection(c)) {
-				RemoveSelection();
+				if(!IsReadOnly())
+					RemoveSelection();
 				if(IsDragAndDropSource())
 					d.SetAction(DND_COPY);
 			}
@@ -111,12 +121,13 @@ void RichEdit::DragAndDrop(Point p, PasteClip& d)
 			if(GetSelection(sell, selh) && d.GetAction() == DND_MOVE && IsDragAndDropSource()) {
 				if(c > sell)
 					c -= selh - sell;
-				RemoveSelection();
+				if(!IsReadOnly())
+					RemoveSelection();
 				d.SetAction(DND_COPY);
 			}
 			Move(c);
 			clip.Normalize();
-			ClipPaste(clip);
+			ClipPaste(clip, fmt);
 			sb = a;
 			Select(c, clip.GetLength());
 			SetFocus();
@@ -158,9 +169,10 @@ void RichEdit::Paste()
 		return;
 	RichText clip;
 	PasteClip d = Clipboard();
-	if(!Accept(d, clip))
+	String fmt;
+	if(!Accept(d, clip, fmt))
 		return;
-	ClipPaste(clip);
+	ClipPaste(clip, fmt);
 }
 
 void RichEdit::DragLeave()
@@ -186,6 +198,14 @@ void RichEdit::ZoomClip(RichText& text) const
 	text.ApplyZoom(clipzoom);
 }
 
+void AppendClipboard(RichText&& txt)
+{
+	AppendClipboardUnicodeText(txt.GetPlainText());
+	Value clip = RawPickToValue(pick(txt));
+	AppendClipboard("text/QTF", clip, sQTF);
+	AppendClipboard(RTFS, clip, sRTF);
+}
+
 void RichEdit::Copy()
 {
 	RichText txt;
@@ -199,10 +219,7 @@ void RichEdit::Copy()
 	}
 	ZoomClip(txt);
 	ClearClipboard();
-	AppendClipboardUnicodeText(txt.GetPlainText());
-	Value clip = RawPickToValue(txt);
-	AppendClipboard("text/QTF", clip, sQTF);
-	AppendClipboard(RTFS, clip, sRTF);
+	AppendClipboard(pick(txt));
 	if(objectpos >= 0) {
 		RichObject o = GetObject();
 		Vector<String> v = Split(o.GetType().GetClipFmts(), ';');
@@ -244,7 +261,7 @@ void RichEdit::LeftDrag(Point p, dword flags)
 		sample.Paint(iw, 0, 0, 128);
 		NextUndo();
 		if(DoDragAndDrop(String().Cat() << "text/QTF;" RTFS ";" << ClipFmtsText(),
-		                 ColorMask(iw, White)) == DND_MOVE) {
+		                 ColorMask(iw, White)) == DND_MOVE && !IsReadOnly()) {
 			RemoveSelection();
 			Action();
 		}
@@ -272,11 +289,12 @@ void  RichEdit::MiddleDown(Point p, dword flags)
 	RichText clip;
 	if(IsReadOnly())
 		return;
-	if(Accept(Selection(), clip)) {
+	String fmt;
+	if(Accept(Selection(), clip, fmt)) {
 		selclick = false;
 		LeftDown(p, flags);
-		ClipPaste(clip);
+		ClipPaste(clip, fmt);
 	}
 }
 
-END_UPP_NAMESPACE
+}

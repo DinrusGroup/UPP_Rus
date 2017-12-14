@@ -3,6 +3,8 @@
 
 #ifdef PLATFORM_WIN32
 
+#if 0
+
 String GetShellFolder(const char *name, HKEY type)
 {
 	return GetWinRegString(name, "Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Shell Folders", type);
@@ -32,16 +34,16 @@ void Uninstall()
 	String path = GetExeFilePath();
 	String bat = AppendFileName(GetShellFolder("Desktop", HKEY_CURRENT_USER), "removepp.bat");
 	String dir = GetFileFolder(path);
-	if(!PromptYesNo("[*3 Хотите удалить систему разработки приложений Ultimate`+`+ ?&&]"
-	                "Программа удалит папку [* " + DeQtf(dir) + "] и все элементы "
-	                "рестра и рабочего стола, связанные с Ultimate`+`+.")) return;
+	if(!PromptYesNo("[*3 Do you wish to uninstall Ultimate`+`+ development system ?&&]"
+	                "Uninstall will remove [* " + DeQtf(dir) + "] directory and all "
+	                "registry and desktop items associated with Ultimate`+`+.")) return;
 	DeleteFolderDeep(dir);
 	RemoveWindowsItems();
 	SaveFile(bat,
 		":Repeat\r\n"
 		"del \"" + path + "\"\r\n"
 		"if exist \"" + path + "\" goto Repeat\r\n"
-		"del \"" + GetExeDirFile("RusIDE.log") + "\"\r\n"
+		"del \"" + GetExeDirFile("theide.log") + "\"\r\n"
 		"del \"" + GetExeDirFile("dbghelp.dll") + "\"\r\n"
 		"rmdir \"" + dir + "\"\r\n"
 		"del \"" + bat + "\"\r\n"
@@ -58,9 +60,9 @@ void Uninstall()
 	if(CreateProcess(NULL, h, NULL, NULL, FALSE,
 	                  IDLE_PRIORITY_CLASS, NULL, GetShellFolder("Desktop", HKEY_CURRENT_USER),
 	                  &si, &pi))
-		Exclamation("Удаление прошло успешно.");
+		Exclamation("Uninstall successful.");
 	else
-		Exclamation("Не удалось удалить екоторые файлы...&" + DeQtf(GetLastErrorMessage()));
+		Exclamation("Uninstall failed to remove some files...&" + DeQtf(GetLastErrorMessage()));
 }
 
 #define Ptr Ptr_
@@ -72,6 +74,11 @@ void Uninstall()
 #include <winnetwk.h>
 
 #include <wincon.h>
+
+#ifdef COMPILER_MINGW
+#undef CY
+#endif
+
 #include <shlobj.h>
 
 #undef Ptr
@@ -159,10 +166,10 @@ bool CheckLicense()
 	HideSplash();
 	Ctrl::ProcessEvents();
 	WithLicenseLayout<TopWindow> d;
-	CtrlLayoutOKCancel(d, "Лицензионное соглашение");
+	CtrlLayoutOKCancel(d, "License agreement");
 	d.license = GetTopic("ide/app/BSD$en-us").text;
 	d.license.Margins(4);
-	d.license.SetZoom(Zoom(18, 100));
+	d.license.SetZoom(Zoom(Zy(18), 100));
 	d.ActiveFocus(d.license);
 	if(d.Run() != IDOK) {
 		Uninstall();
@@ -178,7 +185,7 @@ void BrowseField(EditField *f)
 	String s = ~*f;
 	if(DirectoryExists(s))
 		fs.ActiveDir(s);
-	if(fs.ExecuteSelectDir("Выберите папку для MyApps"))
+	if(fs.ExecuteSelectDir("Select the directory for MyApps"))
 		*f <<= ~fs;
 }
 
@@ -186,10 +193,10 @@ bool Install()
 {
 	{
 		WithInfoLayout<TopWindow> d;
-		CtrlLayoutOKCancel(d, "Руководтво по установке");
+		CtrlLayoutOKCancel(d, "Installation guide");
 		d.info = GetTopic("ide/app/install$en-us").text;
 		d.info.Margins(4);
-		d.info.SetZoom(Zoom(18, 100));
+		d.info.SetZoom(Zoom(Zy(18), 100));
 		d.ActiveFocus(d.info);
 		if(d.Run() != IDOK)
 			return false;
@@ -209,6 +216,11 @@ bool Install()
 		String dir2 = ~dlg.myapps;
 		RealizeDirectory(dir2);
 		FileIn in(ipp);
+		String out = GetExeDirFile("out");
+		if(ToLower(exe).StartsWith(ToLower(GetProgramsFolder())) || ToLower(exe).Find("program files") >= 0) {
+			// We do not want to put MyApps folder dir into Program Files
+			out = GetHomeDirFile("upp.out");
+		}
 		while(!in.IsEof()) {
 			Vector<String> ln = Split(in.GetLine(), '|');
 			if(ln.GetCount() != 4)
@@ -216,7 +228,7 @@ bool Install()
 			SaveFile(AppendFileName(dir, ln[0]),
 				"UPP = " + AsCString(Rdir(ln[1], dir, dir2)) + ";\r\n"
 				"COMMON = " + AsCString(Rdir(ln[2], dir, dir2)) + ";\r\n"
-				"OUTPUT = " + AsCString(Rdir(ln[3], dir, dir2)) + ";\r\n"
+				"OUTPUT = " + AsCString(out /* Rdir(ln[3], dir, dir2) */) + ";\r\n"
 			);
 		}
 		in.Close();
@@ -226,37 +238,16 @@ bool Install()
 		InstallUninstall(exe, "Ultimate++");
 		DeleteFile(ipp);
 	}
-	AutoSetup();
-	PromptOK("Ultimate`+`+ setup was finished.&Press OK to launch RusIDE.&"
+	InstantSetup();
+	PromptOK("Ultimate`+`+ setup was finished.&Press OK to launch TheIDE.&"
 	         "[* WARNING:] Do not put important files into the install directory as they "
 	         "would be [* deleted] during [* uninstall] or [* upgrade] process!");;
 	return true;
 }
 
-#else
+#endif
 
-bool CopyFolder(const char *dst, const char *src, Progress *pi)
-{
-	if(strcmp(src, dst) == 0)
-		return true;
-	RealizeDirectory(dst);
-	if(pi)
-		pi->SetText(dst);
-	FindFile ff(AppendFileName(src, "*"));
-	while(ff) {
-		if(pi && pi->StepCanceled())
-			return false;
-		String s = AppendFileName(src, ff.GetName());
-		String d = AppendFileName(dst, ff.GetName());
-		if(ff.IsFolder())
-			if(!CopyFolder(d, s, pi))
-				return false;
-		if(ff.IsFile())
-			SaveFile(d, LoadFile(s));
-		ff.Next();
-	}
-	return true;
-}
+#else
 
 bool CopyFolder(Progress& pi, const char *dst, const char *src)
 {
@@ -281,13 +272,12 @@ String DefaultInstallFolder()
 		DefaultFolder = "upp-svn";
 	else if(ExeTitle.Find("DEV") >= 0)
 		DefaultFolder = "upp-dev";
-	else if(ExeTitle.Find("BETA") >= 0) 
+	else if(ExeTitle.Find("BETA") >= 0)
 		DefaultFolder = "upp-beta";
 	else
 		DefaultFolder = "upp";
 	
 	return DefaultFolder;
-
 }
 
 struct XInstallDlg : public WithXInstallLayout<TopWindow> {
@@ -303,12 +293,11 @@ public:
 	typedef XInstallDlg CLASSNAME;
 
 	XInstallDlg();
-
 };
 
 void XInstallDlg::FindInstFolder() {
 	FileSel *fs = &OutputFs();
-	fs->Set(path);
+	fs->Set(~path);
 	if(! fs->ExecuteSelectDir("Select output directory ..."))
 		return;
 	path <<= ~(*fs);
@@ -335,15 +324,20 @@ bool Install()
 	if(!(InstallWizard().Run()&(IDOK|IDCANCEL))) return false;
 
 	String supp=UpdaterCfg().globalsrc;
-	String bm = ConfigFile("GCC.bm");
-	if(IsNull(LoadFile(bm)))
-		SaveFile(bm, LoadFile(AppendFileName(supp, "GCC.bm")));
+	FindFile ff(ConfigFile("*.bm"));
+	if(!ff) {
+		ff.Search(AppendFileName(supp, "*.bm"));
+		while(ff) {
+			FileCopy(ff.GetPath(), ConfigFile(ff.GetName()));
+			ff.Next();
+		}
+	}
 	// 2008/06/01 -- add valgrind suppression file
 	String ValgSupp = ConfigFile("valgrind.supp");
 	if(IsNull(LoadFile(ValgSupp)))
 		SaveFile(ValgSupp, LoadFile(AppendFileName(supp, "uppsrc/ide/valgrind.supp")));
 	// 2008/06/01 -- END
-	//PromptOK("Ultimate`+`+ user setup was finished.&Press OK to launch RusIDE.");
+	//PromptOK("Ultimate`+`+ user setup was finished.&Press OK to launch TheIDE.");
 	return true;
 }
 

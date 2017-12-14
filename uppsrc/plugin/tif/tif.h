@@ -23,13 +23,15 @@ struct tiff;
 #undef HAVE_UINT16
 #undef HAVE_UINT32
 
-NAMESPACE_UPP
+namespace Upp {
 
 struct tiff *TIFFStreamOpen(const char *filename, const char *mode, Stream *stream, bool destruct = false);
 struct tiff *TIFFFileStreamOpen(const char *filename, const char *mode);
 
 //struct tiff* TIFFWrapOpen(const char*, const char*);
 //int TIFFWrapGetField(::tiff* tif_data, uint32 tag, ...);
+
+INITIALIZE(TIFRaster);
 
 class TIFRaster : public StreamRaster {
 public:
@@ -75,6 +77,6 @@ private:
 	int bpp;
 };
 
-END_UPP_NAMESPACE
+}
 
 #endif

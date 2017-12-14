@@ -31,7 +31,7 @@ mainly to improve build times in debug mode.&]
 or in 64`-bit mode with sizeof(int) >`= 4 (that is quite standard). 
 Currently tested CPU architectures are i386, AMD64, ARM and PowerPC.&]
 [s0;i150;b33;O0; CPU and compiler are supposed to support [^topic`:`/`/Core`/srcdoc`/Moveable`$en`-us^ M
-oveable] (true for any gcc platform and MSVC`+`+ as well).&]
+oveable] (true for any gcc, clang and MSVC`+`+ as well).&]
 [s0;i150;b33;O0; We decided to ignore possibility of `"out`-of`-memory`" 
 exceptions and recovery. If U`+`+ application goes out of memory, 
 it simply prints the error message and terminates. This is quite 
@@ -39,27 +39,23 @@ pragmatic resolution `- our experience is that it is quite hard
 and annoying to achieve robustness here and it cannot be reliably 
 tested. Also, most platforms with virtual memory will almost 
 freeze long before out`-of`-memory problem due to intensive page 
-swapping. Connected issue `- default and copy constructors are 
+swapping. Related issue `- default and copy constructors are 
 not allowed to throw exceptions in U`+`+ (the common reason to 
-throw exception here was out`-of`-memory condition). This limitation 
-will be removed in future releases.&]
+throw exception here is out`-of`-memory condition).&]
 [s0;i150;b33;O0;%- [%% Maximum number of elements in any of U`+`+ containers 
 (including GUI elements, like number of rows in DropList) is 
 2][%%` 31 ][%% `- 1 `= ]2,147,483,647.&]
 [s0;i150;b33;O0; GUI is designed in a way that all user events are 
-passed and processed the main thread. The synchronization is 
-done using single global mutex (operated by EnterGuiMutex, LeaveGuiMutex 
-or GuiLock scoped helper). Other threads can directly work with 
-GUI as long they do use this global mutex. There are some operations 
-(like opening/closing windows, message loops) that cannot be 
-performed by any other thread than main, however U`+`+ workarounds 
-this by invoking such operations as `"call to main thread`". 
-In other words, you can do anything in non`-main threads as long 
-as you do not forget to synchronize using global GUI mutex.&]
+passed and processed by the main thread. The synchronization 
+is done using single global mutex (operated by EnterGuiMutex, 
+LeaveGuiMutex or GuiLock scoped helper). Other threads can directly 
+work with GUI as long they do use this global mutex. There are 
+some operations (like opening/closing windows, message loops) 
+that cannot be performed by any other thread than main.&]
 [s0;i150;b33;O0; U`+`+ does not use OS`-native widgets. The main 
 reason for this is to achieve widget interface model optimal 
 for rapid development. The less important reason is that this 
 way it is much easier to make U`+`+ cross`-platform. On the other 
 hand, Chameleon skinning system achieves native look`&feel, so 
 there is a little perceivable difference for end user.&]
-[s0; ]
+[s0; ]]

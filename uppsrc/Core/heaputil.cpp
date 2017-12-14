@@ -6,11 +6,9 @@
 #include <sys/mman.h>
 #endif
 
-NAMESPACE_UPP
+namespace Upp {
 
 #include "HeapImp.h"
-
-static MemoryProfile *sPeak;
 
 void *MemoryAllocPermanentRaw(size_t size)
 {
@@ -18,8 +16,9 @@ void *MemoryAllocPermanentRaw(size_t size)
 		return malloc(size);
 	static byte *ptr = NULL;
 	static byte *limit = NULL;
+	ASSERT(size < INT_MAX);
 	if(ptr + size >= limit) {
-		ptr = (byte *)AllocRaw4KB();
+		ptr = (byte *)AllocRaw4KB((int)size);
 		limit = ptr + 4096;
 	}
 	void *p = ptr;
@@ -33,41 +32,54 @@ void *MemoryAllocPermanent(size_t size)
 	return MemoryAllocPermanentRaw(size);
 }
 
-MemoryProfile *PeakMemoryProfile()
+void OutOfMemoryPanic(size_t size)
 {
-	if(sPeak)
-		return sPeak;
-	sPeak = (MemoryProfile *)MemoryAllocPermanent(sizeof(MemoryProfile));
-	memset(sPeak, 0, sizeof(MemoryProfile));
-	return NULL;
-}
-
-void DoPeakProfile()
-{
-	if(sPeak)
-		heap.Make(*sPeak);
+	char h[200];
+	sprintf(h, "Out of memory!\nRequested size: %lld B\nU++ allocated memory: %d KB",
+	        (long long)size, MemoryUsedKb());
+	Panic(h);
 }
 
 int sKB;
 
 int   MemoryUsedKb() { return sKB; }
 
-void *SysAllocRaw(size_t size)
+int sKBLimit = INT_MAX;
+
+void  MemoryLimitKb(int kb)
 {
-	sKB += int(((size + 4095) & ~4095) >> 10);
-#ifdef PLATFORM_WIN32
-	void *ptr = VirtualAlloc(NULL, size, MEM_RESERVE|MEM_COMMIT, PAGE_READWRITE);
-#else
-#ifdef PLATFORM_LINUX
-	void *ptr =  mmap(0, size, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS, -1, 0);
-#else
-	void *ptr =  mmap(0, size, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANON, -1, 0);
-#endif
-	if(ptr == MAP_FAILED)
-		ptr = NULL;
-#endif
+	sKBLimit = kb;
+}
+
+void DoPeakProfile();
+
+void *SysAllocRaw(size_t size, size_t reqsize)
+{
+	size_t rsz = int(((size + 4095) & ~4095) >> 10);
+	void *ptr = NULL;
+	for(int pass = 0; pass < 2; pass++) {
+		if(sKB + (int)rsz < sKBLimit) {
+		#ifdef PLATFORM_WIN32
+			ptr = VirtualAlloc(NULL, size, MEM_RESERVE|MEM_COMMIT, PAGE_READWRITE);
+		#elif PLATFORM_LINUX
+			ptr = mmap(0, size, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS, -1, 0);
+			if(ptr == MAP_FAILED)
+				ptr = NULL;
+		#else
+			ptr = mmap(0, size, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANON, -1, 0);
+			if(ptr == MAP_FAILED)
+				ptr = NULL;
+		#endif
+			if(ptr)
+				break;
+		}
+	#ifdef MEMORY_SHRINK
+		MemoryShrink(); // Freeing large / small empty might help
+	#endif
+	}
 	if(!ptr)
-		Panic("За пределами памяти!");
+		OutOfMemoryPanic(size/*reqsize*/);
+	sKB += (int)rsz;
 	DoPeakProfile();
 	return ptr;
 }
@@ -85,14 +97,15 @@ void  SysFreeRaw(void *ptr, size_t size)
 int s4kb__;
 int s64kb__;
 
-void *AllocRaw4KB()
+#ifdef MEMORY_SHRINK
+void *AllocRaw4KB(int reqsize)
 {
 	static int   left;
 	static byte *ptr;
 	static int   n = 32;
 	if(left == 0) {
 		left = n >> 5;
-		ptr = (byte *)SysAllocRaw(left * 4096);
+		ptr = (byte *)SysAllocRaw(left * 4096, reqsize);
 	}
 	n = n + 1;
 	if(n > 4096) n = 4096;
@@ -104,14 +117,57 @@ void *AllocRaw4KB()
 	return p;
 }
 
-void *AllocRaw64KB()
+void *AllocRaw64KB(int reqsize)
+{
+	void *ptr = (byte *)SysAllocRaw(65536, reqsize);
+	s64kb__++;
+	DoPeakProfile();
+	return ptr;
+}
+
+#if 0
+void FreeRaw4KB(void *ptr)
+{
+	SysFreeRaw(ptr, 4096);
+	s4kb__--;
+}
+#endif
+
+void FreeRaw64KB(void *ptr)
+{
+	SysFreeRaw(ptr, 65536);
+	s64kb__--;
+}
+
+#else
+
+void *AllocRaw4KB(int reqsize)
 {
 	static int   left;
 	static byte *ptr;
 	static int   n = 32;
 	if(left == 0) {
 		left = n >> 5;
-		ptr = (byte *)SysAllocRaw(left * 65536);
+		ptr = (byte *)SysAllocRaw(left * 4096, reqsize);
+	}
+	n = n + 1;
+	if(n > 4096) n = 4096;
+	void *p = ptr;
+	ptr += 4096;
+	left--;
+	s4kb__++;
+	DoPeakProfile();
+	return p;
+}
+
+void *AllocRaw64KB(int reqsize)
+{
+	static int   left;
+	static byte *ptr;
+	static int   n = 32;
+	if(left == 0) {
+		left = n >> 5;
+		ptr = (byte *)SysAllocRaw(left * 65536, reqsize);
 	}
 	n = n + 1;
 	if(n > 256) n = 256;
@@ -122,11 +178,12 @@ void *AllocRaw64KB()
 	DoPeakProfile();
 	return p;
 }
+#endif
 
 void HeapPanic(const char *text, void *pos, int size)
 {
 	RLOG("\n\n" << text << "\n");
-	HexDump(VppLog(), pos, size, 64);
+	HexDump(VppLog(), pos, size, 1024);
 	Panic(text);
 }
 
@@ -146,12 +203,12 @@ void Heap::DbgFreeCheck(void *p, size_t size)
 	dword *ptr = (dword *)p;
 	while(count--)
 		if(*ptr++ != 0x65657246)
-			HeapPanic("Обнаружены записи в освобождённые блоки", p, (int)(uintptr_t)size);
+			HeapPanic("Writes to freed blocks detected", p, (int)(uintptr_t)size);
 }
 
 void *Heap::DbgFreeCheckK(void *p, int k)
 {
-	Page *page = (Page *)((uintptr_t)p & ~(uintptr_t)4095);
+	Page *page = GetPage(p);
 	ASSERT((byte *)page + sizeof(Page) <= (byte *)p && (byte *)p < (byte *)page + 4096);
 	ASSERT((4096 - ((uintptr_t)p & (uintptr_t)4095)) % Ksz(k) == 0);
 	ASSERT(page->klass == k);
@@ -184,16 +241,20 @@ void Heap::Make(MemoryProfile& f)
 			f.allocated[qq] += p->active;
 			p = p->next;
 		}
+		if(empty[i])
+			f.freepages++;
+		p = aux.empty[i];
+		while(p) {
+			f.freepages++;
+			p = p->next;
+		}
 	}
 	int ii = 0;
 	int fi = 0;
 	DLink *m = big->next;
 	while(m != big) {
-		size_t sz = ((BigHdr *)((byte *)m + BIGHDRSZ - sizeof(Header)))->size;
-		f.large_count++;
-		f.large_total += sz;
-		if(ii < 4096)
-			f.large_size[ii++] = sz;
+		f.big_count++;
+		f.big_size += ((BigHdr *)m)->size;
 		m = m->next;
 	}
 	m = large->next;
@@ -203,24 +264,24 @@ void Heap::Make(MemoryProfile& f)
 			if(h->free) {
 				f.large_free_count++;
 				f.large_free_total += h->size;
-				if(fi < 4096)
+				if(fi < 1024)
 					f.large_free_size[fi++] = h->size;
 			}
 			else {
 				f.large_count++;
 				f.large_total += h->size;
-				if(ii < 4096)
+				if(ii < 1024)
 					f.large_size[ii++] = h->size;
 			}
 			h = h->Next();
 		}
 		m = m->next;
 	}
-}
-
-MemoryProfile::MemoryProfile()
-{
-	heap.Make(*this);
+	m = lempty->next;
+	while(m != lempty) {
+		f.large_empty++;
+		m = m->next;
+	}
 }
 
 #ifdef flagHEAPSTAT
@@ -241,7 +302,7 @@ EXITBLOCK {
 		sum += stat[i];
 	sum += bigstat;
 	int total = 0;
-	VppLog() << Sprintf("Статистика аллокации: (всего аллокаций: %d)\n", sum);
+	VppLog() << Sprintf("Allocation statistics: (total allocations: %d)\n", sum);
 	for(int i = 0; i < 65536; i++)
 		if(stat[i]) {
 			total += stat[i];
@@ -251,11 +312,11 @@ EXITBLOCK {
 	if(bigstat) {
 		total += bigstat;
 		VppLog() << Sprintf(">64KB %8dx %2d%%, total %8dx %2d%%\n",
-		 	                bigstat, 100 * bigstat / sum, total, 100 * total / sum);
+		                    bigstat, 100 * bigstat / sum, total, 100 * total / sum);
 	}
 }
 #endif
 
-END_UPP_NAMESPACE
+}
 
 #endif

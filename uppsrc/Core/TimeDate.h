@@ -18,6 +18,12 @@ struct Date : RelOps< Date, Moveable<Date> > {
 	
 	int      Compare(Date b) const;
 
+	Date& operator++()                   { if(day < 28) day++; else Set(Get() + 1); return *this; }
+	Date& operator--()                   { if(day > 1) day--; else Set(Get() - 1); return *this; }
+
+	Date  operator++(int)                { Date d = *this; operator++(); return d; }
+	Date  operator--(int)                { Date d = *this; operator--(); return d; }
+
 	Date()                               { year = -32768; day = month = 0; }
 	Date(const Nuller&)                  { year = -32768; day = month = 0; }
 	Date(int y, int m, int d)            { day = d; month = m; year = y; }
@@ -31,6 +37,8 @@ inline bool operator==(Date a, Date b) {
 	return a.day == b.day && a.month == b.month && a.year == b.year;
 }
 
+template<> inline bool  IsNull(const Date& d)    { return d.year == -32768; }
+
 bool operator<(Date a, Date b);
 
 int   operator-(Date a, Date b);
@@ -42,7 +50,7 @@ Date& operator-=(Date& a, int b);
 
 bool IsLeapYear(int year);
 
-int  GetDaysOfMonth(int m, int y);
+int  GetDaysOfMonth(int month, int year);
 
 int  DayOfWeek(Date date);
 Date LastDayOfMonth(Date d);
@@ -51,9 +59,15 @@ Date LastDayOfYear(Date d);
 Date FirstDayOfYear(Date d);
 int  DayOfYear(Date d);
 
-
 Date AddMonths(Date date, int months);
+int  GetMonths(Date since, Date till);
+int  GetMonthsP(Date since, Date till);
 Date AddYears(Date date, int years);
+
+Date GetWeekDate(int year, int week);
+int  GetWeek(Date d, int& year);
+
+Date EasterDay(int year);
 
 Date GetSysDate();
 
@@ -66,8 +80,11 @@ void   SetDateFormat(const char *fmt);
 void   SetDateScan(const char *scan);
 void   SetDateFilter(const char *seps);
 
+const char *StrToDate(const char *fmt, Date& d, const char *s, Date def = Null);
 const char *StrToDate(Date& d, const char *s, Date def);
 const char *StrToDate(Date& d, const char *s);
+Date        ScanDate(const char *fmt, const char *s, Date def = Null);
+Date        ScanDate(const char *s, Date def = Null);
 String      Format(Date date);
 int         CharFilterDate(int c);
 
@@ -86,6 +103,8 @@ struct Time : Date, RelOps< Time, Moveable<Time> > {
 
 	void   Set(int64 scalar);
 	int64  Get() const;
+
+	bool   IsValid() const;
 
 	int    Compare(Time b) const;
 
@@ -106,6 +125,8 @@ inline unsigned GetHashValue(Time t) {
 	return t.second +
 		   32 * (t.minute + 32 * (t.hour + 16 * (t.day + 32 * (t.month + 8 * t.year))));
 }
+
+template<> inline bool  IsNull(const Time& t)    { return t.year == -32768; }
 
 bool operator==(Time a, Time b);
 bool operator<(Time a, Time b);
@@ -131,7 +152,21 @@ Time  GetSysTime();
 Time  GetUtcTime();
 
 String Format(Time time, bool seconds = true);
+const char *StrToTime(const char *datefmt, Time& d, const char *s);
 const char *StrToTime(Time& d, const char *s);
+Time        ScanTime(const char *datefmt, const char *s, Time def = Null);
+Time        ScanTime(const char *s, Time def = Null);
 
 template<>
 inline String AsString(const Time& time) { return Format(time); }
+
+bool SetSysTime(Time time); // only root/sysadmin can do this...
+
+int    GetTimeZone();
+String GetTimeZoneText();
+int    ScanTimeZoneText(const char *s);
+int    ScanTimeZone(const char *s);
+
+int   GetLeapSeconds(Date dt);
+int64 GetUTCSeconds(Time tm);
+Time  TimeFromUTC(int64 seconds);

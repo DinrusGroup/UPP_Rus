@@ -25,12 +25,13 @@ inline void WriteLines(String& r, int count)
 		r << '\n';
 }
 
-void ScanLayFile(const char *fn)
+String PreprocessLayFile(const char *fn)
 {
 	LTIMING("Lay file");
 	String s = LoadFile(fn);
 	CParser p(s);
-	String r;
+
+	String r = "using namespace Upp;";
 	try {
 		int line = p.GetLine();
 		if(p.Char('#') && p.Id("ifdef")) {
@@ -42,7 +43,8 @@ void ScanLayFile(const char *fn)
 			line = p.GetLine();
 			p.PassId("LAYOUT");
 			p.PassChar('(');
-			r << "template <class T> struct With" << p.ReadId() << " : public T {"
+			String id = p.ReadId();
+			r << "void SetLayout_" + id + "(); template <class T> struct With" << id << " : public T {"
 			  << "\tstatic Size GetLayoutSize();";
 			LaySkipRest(p);
 			WriteLines(r, p.GetLine() - line);
@@ -52,10 +54,11 @@ void ScanLayFile(const char *fn)
 					p.PassChar('(');
 					if(p.IsId()) {
 						String type = p.ReadIdt();
-						if(strncmp(type, "dv___", 5)) {
+						p.PassChar(',');
+						String name = p.ReadId();
+						if(!name.StartsWith("dv___")) {
 							r << '\t' << type;
-							p.PassChar(',');
-							r << ' ' << p.ReadId() << ";";
+							r << ' ' << name << ";";
 						}
 					}
 				}
@@ -77,7 +80,5 @@ void ScanLayFile(const char *fn)
 	}
 	catch(CParser::Error) {}
 	LDUMP(r);
-	StringStream ss(r);
-	CppBase& base = CodeBase();
-	Parse(ss, IgnoreList(), base, fn, CNULL);
+	return r;
 }

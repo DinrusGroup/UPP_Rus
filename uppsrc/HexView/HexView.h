@@ -3,8 +3,7 @@
 
 #include <CtrlLib/CtrlLib.h>
 
-
-NAMESPACE_UPP
+namespace Upp {
 
 #define LAYOUTFILE <HexView/HexView.lay>
 #include <CtrlCore/lay.h>
@@ -60,12 +59,13 @@ private:
 	void      SetColumns(int x);
 	void      SetInfo(int m);
 	void      Goto();
+	void      RefreshInfo();
 
 public:
 	virtual int Byte(int64 adr);
 
-	Callback1<Bar&>          WhenBar;
-	Callback1<const String&> WhenGoto;
+	Event<Bar&>          WhenBar;
+	Event<const String&> WhenGoto;
 
 	void  ColumnsMenu(Bar& bar);
 	void  CharsetMenu(Bar& bar);
@@ -88,12 +88,13 @@ public:
 	HexView& SetFont(Font fnt);
 	HexView& Charset(byte chrset)     { charset = chrset; Refresh(); return *this; }
 	HexView& FixedColumns(int c = 0)  { fixed = c; Layout(); Refresh(); return *this; }
+	HexView& InfoMode(int m = 1)      { info.SetMode(m); return *this; }
 
 	typedef HexView CLASSNAME;
 
 	HexView();
 };
 
-END_UPP_NAMESPACE
+}
 
 #endif

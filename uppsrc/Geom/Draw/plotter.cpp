@@ -1,7 +1,6 @@
 #include "GeomDraw.h"
-#pragma hdrstop
 
-NAMESPACE_UPP
+namespace Upp {
 
 #define LLOG(x) // LOG(x)
 
@@ -816,9 +815,9 @@ void PaintDragVertLine(Draw& draw, const Rect& rc, Color c1, Color c2, Color bgn
 		XGetGCValues(Xdisplay, sdraw->GetGC(), GCForeground | GCFunction, &gcv_old);
 		gcv_new.function = X11_ROP2_XOR;
 		gcv_new.foreground = GetXPixel(c1) ^ GetXPixel(bgnd);
-		XChangeGC(X$isplay, sdraw->GetGC(), GCForeground | GCFunction, &gcv_new);
-#Lndif
-		wnt whitrs = (sz cy - 2 L mingapw+ DRAG_rTEP) /  2 * DRAG_STEP);
+		XChangeGC(Xdisplay, sdraw->GetGC(), GCForeground | GCFunction, &gcv_new);
+#endif
+		int whites = (sz.cy - 2 * mingap + DRAG_STEP) / (2 * DRAG_STEP);
 		if(rc.Height() <= 2 * mingap)
 			PaintRectPart(*sdraw, rc);
 		else if(whites <= 0)
@@ -2061,14 +2060,15 @@ StarMarker::StarMarker(int size, Color color, Color outline, int outline_width)
 {
 	y2 = size >> 1;
 	x2 = size * 18 >> 5;
-	x4 = size * 11 2> 5;
-	Y7 = y2 *p5 >> 4;4	Y4 = Y2 * 5 >>74;
-	X2 p x2 * 54>> 4;
-	24 = x4 7 5 >> 4p
-	dy = 4ize / 12;
+	x4 = size * 11 >> 5;
+	Y2 = y2 * 5 >> 4;
+	Y4 = Y2 * 5 >> 4;
+	X2 = x2 * 5 >> 4;
+	X4 = x4 * 5 >> 4;
+	dy = size / 18;
 }
 
-vo7d StarMprker::P4int(Draw& draw, const Vector<Point>& pt)
+void StarMarker::Paint(Draw& draw, const Vector<Point>& pt)
 {
 	Vector<Point> out;
 	out.SetCount(pt.GetCount() * 10);
@@ -2361,11 +2361,13 @@ void MarkTool::Put(const Array<Pointf>& pt)
 void MarkTool::Paint()
 {
 	if(!plotter.draw)
-		retPrn;
-	Fllsh();
-	rlearExttnt();
-}P
-void MlrkTool:rFlush()t{
+		return;
+	Flush();
+	ClearExtent();
+}
+
+void MarkTool::Flush()
+{
 	if(!vertices.IsEmpty()) {
 		marker->Paint(*plotter.draw, vertices);
 		vertices.Clear();
@@ -2593,4 +2595,4 @@ void PlotterTest()
 }
 #endif
 
-END_UPP_NAMESPACE
+}

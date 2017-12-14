@@ -5,12 +5,12 @@
 
 #include <openssl/engine.h>
 
-NAMESPACE_UPP
+namespace Upp {
 
 #define LOG_UPP_SSL_MALLOC 0
 
 #if LOG_UPP_SSL_MALLOC
-static int UPP_SSL_alloc = 0;
+static size_t UPP_SSL_alloc = 0;
 #endif
 
 struct SSLInitCls {
@@ -55,10 +55,9 @@ void SSLInitCls::AddThread()
 
 void *SSLAlloc(size_t size)
 {
-	size_t alloc = size + sizeof(int);
-	int *aptr = (int *)MemoryAllocSz(alloc);
-	if(!aptr)
-	{
+	size_t alloc = size + sizeof(size_t);
+	size_t *aptr = (size_t *)MemoryAllocSz(alloc);
+	if(!aptr) {
 #if LOG_UPP_SSL_MALLOC
 		RLOG("UPP_SSL_MALLOC(" << (int)size << ", alloc " << alloc << ") -> failed, total = " << UPP_SSL_alloc);
 #endif
@@ -76,7 +75,7 @@ void SSLFree(void *ptr)
 {
 	if(!ptr)
 		return;
-	int *aptr = (int *)ptr - 1;
+	size_t *aptr = (size_t *)ptr - 1;
 #if LOG_UPP_SSL_MALLOC
 	UPP_SSL_alloc -= *aptr;
 	RLOG("UPP_SSL_FREE(" << ptr << ", alloc " << *aptr << "), total = " << UPP_SSL_alloc);
@@ -88,16 +87,16 @@ void *SSLRealloc(void *ptr, size_t size)
 {
 	if(!ptr)
 		return NULL;
-	int *aptr = (int *)ptr - 1;
-	if((int)(size + sizeof(int)) <= *aptr)
+	size_t *aptr = (size_t *)ptr - 1;
+	if(size + sizeof(size_t) <= *aptr)
 	{
 #if LOG_UPP_SSL_MALLOC
 		RLOG("UPP_SSL_REALLOC(" << ptr << ", " << (int)size << ", alloc " << *aptr << ") -> keep same block");
 #endif
 		return ptr;
 	}
-	size_t newalloc = size + sizeof(int);
-	int *newaptr = (int *)MemoryAllocSz(newalloc);
+	size_t newalloc = size + sizeof(size_t);
+	size_t *newaptr = (size_t *)MemoryAllocSz(newalloc);
 	if(!newaptr)
 	{
 #if LOG_UPP_SSL_MALLOC
@@ -106,7 +105,7 @@ void *SSLRealloc(void *ptr, size_t size)
 		return NULL;
 	}
 	*newaptr++ = newalloc;
-	memcpy(newaptr, ptr, min<int>(*aptr - sizeof(int), size));
+	memcpy(newaptr, ptr, min<size_t>(*aptr - sizeof(size_t), size));
 #if LOG_UPP_SSL_MALLOC
 	UPP_SSL_alloc += newalloc - *aptr;
 	RLOG("UPP_SSL_REALLOC(" << ptr << ", " << (int)size << ", alloc " << newalloc << ") -> "
@@ -115,21 +114,6 @@ void *SSLRealloc(void *ptr, size_t size)
 	MemoryFree(aptr);
 	return newaptr;
 }
-
-/*
-void SSLInit()
-{
-	static bool inited = false;
-	if(!inited)
-	{
-		inited = true;
-		Socket::Init();
-		CRYPTO_set_mem_functions(SSLAlloc, SSLRealloc, SSLFree);
-		SSL_load_error_strings();
-		SSL_library_init();
-	}
-}
-*/
 
 String SSLGetLastError(int& code)
 {
@@ -173,7 +157,7 @@ String SSLBuffer::Get() const
 {
 	if(IsEmpty())
 		return String::GetVoid();
-	return String(buf_mem->data, buf_mem->length);
+	return String(buf_mem->data, (int)buf_mem->length);
 }
 
 bool SSLBuffer::Grow(int length)
@@ -186,9 +170,9 @@ bool SSLBuffer::Set(String d)
 	if(!buf_mem && !Create())
 		return false;
 	int len = d.GetLength();
-	if(buf_mem->max < len && !Grow(len))
+	if((int)buf_mem->max < len && !Grow(len))
 		return false;
-	ASSERT(buf_mem->max >= len);
+	ASSERT((int)buf_mem->max >= len);
 	buf_mem->length = len;
 	memcpy(buf_mem, d, len);
 	return true;
@@ -217,7 +201,7 @@ String SSLStream::GetResult() const
 	BIO_get_mem_ptr(bio, &bm);
 	if(!bm)
 		return String::GetVoid();
-	return String(bm->data, bm->length);
+	return String(bm->data, (int)bm->length);
 }
 
 bool SSLKey::Load(String data)
@@ -368,7 +352,9 @@ public:
 	SSLSocketData(SSLContext& context);
 	virtual ~SSLSocketData();
 
-	bool                            OpenClient(const char *host, int port, bool nodelay, dword *my_addr, int timeout, bool is_blocking);
+	bool                            OpenClientUnsecured(const char *host, int port, bool nodelay, dword *my_addr,
+	                                                    int timeout, bool is_blocking);
+	bool                            Secure();
 	bool                            OpenAccept(SOCKET connection, bool nodelay, bool blocking);
 
 	virtual int                     GetKind() const { return SOCKKIND_SSL; }
@@ -442,7 +428,8 @@ bool SSLSocketData::Peek(int timeout_msec, bool write)
 
 int SSLSocketData::Read(void *buf, int amount)
 {
-	ASSERT(ssl);
+	if(!ssl)
+		return Data::Read(buf, amount);
 	int res = SSL_read(ssl, (char *)buf, amount);
 	if(res == 0) {
 		is_eof = true;
@@ -467,23 +454,28 @@ int SSLSocketData::Read(void *buf, int amount)
 
 int SSLSocketData::Write(const void *buf, int amount)
 {
-	ASSERT(ssl);
+	if(!ssl)
+		return Data::Write(buf, amount);
 	int res = SSL_write(ssl, (const char *)buf, amount);
 	if(res <= 0)
 		SetSSLResError("SSL_write", res);
 	return res;
 }
 
-bool SSLSocketData::OpenClient(const char *host, int port, bool nodelay, dword *my_addr, int timeout, bool blocking)
+bool SSLSocketData::OpenClientUnsecured(const char *host, int port, bool nodelay, dword *my_addr,
+                                        int timeout, bool blocking)
 {
-	if(!Data::OpenClient(host, port, nodelay, my_addr, timeout, /*blocking*/true))
-		return false;
+	return Data::OpenClient(host, port, nodelay, my_addr, timeout, /*blocking*/true);
+}
+
+bool SSLSocketData::Secure()
+{
 	if(!(ssl = SSL_new(ssl_context)))
 	{
 		SetSSLError("OpenClient / SSL_new");
 		return false;
 	}
-	if(!SSL_set_fd(ssl, socket))
+	if(!SSL_set_fd(ssl, (int)socket))
 	{
 		SetSSLError("OpenClient / SSL_set_fd");
 		return false;
@@ -492,7 +484,7 @@ bool SSLSocketData::OpenClient(const char *host, int port, bool nodelay, dword *
 	int res = SSL_connect(ssl);
 	if(res <= 0)
 	{
-		SetSSLResError(NFormat("OpenClient(host=%s, port=%d) / SSL_connect", host, port), res);
+		SetSSLResError("OpenClient / SSL_connect", res);
 		return false;
 	}
 	cert.Set(SSL_get_peer_certificate(ssl));
@@ -507,7 +499,7 @@ bool SSLSocketData::OpenAccept(SOCKET conn, bool nodelay, bool blocking)
 		SetSSLError("Accept / SSL_new");
 		return false;
 	}
-	if(!SSL_set_fd(ssl, socket))
+	if(!SSL_set_fd(ssl, (int)socket))
 	{
 		SetSSLError("Accept / SSL_set_fd");
 		return false;
@@ -531,7 +523,8 @@ bool SSLSocketData::Accept(Socket& socket, dword *ipaddr, bool nodelay, int time
 	One<SSLSocketData> data = new SSLSocketData(ssl_context);
 	if(!data->OpenAccept(connection, nodelay, is_blocking))
 		return false;
-	socket.Attach(-data);
+	One<Data> d(-data);
+	socket.Attach(d);
 	return true;
 }
 
@@ -567,19 +560,46 @@ bool SSLServerSocket(Socket& socket, SSLContext& ssl_context, int port, bool nod
 	One<SSLSocketData> data = new SSLSocketData(ssl_context);
 	if(!data->OpenServer(port, nodelay, listen_count, blocking))
 		return false;
-	socket.Attach(-data);
+	One<Socket::Data> d(-data);
+	socket.Attach(d);
 	return true;
 }
 
-bool SSLClientSocket(Socket& socket, SSLContext& ssl_context, const char *host, int port, bool nodelay, dword *my_addr, int timeout, bool blocking)
+bool SSLClientSocket(Socket& socket, SSLContext& ssl_context, const char *host, int port, bool nodelay,
+                     dword *my_addr, int timeout, bool blocking)
 {
 	One<SSLSocketData> data = new SSLSocketData(ssl_context);
 	if(!data->OpenClient(host, port, nodelay, my_addr, timeout, blocking))
 		return false;
-	socket.Attach(-data);
+	if(!data->Secure())
+		return false;
+	One<Socket::Data> d(-data);
+	socket.Attach(d);
 	return true;
 }
 
-END_UPP_NAMESPACE
+bool SSLClientSocketUnsecured(Socket& socket, SSLContext& ssl_context, const char *host,
+                              int port, bool nodelay, dword *my_addr, int timeout,
+                              bool is_blocking)
+{
+	One<SSLSocketData> data = new SSLSocketData(ssl_context);
+	if(data->OpenClientUnsecured(host, port, nodelay, my_addr, timeout, is_blocking)) {
+		One<Socket::Data> d(-data);
+		socket.Attach(d);
+		return true;
+	}
+	return false;
+}
+
+bool SSLSecureSocket(Socket& socket)
+{
+	SSLSocketData *sd = dynamic_cast<SSLSocketData *>(~socket.data);
+	if(!sd)
+		return false;
+	return sd->Secure();
+}
+
+
+}
 
 #endif//flagNOSSL

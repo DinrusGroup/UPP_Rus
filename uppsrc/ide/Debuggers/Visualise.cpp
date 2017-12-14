@@ -1,6 +1,6 @@
 #include "Debuggers.h"
 
-#ifdef COMPILER_MSC
+#ifdef PLATFORM_WIN32
 
 void Pdb::Visual::Cat(const String& text, Color ink)
 {
@@ -48,15 +48,21 @@ bool IsOk(const String& q)
 	return true;
 }
 
+void Pdb::CatInt(Visual& result, int64 val)
+{
+	result.Cat(IntFormat(val), Red);
+}
+
 void Pdb::Visualise(Visual& result, Pdb::Val val, int expandptr, int slen)
 {
+	DR_LOG("Visualise");
 	const int maxlen = 300;
 	if(result.length > maxlen)
 		return;
 	if(val.ref > 0 || val.type < 0)
 		val = GetRVal(val);
 	if(val.ref > 0) {
-		result.Cat(FormatIntHex(val.address, 0), LtMagenta);
+		result.Cat(Hex(val.address), LtMagenta);
 		if(val.type == UINT1 || val.type == SINT1) {
 			if(Byte(val.address) < 0)
 				result.Cat("??", SColorDisabled);
@@ -79,7 +85,8 @@ void Pdb::Visualise(Visual& result, Pdb::Val val, int expandptr, int slen)
 		return;
 	}
 	if(val.type < 0) {
-		#define RESULTINT(x, type) case x: result.Cat(IntFormat((type)val.ival), Red); break;
+		#define RESULTINT(x, type) case x: CatInt(result, (type)val.ival); break;
+		#define RESULTINTN(x, type, t2) case x:  if(IsNull((t2)val.ival)) result.Cat("Null ", Magenta); CatInt(result, (type)val.ival); break;
 		switch(val.type) {
 		RESULTINT(BOOL1, bool)
 		RESULTINT(UINT1, byte)
@@ -87,14 +94,18 @@ void Pdb::Visualise(Visual& result, Pdb::Val val, int expandptr, int slen)
 		RESULTINT(UINT2, uint16)
 		RESULTINT(SINT2, int16)
 		RESULTINT(UINT4, uint32)
-		RESULTINT(SINT4, int32)
 		RESULTINT(UINT8, uint64)
-		RESULTINT(SINT8, int64)
+		RESULTINTN(SINT4, int32, int)
+		RESULTINTN(SINT8, int64, int64)
 		case DBL:
 		case FLT:
-			result.Cat(FormatDouble(val.fval, 20), Red); break;
+			if(IsNull(val.fval))
+				result.Cat("Null", Magenta);
+			else
+				result.Cat(FormatDouble(val.fval, 20), Red);
+			break;
 		case PFUNC: {
-			result.Cat(FormatIntHex(val.address), Red);
+			result.Cat(Hex(val.address), Red);
 			FnInfo fi = GetFnInfo(val.address);
 			if(!IsNull(fi.name)) {
 				result.Cat("->", SColorMark);
@@ -150,6 +161,12 @@ void Pdb::Visualise(Visual& result, Pdb::Val val, int expandptr, int slen)
 			result.Cat(e, SColorDisabled);
 		}
 	}
+	BaseFields(result, t, val, expandptr, slen, cm, 0);
+	result.Cat(" }", SColorMark);
+}
+
+void Pdb::BaseFields(Visual& result, const Type& t, Pdb::Val val, int expandptr, int slen, bool& cm, int depth)
+{
 	for(int i = 0; i < t.base.GetCount(); i++) {
 		const Val& b = t.base[i];
 		if(b.type >= 0) {
@@ -159,7 +176,7 @@ void Pdb::Visualise(Visual& result, Pdb::Val val, int expandptr, int slen)
 				if(cm)
 					result.Cat(", ");
 				cm = true;
-				if(result.length > maxlen) {
+				if(result.length > 300) {
 					result.Cat("..");
 					break;
 				}
@@ -174,9 +191,10 @@ void Pdb::Visualise(Visual& result, Pdb::Val val, int expandptr, int slen)
 					result.Cat(e, SColorDisabled);
 				}
 			}
+			if(depth < 30)
+				BaseFields(result, t, val, expandptr, slen, cm, depth + 1);
 		}
 	}
-	result.Cat(" }", SColorMark);
 }
 
 Size Pdb::Visual::GetSize() const
@@ -192,10 +210,9 @@ void Pdb::Visualise(Visual& result, Pdb::Val val, int expandptr)
 	int cx = autos.HeaderObject().GetTabWidth(1);
 	int l = 30;
 	int h = 300;
-	for(int i = 0; i < 8; i++) {
+	for(int i = 0; i < 8; i++) { // try to reduce size of strings so that value fits better
 		int slen = (l + h) / 2;
-		result.length = 0;
-		result.part.Clear();
+		result.Clear();
 		Visualise(result, val, expandptr, slen);
 		int x = result.GetSize().cx;
 		if(x < cx)
@@ -204,7 +221,7 @@ void Pdb::Visualise(Visual& result, Pdb::Val val, int expandptr)
 			h = slen;
 		if(l + 1 >= h)
 			break;
-	}	
+	}
 }
 
 Pdb::Visual Pdb::Visualise(Val v)

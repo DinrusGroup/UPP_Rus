@@ -1,6 +1,6 @@
 #include "Web.h"
 
-NAMESPACE_UPP
+namespace Upp {
 
 bool HttpClient_Trace__;
 
@@ -40,24 +40,31 @@ HttpClient::HttpClient(const char *url)
 	URL(url);
 }
 
+HttpClient::~HttpClient()
+{
+}
+
 HttpClient& HttpClient::URL(const char *u)
 {
 	const char *t = u;
-	while(*t && *t != '?')
+	while(*t && *t != '?' && *t != '#')
 		if(*t++ == '/' && *t == '/') {
 			u = ++t;
 			break;
 		}
 	t = u;
-	while(*u && *u != ':' && *u != '/' && *u != '?')
+	while(*u && *u != ':' && *u != '/' && *u != '?' && *u != '#')
 		u++;
-	if(*u == '?' && u[1])
+	if(strchr(u, '?'))
 		hasurlvar = true;
 	host = String(t, u);
 	port = 0;
 	if(*u == ':')
 		port = ScanInt(u + 1, &u);
 	path = u;
+	int q = path.Find('#');
+	if(q >= 0)
+		path.Trim(q);
 	return *this;
 }
 
@@ -168,7 +175,7 @@ String HttpClient::CalculateDigest(String authenticate) const
 	hv1 << username << ':' << realm << ':' << password;
 	String ha1 = MD5String(hv1);
 	hv2 << (method == METHOD_GET ? "GET" : method == METHOD_PUT ? "PUT" : method == METHOD_POST ? "POST" : "READ")
-	<< ':' << path;
+	<< ':' << UrlEncode(path);
 	String ha2 = MD5String(hv2);
 	int nc = 1;
 	String cnonce = FormatIntHex(Random(), 8);
@@ -213,7 +220,7 @@ String HttpClient::Execute(Gate2<int, int> progress)
 	if(socket.IsOpen() && IsError())
 		Close();
 	error = Null;
-	bool use_proxy = !IsNull(proxy_host);
+	use_proxy = !IsNull(proxy_host);
 	socket_host = (use_proxy ? proxy_host : host);
 	socket_port = (use_proxy ? proxy_port : port);
 
@@ -247,14 +254,14 @@ String HttpClient::Execute(Gate2<int, int> progress)
 			if(IsNull(ctype))
 				ctype = "application/x-www-form-urlencoded";
 			break;
-      case METHOD_HEAD: request << "HEAD "; break;
+		case METHOD_HEAD: request << "HEAD "; break;
 		default: NEVER(); // invalid method
 	}
 	String host_port = host;
 	if(port)
 		host_port << ':' << port;
 	String url;
-	url << "http://" << host_port << Nvl(path, "/");
+	url << (IsSecure() ? "https://" : "http://") << host_port << Nvl(path, "/");
 	if(use_proxy)
 		request << url;
 	else
@@ -285,7 +292,7 @@ String HttpClient::Execute(Gate2<int, int> progress)
 	LLOG("host = " << host << ", port = " << port);
 	LLOG("request: " << request);
 	int written = 0;
-	while(msecs() < end_time) {
+	while(msecs() - end_time < 0) {
 		int nwrite = socket.WriteWait(request.GetIter(written), min(request.GetLength() - written, 1000), 1000);
 		if(socket.IsError()) {
 			error = Socket::GetErrorText();
@@ -420,7 +427,8 @@ String HttpClient::Execute(Gate2<int, int> progress)
 		return String::GetVoid();
 	}
 	String chunked;
-	String body;
+	body.Clear();
+
 	while(body.GetLength() < content_length || content_length < 0 || tc_chunked) {
 		if(msecs(end_time) >= 0) {
 			error = NFormat(t_("%s:%d: timed out when receiving server response"), host, port);
@@ -584,6 +592,11 @@ bool HttpClient::CreateClientSocket()
 	return true;
 }
 
+bool HttpClient::IsSecure()
+{
+	return false;
+}
+
 String HttpClientGet(String url, String proxy, String username, String password,
 	String *server_headers, String *error, Gate2<int, int> progress,
 	int timeout, int num_redirect, int retries)
@@ -621,4 +634,4 @@ String HttpClientGet(String url, String *server_headers, String *error,
 	return HttpClientGet(url, Null, Null, Null, server_headers, error, progress, timeout, max_redirect, retries);
 }
 
-END_UPP_NAMESPACE
+}

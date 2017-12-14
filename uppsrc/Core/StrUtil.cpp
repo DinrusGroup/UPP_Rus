@@ -1,6 +1,6 @@
-#include <Core/Core.h>
+#include "Core.h"
 
-NAMESPACE_UPP
+namespace Upp {
 
 int wstrlen(const wchar *s)
 {
@@ -66,6 +66,16 @@ int CharFilterNotWhitespace(int c)
 int CharFilterAlpha(int c)
 {
 	return IsAlpha(c) ? c : 0;
+}
+
+int CharFilterToUpper(int c)
+{
+	return ToUpper(c);
+}
+
+int CharFilterToLower(int c)
+{
+	return ToLower(c);
 }
 
 int CharFilterAlphaToUpper(int c)
@@ -135,4 +145,4 @@ WString FilterWhile(const wchar *s, int (*filter)(int))
 	return result;
 }
 
-END_UPP_NAMESPACE
+}

@@ -3,20 +3,25 @@ description "Image designer\377";
 uses
 	CtrlLib,
 	plugin\gif,
-	plugin\jpg;
+	plugin\jpg,
+	Painter,
+	RichEdit;
 
 file
-	IconDes.h,
+	IconDes.h options(BUILDER_OPTION) PCH,
 	IconDes.key,
+	IconDraw.cpp,
 	AlphaCtrl.cpp,
 	RGBACtrl.cpp,
-	ImageOp.cpp optimize_speed,
+	ImageOp.cpp,
 	Paint.cpp,
 	Event.cpp,
-	Fast.cpp optimize_speed,
+	Fast.cpp,
 	IconDes.cpp,
 	List.cpp,
 	Image.cpp,
+	Smoothen.cpp,
+	Text.cpp,
 	Bar.cpp,
 	EditPos.cpp,
 	ImlFile.cpp,

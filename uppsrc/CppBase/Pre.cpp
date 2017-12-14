@@ -1,53 +1,12 @@
 #include "CppBase.h"
 
-NAMESPACE_UPP
+namespace Upp {
 
 #ifdef _MSC_VER
 #pragma inline_depth(255)
 #pragma optimize("t", on)
 #endif
 
-static StaticMutex   cpp_file_mutex;
-static Index<String> cpp_file;
-
-int GetCppFileIndex(const String& path)
-{
-	INTERLOCKED_(cpp_file_mutex) {
-		return cpp_file.FindAdd(path);
-	}
-	return -1;
-}
-
-const String& GetCppFile(int i)
-{
-	INTERLOCKED_(cpp_file_mutex) {
-		return cpp_file[i];
-	}
-	static String x;
-	return x;
-}
-/*
-void  CppPos::Serialize(Stream& s)
-{
-	s % impl % line;
-	String fn = GetCppFile(file);
-	s % fn;
-	file = GetCppFileIndex(fn);
-}
-
-String SSpaces(const char *txt)
-{
-	StringBuffer r;
-	while(*txt)
-		if(*txt == ' ') {
-			while((byte)*txt <= ' ' && *txt) txt++;
-			r.Cat(' ');
-		}
-		else
-			r.Cat(*txt++);
-	return r;
-}
-*/
 void SLPos(SrcFile& res)
 {
 	res.linepos.Add(res.text.GetLength());
@@ -60,12 +19,14 @@ SrcFile::SrcFile() :
 {
 }
 
-SrcFile PreProcess(Stream& in)
+SrcFile PreProcess(Stream& in, Parser& parser) // This is not really C preprocess, only removes (or processes) comment and directives
 {
 	SrcFile res;
 	bool include = true;
+	int lineno = 0;
 	while(!in.IsEof()) {
 		String ln = in.GetLine();
+		lineno++;
 		SLPos(res);
 		while(*ln.Last() == '\\') {
 			ln.Trim(ln.GetLength() - 1);
@@ -74,21 +35,38 @@ SrcFile PreProcess(Stream& in)
 		}
 		const char *rm = ln;
 		if(IsAlNum(*rm)) {
-			const char *s = ln.Last();
-			while(s > rm && *s == ' ') s--;
-			if(*s != ':')
+			const char *s = ln;
+			bool islbl = false;
+			bool wassemi = false;
+			while(*s && iscid(*s) || findarg(*s, '\t', ' ', ':') >= 0) { // check for label, labeled lines are not grounded
+				if(*s == ':' && !wassemi) {
+					islbl = true;
+					wassemi = true; // second ':' cancels label
+				}
+				else
+				if(*s != '\t' && *s != ' ')
+					islbl = false; // something was after the label, e.g. void Foo::Bar()
+				s++;
+			}
+			if(!islbl)
 				res.text << '\2';
 		}
+		else
+		if(*rm == '\x1f') // line started with macro
+			res.text << '\2';
 		while(*rm == ' ' || *rm == '\t') rm++;
 		if(*rm == '\0')
 			res.blankLinesRemoved++;
 		else
 		if(*rm == '#')
 		{
-			if(rm[1] == 'd' && rm[2] == 'e' && rm[3] == 'f' &&
-			   rm[4] == 'i' && rm[5] == 'n' && rm[6] == 'e' && !iscid(rm[7])) {
-				const char *s = rm + 8;
-				while(*s == ' ') s++;
+			const char *s = rm + 1;
+			while(*s == ' ' || *s == '\t')
+				s++;
+			if(s[0] == 'd' && s[1] == 'e' && s[2] == 'f' &&
+			   s[3] == 'i' && s[4] == 'n' && s[5] == 'e' && !iscid(s[6])) {
+				s += 6;
+				while(*s == ' ' || *s == '\t') s++;
 				String macro;
 				while(iscid(*s))
 					macro.Cat(*s++);
@@ -97,9 +75,8 @@ SrcFile PreProcess(Stream& in)
 						macro.Cat(*s++);
 					macro << ')';
 				}
-//				res.text << '#' << AsCString(SSpaces(macro));
 				if(include)
-					res.text << '#' << AsCString(macro);
+					parser.AddMacro(lineno, macro);
 			}
 			res.preprocessorLinesRemoved++;
 		}
@@ -189,7 +166,7 @@ SrcFile PreProcess(Stream& in)
 				res.commentLinesRemoved++;
 		}
 	}
-	return res;
+	return pick(res);
 }
 
-END_UPP_NAMESPACE
+}

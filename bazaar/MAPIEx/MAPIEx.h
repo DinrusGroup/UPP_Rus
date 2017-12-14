@@ -2,10 +2,11 @@
 #define __MAPIEX_H__
 
 #include <Core/Core.h>
+#include <Functions4U/Functions4U.h>
 
 using namespace Upp;
-
-#define CY tagCY
+//#undef CY
+//#define CY tagCY
 
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -23,16 +24,36 @@ using namespace Upp;
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 // Ported to U++ Framework by Koldo. See License.txt file
+#ifdef _WIN32
 
 #ifdef _WIN32_WCE
 #include <cemapi.h>
 #include <objidl.h>
 #else
+#undef __MINGW_EXTENSION
+	#if defined(__GNUC__) || defined(__GNUG__)
+		#define __MINGW_EXTENSION       __extension__
+	#else
+		#define __MINGW_EXTENSION
+	#endif
+	#define _FILETIME_
+	#define _tagCY_DEFINED
+	#define CY tagCY
+	#ifndef __LP64__        /* 32 bit target, 64 bit Mingw target */ 
+		#define __LONG32 long 
+	#else                   /* 64 bit Cygwin target */ 
+		#define __LONG32 int 
+	#endif 
+	#ifndef __C89_NAMELESS 
+		#define __C89_NAMELESS __MINGW_EXTENSION 
+	#endif 
 #include <mapix.h>
+#include <wabutil.h>
 #include <objbase.h>
+#include <imessage.h>
 #endif
 
-#define RELEASE(s) if(s!=NULL) { s->Release();s=NULL; }
+#define RELEASE(s) if(s != NULL) {s->Release(); s=NULL;}
 
 #define MAPI_NO_CACHE ((ULONG)0x00000200)
 
@@ -42,6 +63,12 @@ using namespace Upp;
 #include "MAPIAppointment.h"
 #include "MAPIFolder.h"
 #include "MAPIAttachment.h"
+
+#if defined(COMPILER_MINGW)
+#define ULONG_PTR2 ULONG
+#else
+#define ULONG_PTR2 ULONG_PTR
+#endif
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // MAPIEx
@@ -60,7 +87,7 @@ protected:
 	IMAPISession* m_pSession;
 	LPMDB m_pMsgStore;
 	ULONG m_ulMDBFlags;
-	ULONG m_sink;
+	ULONG_PTR2 m_sink;
 
 // Operations
 public:
@@ -118,6 +145,7 @@ protected:
 	ULONG GetMessageStoreSupport();
 	
 	bool OpenFolder(unsigned long ulFolderID, MAPIFolder &folder);
+public:	////////
 	static String ValidateString(LPCTSTR s);
 	IMAPISession* GetSession() 	{return m_pSession;}
 	LPMDB GetMessageStore() 	{return m_pMsgStore;}
@@ -168,6 +196,25 @@ protected:
 
 #ifndef MAPI_NO_COINIT
 #define MAPI_NO_COINIT 0x8
+#endif
+
+
+class MAPIFunctions {
+public:	
+	MAPIFunctions();
+	const void (*CloseIMsgSession)(LPMSGSESS lpMsgSess);
+	const void (*FreePadrlist)(LPADRLIST lpAdrlist);
+	const LPMALLOC (*MAPIGetDefaultMalloc)(VOID);
+	const SCODE (*OpenIMsgSession)(LPMALLOC lpMalloc,ULONG ulFlags,LPMSGSESS *lppMsgSess);
+	const SCODE (*OpenIMsgOnIStg)(LPMSGSESS lpMsgSess,LPALLOCATEBUFFER lpAllocateBuffer,LPALLOCATEMORE lpAllocateMore,LPFREEBUFFER lpFreeBuffer,LPMALLOC lpMalloc,LPVOID lpMapiSup,LPSTORAGE lpStg,MSGCALLRELEASE *lpfMsgCallRelease,ULONG ulCallerData,ULONG ulFlags,LPMESSAGE *lppMsg);
+	const LPSPropValue (*PpropFindProp)(LPSPropValue lpPropArray,ULONG cValues,ULONG ulPropTag);
+	
+private:
+	Dl dll;
+};
+
+MAPIFunctions &MF();
+	
 #endif
 
 #endif

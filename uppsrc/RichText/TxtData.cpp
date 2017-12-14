@@ -1,13 +1,12 @@
 #include "RichText.h"
 
-NAMESPACE_UPP
+namespace Upp {
 
 void RichTxt::Para::Invalidate()
 {
 	INTERLOCKED {
 		static int64 ss;
 		updateserial = ++ss;
-		dirty.Invalidate();
 		ccx = -1;
 	}
 }
@@ -38,7 +37,6 @@ void RichTxt::Invalidate()
 {
 	length = -1;
 	tabcount = -1;
-	py.Clear();
 }
 
 int RichTxt::GetPartLength(int pi) const
@@ -86,7 +84,7 @@ void RichTxt::SetRefresh(int parti)
 				r_paraocy = Sum(pp.linecy, 0) + pp.before + pp.after;
 				r_keep = pp.keep;
 				r_keepnext = pp.keepnext;
-				r_newpage = pp.newpage;
+				r_newpage = pp.newpage || pp.header_qtf.GetCount() || pp.footer_qtf.GetCount();
 				break;
 			}
 			else
@@ -159,10 +157,10 @@ void RichTxt::RemovePart(int parti)
 	Invalidate();
 }
 
-void RichTxt::SetPick(int i, pick_ RichTable& p)
+void RichTxt::SetPick(int i, RichTable&& p)
 {
 	const_cast<RichTable&>(p).Normalize();
-	part.At(i).Create<RichTable>() = p;
+	part.At(i).Create<RichTable>() = pick(p);
 	Invalidate();
 	SetRefresh(i);
 }
@@ -219,19 +217,20 @@ int RichTxt::ComputeLength() const
 }
 
 int RichTxt::GetLength() const
-{
+{ // expects int to be atomic, worst 'race' is that it gets computed more times...
 	if(length < 0)
 		length = ComputeLength();
 	return length;
 }
 
 int  RichTxt::GetTableCount() const
-{
+{ // expects int to be atomic, worst 'race' is that it gets computed more times...
 	if(tabcount < 0) {
-		tabcount = 0;
+		int n = 0;
 		for(int i = 0; i < part.GetCount(); i++)
 			if(IsTable(i))
-				tabcount += GetTable(i).GetTableCount() + 1;
+				n += GetTable(i).GetTableCount() + 1;
+		tabcount = n;
 	}
 	return tabcount;
 }
@@ -320,7 +319,7 @@ void RichTxt::GetRichPos(int pos, RichPos& rp, int ti, int maxlevel, const RichS
 				rp.parai = i;
 				rp.partcount = part.GetCount();
 				rp.paralen = l - 1;
-				Get(i, st).GetRichPos(rp, pos);
+				Get(i, st, true).GetRichPos(rp, pos);
 				return;
 			}
 		}
@@ -437,6 +436,7 @@ void RichTxt::Init()
 {
 	r_type = ALL;
 	r_parti = 0;
+	r_paraocx = r_paraocy = -1;	
 	tabcount = length = 0;
 }
 
@@ -457,7 +457,6 @@ RichTxt::RichTxt(const RichTxt& src, int)
 	part <<= src.part;
 	length = src.length;
 	tabcount = src.tabcount;
-	py.Clear();
 }
 
 #ifdef _DEBUG
@@ -498,4 +497,4 @@ String RichCellPos::ToString() const
 
 #endif
 
-END_UPP_NAMESPACE
+}

@@ -1,6 +1,6 @@
 #include "Core.h"
 
-NAMESPACE_UPP
+namespace Upp {
 
 /* 
    A C-program for MT19937, with initialization improved 2002/1/26.
@@ -58,7 +58,11 @@ struct MTrand {
 	dword mt[N];
 	int   mti;         /* mti==N+1 means mt[N] is not initialized */
 	dword mag01[2];
+#ifdef PLATFORM_POSIX
+	int   pid;
+#endif
 	
+	void seed();
 	void init_genrand(dword s);
 	void init_by_array(dword *init_key, int key_length);
 	dword genrand();
@@ -158,11 +162,23 @@ MTrand::MTrand()
 	mti = N + 1;
 	mag01[0] = 0;
 	mag01[1] = MATRIX_A;
+	seed();
+#ifdef PLATFORM_POSIX
+	pid = getpid();
+#endif
+}
+
+void MTrand::seed()
+{
 	dword seed[1024];
 #ifdef PLATFORM_POSIX
 	int fd = open("/dev/urandom", O_RDONLY);
-	read(fd, seed, sizeof(seed));
-	close(fd);
+	if(fd != -1) {
+		IGNORE_RESULT(
+			read(fd, seed, sizeof(seed))
+		);		
+		close(fd);
+	}
 #else
 	for(int i = 0; i < 1024; i++) {
 		Uuid uuid;
@@ -182,16 +198,38 @@ thread__ MTrand *sRng;
 thread__ byte    sRb[sizeof(MTrand)];
 #endif
 
+void SeedRandom(dword *seed, int len){
+	if(!sRng) {
+		sRng = new(sRb) MTrand;
+	}
+	sRng->init_by_array(seed, len);
+}
+
+void SeedRandom(dword seed){
+	if(!sRng) {
+		sRng = new(sRb) MTrand;
+	}
+	sRng->init_genrand(seed);
+}
+
 dword Random()
 {
 	if(!sRng) {
 		sRng = new(sRb) MTrand;
 	}
+#ifdef PLATFORM_POSIX // Be fork safe...
+	int pid = getpid();
+	if(sRng->pid != pid) {
+		sRng->seed();
+		sRng->pid = pid;
+	}
+#endif
 	return sRng->genrand();
 }
 
 dword Random(dword n)
 {
+	ASSERT(n);
 	dword mask = n;
 	mask |= mask >> 1;
 	mask |= mask >> 2;
@@ -206,4 +244,27 @@ dword Random(dword n)
 	return r;
 }
 
-END_UPP_NAMESPACE
+qword Random64()
+{
+	return MAKEQWORD(Random(), Random());
+}
+
+qword Random64(qword n)
+{
+	qword mask = n, r;
+	mask |= mask >> 1;	mask |= mask >> 2;
+	mask |= mask >> 4;	mask |= mask >> 8;
+	mask |= mask >> 16;	mask |= mask >> 32;
+
+	do
+		r = Random64() & mask;
+	while(r >= n);
+	return r;
+}
+
+double Randomf()
+{
+	return Random64(I64(4503599627370496)) / 4503599627370496.0;
+}
+
+}

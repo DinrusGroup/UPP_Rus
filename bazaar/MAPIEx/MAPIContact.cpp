@@ -1,3 +1,5 @@
+#ifdef _WIN32
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //
 // File: MAPIContact.cpp
@@ -14,9 +16,10 @@
 
 // Ported to U++ Framework by Koldo. See License.txt file
 
-#include <MapiUtil.h>
 #include "MAPIEx.h"
-String Tokenize(const String &str, const String &token, int &pos);
+
+#include <Functions4U/Functions4U.h>
+
 
 #define CATEGORIES_PROPERTY "Keywords"
 
@@ -640,13 +643,14 @@ bool MAPIContact::SetCategories(const String &szCategories) {
 	return SetPropertyString(OUTLOOK_CATEGORIES, szCategories);
 #else
 	String strCategories = szCategories;
-	int nCount = 0, nIndex = 0;
+	int nCount = 0;
 	if (!strCategories.IsEmpty())
 		nCount++;
-	String strCategory = Tokenize(strCategories, ";", nIndex);
-	while(strCategory.IsEmpty()) {
+	int nIndex = 0;
+	String strCategory = Tokenize2(strCategories, ";", nIndex);
+	while(strCategory.IsEmpty() && !IsNull(nIndex)) {
 		nCount++;
-		strCategory = Tokenize(strCategories, ";", nIndex);
+		strCategory = Tokenize2(strCategories, ";", nIndex);
 	}
 
 	HRESULT hr = E_FAIL;
@@ -659,16 +663,16 @@ bool MAPIContact::SetCategories(const String &szCategories) {
 		nCount = 0;
 		nIndex = 0;
 		int nLen = 0;
-		strCategory=Tokenize(strCategories, ";", nIndex);		
+		strCategory = Tokenize2(strCategories, ";", nIndex);		
 		do {
 			nLen = strCategory.GetLength();
 			if(nLen > 0) {
 				arCategories[nCount] = new TCHAR[nLen+1];
 				memcpy(arCategories[nCount], (LPCTSTR)strCategory, nLen*sizeof(TCHAR));
 				arCategories[nCount++][nLen] = (TCHAR)0;
-				strCategory=Tokenize(strCategories, ";", nIndex);		
+				strCategory = Tokenize2(strCategories, ";", nIndex);		
 			}
-		} while(nLen);
+		} while(nLen && !IsNull(nIndex));
 
 		LPSPropValue pProp;
 		if(SetNamedMVProperty(CATEGORIES_PROPERTY, (LPCTSTR*)arCategories, nCount, pProp)) {
@@ -676,7 +680,7 @@ bool MAPIContact::SetCategories(const String &szCategories) {
 			MAPIFreeBuffer(pProp);
 		}
 
-		for(nIndex=0;nIndex<nCount;nIndex++) 
+		for(nIndex=0; nIndex < nCount; nIndex++) 
 			delete [] arCategories[nIndex];
 		delete [] arCategories;
 	}
@@ -711,3 +715,5 @@ bool MAPIContact::SetPicture(const String &szPath) {
 	return bPicture;
 #endif
 }
+
+#endif

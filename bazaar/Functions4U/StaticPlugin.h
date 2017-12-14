@@ -1,6 +1,8 @@
 #ifndef _Functions4U_StaticPlugin_h_
 #define _Functions4U_StaticPlugin_h_
 
+NAMESPACE_UPP
+
 #define PluginRegister(a, b, c)	 	a::Register<b>(c, typeid(a).name())
 #define PluginInit(a, b)			(a)._Init(b, typeid(a).name())
 
@@ -11,8 +13,8 @@ private:
 	String type;
 	void *instance;
 	
-	template <class T> static void *New() 			{return new T;};
-	template <class T> static void Delete(void *p) 	{delete static_cast<T *>(p);};
+	template <class T> static void *New() 			{return new T;}
+	template <class T> static void Delete(void *p) 	{delete static_cast<T *>(p);}
 
 protected:
 	inline void *GetData() {return data;};
@@ -45,7 +47,7 @@ public:
 	bool _Init(const char *_name, const char *_type);
 	//bool Init(const char *_name);
 	#if defined(__MINGW32__)
-		__attribute__ ((deprecated));
+		__attribute__ ((deprecated))
 	#else
 		;
 	#endif
@@ -54,5 +56,6 @@ public:
 	String &GetName() {return name;};
 };
 
+END_UPP_NAMESPACE
 
 #endif

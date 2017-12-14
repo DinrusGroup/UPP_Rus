@@ -2,10 +2,10 @@
 
 #ifdef GUI_X11
 
-NAMESPACE_UPP
+namespace Upp {
 
 #define LTIMING(x)
-#define LLOG(x)
+#define LLOG(x)    // DLOG(x)
 
 int    gtk_antialias = -1;
 int    gtk_hinting = -1;
@@ -17,15 +17,14 @@ XftFont *CreateXftFont(Font font, int angle)
 	LTIMING("CreateXftFont");
 	XftFont *xftfont;
 	double sina, cosa;
-	Std(font);
 	int hg = abs(font.GetHeight());
 	if(hg == 0) hg = max(GetStdFontCy(), 10);
 	String face = font.GetFaceName();
 	FcPattern *p = FcPatternCreate();
 	FcPatternAddString(p, FC_FAMILY, (FcChar8*)~face);
-	FcPatternAddInteger(p, FC_SLANT, font.IsItalic() ? 110 : 0);
+	FcPatternAddInteger(p, FC_SLANT, font.IsItalic() ? FC_SLANT_ITALIC : FC_SLANT_ROMAN);
 	FcPatternAddInteger(p, FC_PIXEL_SIZE, hg);
-	FcPatternAddInteger(p, FC_WEIGHT, font.IsBold() ? 200 : 100);
+	FcPatternAddInteger(p, FC_WEIGHT, font.IsBold() ? FC_WEIGHT_BOLD : FC_WEIGHT_NORMAL);
 	FcPatternAddBool(p, FC_MINSPACE, 1);
 	if(angle) {
 		FcMatrix mx;
@@ -72,13 +71,8 @@ struct XftEntry {
 	XftFont *xftfont;
 };
 
-XftFont *GetXftFont(Font fnt, int angle)
+XftFont *GetXftFont(XftEntry *cache, Font fnt, int angle)
 {
-	static XftEntry cache[FONTCACHE];
-	ONCELOCK {
-		for(int i = 0; i < FONTCACHE; i++)
-			cache[i].font.Height(-30000);
-	}
 	XftEntry be;
 	be = cache[0];
 	for(int i = 0; i < FONTCACHE; i++) {
@@ -102,11 +96,22 @@ XftFont *GetXftFont(Font fnt, int angle)
 	return be.xftfont;
 }
 
+XftFont *GetXftMetricFont(Font fnt, int angle)
+{ // Using different global cache for metrics to avoid MT locking issues
+	static XftEntry cache[FONTCACHE];
+	ONCELOCK {
+		for(int i = 0; i < FONTCACHE; i++)
+			cache[i].font.Height(-30000);
+	}
+	Std(fnt);
+	return GetXftFont(cache, fnt, angle);
+}
+
 CommonFontInfo XftGetFontInfoSys(Font font)
 {
 	CommonFontInfo fi;
 	String path;
-	XftFont *xftfont = GetXftFont(font, 0);
+	XftFont *xftfont = GetXftMetricFont(font, 0);
 	if(xftfont) {
 		fi.ascent = (int16)xftfont->ascent;
 		fi.descent = (int16)xftfont->descent;
@@ -132,7 +137,7 @@ GlyphInfo XftGetGlyphInfoSys(Font font, int chr)
 {
 	wchar h = chr;
 	XGlyphInfo info;
-	XftTextExtents16(Xdisplay, GetXftFont(font, 0), &h, 1, &info);
+	XftTextExtents16(Xdisplay, GetXftMetricFont(font, 0), &h, 1, &info);
 	GlyphInfo gi;
 	gi.width = info.xOff;
 	gi.lspc = -info.x;
@@ -141,10 +146,12 @@ GlyphInfo XftGetGlyphInfoSys(Font font, int chr)
 }
 
 INITBLOCK {
-//	extern FT_Face (*FTFaceXft)(Font fnt, String *rpath);
+	// it is probably not quite required as Xft is based on FC, but to be sure to have 
+	// consistent metrics hook Xft metrics into Draw/FontFc.cpp
+
 	extern CommonFontInfo (*GetFontInfoSysXft)(Font font);
 	extern GlyphInfo (*GetGlyphInfoSysXft)(Font font, int chr);
-//	FTFaceXft = XftFTFace;
+
 	GetFontInfoSysXft = XftGetFontInfoSys;
 	GetGlyphInfoSysXft = XftGetGlyphInfoSys;
 }
@@ -164,9 +171,17 @@ void SystemDraw::DrawTextOp(int x, int y, int angle, const wchar *text, Font fon
 	c.color.blue = ink.GetB() << 8;
 	c.color.alpha = 0xffff;
 	c.pixel = GetXPixel(ink.GetR(), ink.GetG(), ink.GetB());
-	XftFont *xftfont = GetXftFont(font, angle);
+
+	static XftEntry cache[FONTCACHE];
+	ONCELOCK {
+		for(int i = 0; i < FONTCACHE; i++)
+			cache[i].font.Height(-30000);
+	}
+	font.RealizeStd();
+	XftFont *xftfont = GetXftFont(cache, font, angle);
+	
 	Size offset = Point(0, 0);
-	double sina, cosa;
+	double sina = 0, cosa = 1;
 	int ascent = font.Info().GetAscent();
 	if(angle) {
 		SinCos(angle, sina, cosa);
@@ -185,7 +200,7 @@ void SystemDraw::DrawTextOp(int x, int y, int angle, const wchar *text, Font fon
 			                int(ox + xpos * cosa + offset.cx),
 			                int(oy - xpos * sina + offset.cy),
 			                (FcChar16 *)&h, 1);
-			xpos += dx ? dx[i] : lastFont[text[i]];
+			xpos += dx ? dx[i] : font[text[i]];
 		}
 		if(font.IsUnderline() || font.IsStrikeout()) {
 			x += offset.cx;
@@ -213,20 +228,20 @@ void SystemDraw::DrawTextOp(int x, int y, int angle, const wchar *text, Font fon
 		}
 	}
 	else {
-		if(dx) {
+	//	if(dx) {
 			int xpos = ox;
 			Buffer<XftCharSpec> ch(n);
 			for(int i = 0; i < n; i++) {
 				ch[i].ucs4 = text[i];
 				ch[i].x = xpos;
 				ch[i].y = oy + ascent;
-				xpos += dx[i];
+				xpos += dx ? dx[i] : font[text[i]];
 			}
 			XftDrawCharSpec(xftdraw, &c, xftfont, ch, n);
-		}
-		else
-			XftDrawString16(xftdraw, &c, xftfont, ox, oy + ascent,
-			                (FcChar16 *)text, n);
+	//	}
+	//	else
+	//		XftDrawString16(xftdraw, &c, xftfont, ox, oy + ascent,
+	//		                (FcChar16 *)text, n);
 		LLOG("XftColor: r=" << c.color.red << ", g=" << c.color.green << ", b=" << c.color.blue
 			 << ", alpha=" << c.color.alpha << ", pixel=" << FormatIntHex(c.pixel));
 		if(font.IsUnderline() || font.IsStrikeout()) {
@@ -234,7 +249,7 @@ void SystemDraw::DrawTextOp(int x, int y, int angle, const wchar *text, Font fon
 			if(dx && n > 0) {
 				cx = 0;
 				Sum(cx, dx, dx + n - 1);
-				cx += lastFont[text[n - 1]];
+				cx += font[text[n - 1]];
 			}
 			else
 				cx = GetTextSize(text, font, n).cx;
@@ -246,6 +261,6 @@ void SystemDraw::DrawTextOp(int x, int y, int angle, const wchar *text, Font fon
 	}
 }
 
-END_UPP_NAMESPACE
+}
 
 #endif

@@ -46,23 +46,23 @@ struct Converter : TopWindow
 
 	Converter()
 	{
-		Title("Конвертер");
+		Title("Converter");
 		Size sz = metric.GetLayoutSize();
 		SetRect(0, 0, metric.GetSize().cx, metric.GetSize().cy * 2);
 		Add(metric.HSizePos().TopPos(0, sz.cy));
 		Add(us.HSizePos().BottomPos(0, sz.cy));
 
-		metric.title = "Метрические единицы";
-		metric.unit.Add(0.01, "Сантиметры");
-		metric.unit.Add(1.0, "Метры");
-		metric.unit.Add(1000.0, "Километры");
+		metric.title = "Metric units";
+		metric.unit.Add(0.01, "Centimeters");
+		metric.unit.Add(1.0, "Meters");
+		metric.unit.Add(1000.0, "Kilometers");
 		metric.unit <<= 1.0;
 
-		us.title = "Единицы США";
-		us.unit.Add(0.0254, "Дюймы");
-		us.unit.Add(0.305, "Футы");
-		us.unit.Add(0.914, "Ярды");
-		us.unit.Add(1613.0, "Мили");
+		us.title = "U.S. units";
+		us.unit.Add(0.0254, "Inches");
+		us.unit.Add(0.305, "Feet");
+		us.unit.Add(0.914, "Yards");
+		us.unit.Add(1613.0, "Miles");
 		us.unit <<= 0.305;
 
 		us.slave = &metric;

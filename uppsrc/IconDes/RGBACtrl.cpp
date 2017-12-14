@@ -1,6 +1,6 @@
 #include "IconDes.h"
 
-NAMESPACE_UPP
+namespace Upp {
 
 Color s_stdcolor[] = {
 	Black,
@@ -156,6 +156,16 @@ RGBA RGBACtrl::Get() const
 	return c;
 }
 
+Color RGBACtrl::GetColor() const
+{
+	return color;
+}
+
+int RGBACtrl::GetAlpha() const
+{
+	return alpha.Get();
+}
+
 void RGBACtrl::Mask(bool b)
 {
 	alpha.Mask(b);
@@ -181,11 +191,11 @@ RGBACtrl::RGBACtrl()
 	ramp <<= THISBACK(Ramp);
 	Add(alpha);
 	alpha <<= THISBACK(Alpha);
-	text.SetFont(Courier(11));
+	text.SetFont(CourierZ(11));
 	text.NoWantFocus();
 	text.SetReadOnly();
 	Add(text);
 	SyncText();
 }
 
-END_UPP_NAMESPACE
+}

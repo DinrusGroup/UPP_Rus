@@ -39,6 +39,9 @@ struct PackageTemplate {
 	bool                main, sub;
 	Array<TemplateItem> item;
 	Array<FileTemplate> file;
+	
+	rval_default(PackageTemplate);
+	PackageTemplate() {}
 };
 
 struct AppPreview : Ctrl {
@@ -69,9 +72,9 @@ struct TemplateDlg : public WithNewPackageLayout<TopWindow> {
 
 	Array<PackageTemplate> pt;
 
-	Array<Label>  label;
-	Array<Ctrl>   ctrl;
-	DelayCallback delay;
+	Array<Label>   label;
+	Array<Ctrl>    ctrl;
+	DelayCallback  delay;
 
 	const PackageTemplate& ActualTemplate();
 
@@ -93,6 +96,126 @@ struct TemplateDlg : public WithNewPackageLayout<TopWindow> {
 	TemplateDlg();
 	virtual ~TemplateDlg();
 };
+
+int FilterPackageName(int c);
+
+class BaseSetupDlg : public WithBaseSetupLayout<TopWindow>
+{
+public:
+	typedef BaseSetupDlg CLASSNAME;
+	BaseSetupDlg();
+
+	bool Run(String& vars);
+
+private:
+	void OnUpp();
+	void OnBrowseUpp();
+
+private:
+	FrameRight<Button> browse_upp;
+	SelectDirButton    browse_out;
+	bool               new_base;
+};
+
+bool BaseSetup(String& vars);
+
+inline bool PackageLess(String a, String b)
+{
+	int nc = CompareNoCase(a, b);
+	if(nc) return nc < 0;
+	return a < b;
+};
+
+struct SelectPackageDlg : public WithListLayout<TopWindow> {
+	virtual bool Key(dword key, int count);
+
+	typedef SelectPackageDlg CLASSNAME;
+
+	SelectPackageDlg(const char *title, bool selectvars, bool main);
+
+	String         Run(String startwith);
+
+	void           Serialize(Stream& s);
+
+	ArrayCtrl      base;
+	ParentCtrl     list;
+	FileList       clist;
+	ArrayCtrl      alist;
+
+	bool           selectvars;
+	bool           loading;
+	int            loadi;
+	bool           finished;
+	bool           canceled;
+	String         selected;
+
+	struct PkInfo {
+		String package;
+		String description;
+		String nest;
+		Image  icon;
+		bool   main;
+
+		bool operator<(const PkInfo& b) const { return PackageLess(package, b.package); }
+		
+		PkInfo() { main = false; }
+	};
+	
+	struct PkData : PkInfo {
+		bool   ispackage;
+		Time   tm, itm;
+		
+		void Serialize(Stream& s)  { s % package % description % nest % icon % main % ispackage % tm % itm; }
+		PkData()                   { tm = itm = Null; ispackage = true; }
+	};
+
+	Array<PkInfo>             packages;
+	Array< ArrayMap<String, PkData> > data;
+
+	String         GetCurrentName();
+	int            GetCurrentIndex();
+	void           SyncBrief();
+
+	void           ToolBase(Bar& bar);
+
+	void           OnBaseAdd();
+	void           OnBaseEdit();
+	void           OnBaseRemove();
+
+	void           OnOK();
+	void           OnCancel();
+
+	void           OnNew();
+	void           OnBase();
+	void           OnFilter();
+
+	void           ListCursor();
+	void           ChangeDescription();
+
+	void           ScanFolder(const String& path, ArrayMap<String, PkData>& nd,
+	                          const String& nest, Index<String>& dir_exists,
+	                          const String& prefix);
+	String         CachePath(const char *vn) const;
+	void           Load(const String& find = Null);
+	void           SyncBase(String initvars);
+	void           SyncList(const String& find);
+	static bool    Pless(const SelectPackageDlg::PkInfo& a, const SelectPackageDlg::PkInfo& b);
+	
+	Vector<String> GetSvnDirs();
+	void           SyncSvnDir(const String& dir);
+	void           SyncSvnDirs();
+
+	void           DuplicatePackage();
+	void           RenamePackage(bool duplicate);
+	void           DeletePackage();
+	void           PackageMenu(Bar& bar);
+	
+	enum {
+		MAIN = 1, FIRST = 2
+	};
+};
+
+bool RenamePackageFs(const String& upp, const String& newname, bool duplicate = false);
 
 String SelectPackage(const char *title, const char *startwith = NULL,
 	bool selectvars = false, bool all = false);
@@ -128,7 +251,6 @@ struct WorkspaceWork {
 	static    Font ListFont();
 
 	FileList     package;
-	Vector<bool> speed;
 	UppList      filelist;
 	Vector<int>  fileindex;
 
@@ -136,6 +258,8 @@ struct WorkspaceWork {
 	String    actualpackage;
 	int       actualfileindex;
 	Package   actual;
+	bool      editormode;
+	bool      repo_dirs;
 
 	struct Sepfo : Moveable<Sepfo> {
 		String package;
@@ -157,7 +281,7 @@ struct WorkspaceWork {
 	};
 
 	ArrayMap<String, Backup> backup;
-
+	
 	bool         organizer;
 	bool         showtime;
 	bool         sort;
@@ -170,6 +294,7 @@ struct WorkspaceWork {
 	virtual void   BuildFileMenu(Bar& bar)            {}
 	virtual void   FilePropertiesMenu(Bar& bar)       {}
 	virtual String GetOutputDir()                     { return Null; }
+	virtual String GetConfigDir()                     { return Null; }
 	virtual void   SyncWorkspace()                    {}
 	virtual void   FileSelected()                     {}
 	virtual void   FileRename(const String& nm)       {}
@@ -180,6 +305,8 @@ struct WorkspaceWork {
 	void   SavePackage();
 	void   RestoreBackup();
 	void   SyncErrorPackages();
+
+	Vector<String> RepoDirs(bool actual = false);
 
 	void SerializeFileSetup(Stream& s)                { s % filelist % package; }
 
@@ -210,10 +337,15 @@ struct WorkspaceWork {
 	void SaveLoadPackageNS(bool sel = true);
 	void TouchFile(const String& path);
 
+	void DoMove(int b, bool drag);
 	void MoveFile(int d);
-	void Move(Vector<String>& v, FileList& ta, int d);
 
-	enum ADDFILE { PACKAGE_FILE, OUTPUT_FILE, HOME_FILE, LOCAL_FILE, ANY_FILE };
+	void DnDInsert(int line, PasteClip& d);
+	void Drag();
+	
+	void NewPackageFile();
+	
+	enum ADDFILE { PACKAGE_FILE, OUTPUT_FILE, HOME_FILE, LOCAL_FILE, CONFIG_FILE, ANY_FILE };
 	void AddFile(ADDFILE type);
 	void AddItem(const String& name, bool separator, bool readonly);
 	void AddTopicGroup();
@@ -226,15 +358,20 @@ struct WorkspaceWork {
 	void RemoveFile();
 	void DelFile();
 	void RenameFile();
-	void ToggleFileSpeed();
+	void TogglePCH();
 	void ToggleIncludeable();
 
 	void AddNormalUses();
 	void AddAnyUses();
 	void TogglePackageSpeed();
 
+	void PackageOp(String active, String from_package, String rename);
+
 	void RemovePackageMenu(Bar& bar);
 	void RemovePackage(String from_package);
+
+	void RenamePackage();
+	void DeletePackage();
 
 	static bool IsAux(const String& p);
 	bool IsAux();
@@ -262,7 +399,7 @@ struct PackageEditor : WorkspaceWork, WithUppLayout<TopWindow> {
 	virtual void PackageCursor();
 
 	enum OptionType {
-		FLAG = 0, USES, TARGET, LIBRARY, LINK, COMPILER, INCLUDE,
+		FLAG = 0, USES, TARGET, LIBRARY, STATIC_LIBRARY, LINK, COMPILER, INCLUDE,
 		FILEOPTION, FILEDEPENDS
 	};
 

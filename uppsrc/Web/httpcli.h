@@ -6,6 +6,7 @@ class HttpClient
 public:
 	HttpClient();
 	HttpClient(const char *url);
+	virtual ~HttpClient();
 
 	HttpClient&  TimeoutMsecs(int t)              { timeout_msecs = t; return *this; }
 	HttpClient&  MaxHeaderSize(int m)             { max_header_size = m; return *this; }
@@ -60,6 +61,7 @@ public:
 	int          GetStatusCode() const            { return status_code; }
 	String       GetStatusLine() const            { return status_line; }
 	String       GetHeaders() const               { return server_headers; }
+	String       GetBody() const                  { return body; }
 
 	bool         IsRedirect() const               { return is_redirect; }
 	String       GetRedirectURL() const           { return redirect_url; }
@@ -72,6 +74,7 @@ public:
 
 	
 	virtual bool CreateClientSocket();
+	virtual bool IsSecure();
 
 public:
 	Socket       socket;
@@ -79,6 +82,7 @@ public:
 	bool         aborted;
 	bool         force_digest;
 	String       error;
+	String       body;
 
 	int          timeout_msecs;
 	int          max_header_size;
@@ -134,6 +138,9 @@ public:
 
 private:
 	void         Init();
+
+protected:
+	bool         use_proxy;
 	String       ReadUntilProgress(char until, int start_time, int end_time, Gate2<int, int> progress);
 };
 

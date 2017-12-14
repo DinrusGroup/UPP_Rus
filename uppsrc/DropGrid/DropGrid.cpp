@@ -1,6 +1,6 @@
 #include "DropGrid.h"
 
-NAMESPACE_UPP
+namespace Upp {
 
 DropGrid::PopUpGrid::PopUpGrid()
 {
@@ -84,7 +84,7 @@ DropGrid::DropGrid()
 	nodrop = false;
 	clear_button = false;
 	
-	must_change_str = t_("Выберите значение.");
+	must_change_str = t_("Select a value.");
 
 	clear.SetButton(1);
 	clear <<= THISBACK(DoClearValue);
@@ -441,7 +441,7 @@ DropGrid& DropGrid::Searching(bool b /* = true*/)
 	return *this;
 }
 
-DropGrid& DropGrid::MustChange(bool b /* = true*/, const char* s /* = NULL*/)
+DropGrid& DropGrid::MustChange(bool b /* = true*/, const char* s /* = ""*/)
 {
 	must_change = b;
 	if(s)
@@ -715,6 +715,18 @@ Value DropGrid::Get(int r, int c) const
 Value DropGrid::Get(int r, Id id) const
 {
 	return list.Get(r, id);
+}
+
+Value DropGrid::GetPrev(int c) const
+{
+	int r = list.GetPrevCursor();
+	return r >= 0 ? Get(r, c) : Null;
+}
+
+Value DropGrid::GetPrev(Id id) const
+{
+	int r = list.GetPrevCursor();
+	return r >= 0 ? Get(r, id) : Null;
 }
 
 void DropGrid::Set(int c, const Value& v)
@@ -1035,6 +1047,7 @@ DropGrid& DropGrid::AddSeparator(Color c)
 	return *this;
 }
 
+//$-
 #define E__Addv0(I)    list.Set(q, I - 1, p##I)
 #define E__AddF0(I) \
 DropGrid& DropGrid::Add(__List##I(E__Value)) { \
@@ -1054,4 +1067,4 @@ GridCtrl::ItemRect& DropGrid::AddRow(__List##I(E__Value)) { \
 }
 __Expand(E__AddF1)
 
-END_UPP_NAMESPACE
+}

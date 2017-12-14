@@ -1,55 +1,73 @@
 #ifndef _Controls4U_Controls4U_h_
 #define _Controls4U_Controls4U_h_
 
+#include <PolyXML/PolyXML.h>
 #include <Painter/Painter.h>
 #include <Functions4U/Functions4U.h>
 #if defined(PLATFORM_WIN32) 
 #include "Controls4U/ActiveX.h"
 #endif
-#include "Controls4U/DrawingCanvas.h"
+#include "Controls4U/PainterCanvas.h"
 #include "Controls4U/SliderCtrlX.h"
 #include "Controls4U/StarIndicator.h"
+#include "Controls4U/SplitterButton.h"
+
+//NAMESPACE_UPP
+using namespace Upp;
 
 double AngAdd(double ang, double val);
+
+class FileSel_ : public FileSel {
+public:
+	String GetBaseDir()	{return basedir;}	
+};
 
 class EditFileFolder : public EditString {
 typedef EditFileFolder CLASSNAME;
 protected:
-	FrameLeft<Button> butBrowse, butLeft, butRight, butUp;
+	FrameLeft<Button> butBrowseLeft, butLeft, butRight, butUp;
+	FrameRight<Button> butBrowseRight;
 	FrameRight<Button> butGo;
 	
-	FileSel fs;
+	FileSel_ *pfs;
 	bool isFile, isLoad;
 	String title;
 	
 	Vector <String> history;
 	int histInd;
 	
+	void InitFs();
+		
 public:
 	EditFileFolder() 								{Init();};
+	~EditFileFolder();
+	
 	void Init();
 	void DoLeft(), DoRight(), DoUp();
 	void DoBrowse();
 	void DoGo(bool add = true);
-	void Type(const char *name, const char *ext)	{fs.Type(name, ext);};
-	void AllFilesType()								{fs.AllFilesType();};
-	void ActiveDir(const String& d) 				{fs.ActiveDir(d);};
-	void MkDirOption(bool b)						{fs.MkDirOption(b);};
-	String Get() const                           	{return GetData();};	
-	String operator~() const                     	{return Get();};
-	operator String() const                      	{return Get();};
-	void Set(const String& s)						{fs.Set(s); EditString::SetData(s);};
-	void operator<<=(const String& s)            	{Set(s);};
-	void operator=(const String& s)              	{Set(s);};
-	bool IsEmpty()									{return GetData().IsNull();};
-	EditFileFolder &NotNull(bool b)					{EditString::NotNull(b);  return *this;};
-	EditFileFolder &SelLoad(bool load) 				{isLoad = load; return *this;};
-	EditFileFolder &SetTitle(const char *_title)	{title = _title; return *this;};
+	void Type(const char *name, const char *ext)	{InitFs();	pfs->Type(name, ext);}
+	void AllFilesType()								{InitFs();	pfs->AllFilesType();}
+	void ActiveDir(const String& d) 				{InitFs();	pfs->ActiveDir(d);}
+	void MkDirOption(bool b)						{InitFs();	pfs->MkDirOption(b);}
+	void BaseDir(const char *dir)					{InitFs();	pfs->BaseDir(dir);}
+	String Get() const                           	{return GetData();}
+	operator const char *() const					{return Get();}
+	const String operator~() const   				{return Get();}
+	void Set(const String& s)						{InitFs();	pfs->Set(s); EditString::SetData(s);}
+	void operator<<=(const String& s)            	{Set(s);}
+	EditFileFolder &operator=(const char *s)  	  	{Set(s); return *this;}
+	EditFileFolder &operator=(const String& s) 		{Set(s); return *this;}
+	bool IsEmpty()									{return GetData().IsNull();}
+	EditFileFolder &NotNull(bool b)					{EditString::NotNull(b);  return *this;}
+	EditFileFolder &SelLoad(bool load) 				{isLoad = load; return *this;}
+	EditFileFolder &SetTitle(const char *_title)	{title = _title; return *this;}
 	EditFileFolder &UseHistory(bool use);
 	EditFileFolder &UseUp(bool use);
 	EditFileFolder &UseBrowse(bool use);
+	EditFileFolder &UseBrowseRight(bool use);
+	EditFileFolder &UseGo(bool use);
 	virtual void SetData(const Value& data);
-	//void Xmlize(XmlIO xml);
 	
 	Callback WhenChange;
 };
@@ -58,12 +76,40 @@ class EditFile : public EditFileFolder {
 typedef EditFile CLASSNAME;		
 public:
 	EditFile();
+	using EditFileFolder::operator=;
 };
 
 class EditFolder : public EditFileFolder {
 typedef EditFolder CLASSNAME;		
 public:
 	EditFolder();
+	using EditFileFolder::operator=;
+};
+
+class ImagePopUp : public Ctrl {
+	public:
+		Ctrl* ctrl;
+
+		ImagePopUp() {}
+		Point Offset(Point p);
+
+		virtual void  Paint(Draw &w);
+		virtual void  LeftDown(Point p, dword flags);
+		virtual void  LeftDrag(Point p, dword flags);
+		virtual void  LeftDouble(Point p, dword flags);
+		virtual void  RightDown(Point p, dword flags);
+		virtual void  LeftUp(Point p, dword flags);
+		virtual void  MouseWheel(Point p, int zdelta, dword flags);
+		virtual void  MouseLeave();
+		virtual void  MouseEnter(Point p, dword flags);
+		virtual void  MouseMove(Point p, dword flags);
+	    virtual Image CursorImage(Point p, dword flags);
+	    virtual void  LostFocus();
+		void PopUp(Ctrl *owner, int x, int y, int width, int height, Image &_image, int _angle, int _fit);
+		virtual void Close();
+		
+		Image image;
+		int angle, fit;
 };
 
 class StaticImage : public Ctrl {
@@ -75,17 +121,27 @@ public:
 protected:
 	virtual void Paint(Draw& draw);
 	virtual void Layout();
+	virtual void RightDown(Point pos, dword keyflags);
+	virtual void LeftDown(Point pos, dword keyflags);
+	virtual void LeftDouble(Point pos, dword keyflags);
+	virtual void MouseEnter(Point pos, dword keyflags);
+	virtual void MouseLeave();
 	
 	String fileName;
 	Image image, origImage;
 	Color background;
 	int angle, fit;
 	bool useAsBackground;
+	ImagePopUp popup;
+	bool isPopUp;
+	Size szPopUp;
 
 public:
-	bool  Set(String fileName);
-	bool  Set(Image image);
+	bool Set(String fileName);
+	bool Set(Image image);
+	void Clear()							{Set(Image());}
 	Image &Get()							{return origImage;}
+	void SetData(const Value& data)			{Set(data.ToString());}
 	
 	void  operator=(String fileName)      	{Set(fileName);}
 	void  operator=(Image image)       		{Set(image);}	
@@ -94,7 +150,41 @@ public:
 	StaticImage& SetFit(int _fit)				{fit = _fit; 		  Refresh(); return *this;}
 	StaticImage& SetBackground(Color c) 		{background = c; 	  Refresh(); return *this;}
 	StaticImage& UseAsBackground(bool b = true)	{useAsBackground = b; Refresh(); return *this;}
+	StaticImage& SetPopUp(bool pop = true)		{isPopUp = pop;	return *this;}
+	StaticImage& SetPopUpSize(Size sz);
 	StaticImage();
+	
+	Callback WhenLeftDouble;
+	Callback WhenLeftDown;
+	Callback WhenRightDown;
+};
+
+class StaticImageSet : public Ctrl {
+typedef StaticImageSet CLASSNAME;		
+protected:
+	virtual void Paint(Draw& draw);
+	virtual void LeftDown(Point pos, dword keyflags);
+	virtual void LeftRepeat(Point pos, dword keyflags);
+	virtual void LeftUp(Point pos, dword keyflags);
+	virtual void MouseMove(Point pos, dword keyflags);
+	virtual void GotFocus();
+	virtual void LostFocus();
+	
+	Vector<Image> images;
+	Color background;
+	
+	int id;
+
+public:
+	bool  Add(String fileName);
+	bool  Add(Image image);
+	Image &Get(int id)						{return images[id];}
+	Vector<Image> &GetImages()				{return images;}
+	void SetActive(int _id)					{id = _id; Refresh();}
+	StaticImageSet& SetBackground(Color c) 	{background = c; Refresh(); return *this;}
+	void Next()								{id++; if(id >= images.GetCount()) id = 0;}
+	
+	StaticImageSet();
 };
 
 #ifndef flagNOPAINTER
@@ -103,10 +193,10 @@ class StaticRectangle : public Ctrl {
 typedef StaticRectangle CLASSNAME;	
 public:
 	virtual void Paint(Draw& draw);
-	virtual void MouseEnter(Point p, dword keyflags) {WhenMouseEnter(p, keyflags);};
-	virtual void MouseLeave() {	WhenMouseLeave();};
-	virtual void LeftDown(Point p, dword keyflags) {WhenLeftDown(p, keyflags);};
-	virtual void LeftUp(Point p, dword keyflags) {WhenLeftUp(p, keyflags);};
+	virtual void MouseEnter(Point p, dword keyflags) 	{WhenMouseEnter(p, keyflags);};
+	virtual void MouseLeave() 							{WhenMouseLeave();};
+	virtual void LeftDown(Point p, dword keyflags) 		{WhenLeftDown(p, keyflags);};
+	virtual void LeftUp(Point p, dword keyflags) 		{WhenLeftUp(p, keyflags);};
 	virtual void Layout();
 	
 protected:
@@ -250,8 +340,8 @@ public:
 	void SetTimeRefresh() {SetTime();};
 	void SetTime(int h, int n, int s);
 
-	StaticClock();	
-	~StaticClock(); 
+	StaticClock();
+	~StaticClock();	
 };
 
 class Meter : public Ctrl {
@@ -311,9 +401,10 @@ public:
 class Knob : public Ctrl {
 private:
 	double value;
-	double minv, maxv, keyStep;
+	double minv, maxv;
 	int nminor, nmajor;
 	double minorstep, majorstep;
+	double keyStep;
 	double angleBegin, angleEnd;
 	double angleClick;
 	int  colorType;
@@ -501,7 +592,7 @@ private:
 	bool forceOpenTree;
 	String fileNameSelected;
 	bool readOnly;
-	int flags;
+	EXT_FILE_FLAGS flags;
 	bool acceptDragAndDrop;
 	
 	void SortByColumn(int col);
@@ -528,10 +619,10 @@ public:
  	String operator~()    {return GetFile();}	
  	String GetFolder();
 	FileBrowser &SetReadOnly(bool set = true) {readOnly = set; return *this;};
-	FileBrowser &SetUseTrashBin(bool set = true) {set ? flags |= USE_TRASH_BIN : flags &= ~USE_TRASH_BIN; return *this;};
-	FileBrowser &SetBrowseLinks(bool set = true) {set ? flags |= BROWSE_LINKS : flags &= ~BROWSE_LINKS;	return *this;};
-	FileBrowser &SetDeleteReadOnly(bool set = true) {set ? flags |= DELETE_READ_ONLY : flags &= ~DELETE_READ_ONLY; return *this;};
-	FileBrowser &SetAskBeforeDelete(bool set = true) {set ? flags |= ASK_BEFORE_DELETE : flags &= ~ASK_BEFORE_DELETE; return *this;};
+	FileBrowser &SetUseTrashBin(bool set = true) {flags = (set ? EXT_FILE_FLAGS(flags | USE_TRASH_BIN) : EXT_FILE_FLAGS(flags & ~USE_TRASH_BIN)); return *this;};
+	FileBrowser &SetBrowseLinks(bool set = true) {flags = (set ? EXT_FILE_FLAGS(flags | BROWSE_LINKS) : EXT_FILE_FLAGS(flags & ~BROWSE_LINKS)); return *this;};
+	FileBrowser &SetDeleteReadOnly(bool set = true) {flags = (set ? EXT_FILE_FLAGS(flags | DELETE_READ_ONLY) : EXT_FILE_FLAGS(flags & ~DELETE_READ_ONLY)); return *this;};
+//	FileBrowser &SetAskBeforeDelete(bool set = true) {set ? flags |= ASK_BEFORE_DELETE : flags &= ~ASK_BEFORE_DELETE; return *this;};
 	FileBrowser &SetDragAndDrop(bool set = true) {acceptDragAndDrop = set; return *this;};
 	FileBrowser &SetBrowseFiles(bool set = true) {browseFiles = set; return *this;};
 	
@@ -540,5 +631,127 @@ public:
 	Callback WhenTreeDblClick;
 	Callback WhenSelected;
 };
+
+struct AboutUpp : StaticRect {
+	RichTextView about;
+
+	typedef AboutUpp CLASSNAME;
+
+	AboutUpp();
+};
+
+
+class HyperlinkLabel : public Label {
+public:
+	HyperlinkLabel() {
+		NoIgnoreMouse();
+		SetInk(LtBlue());
+	}
+	HyperlinkLabel& SetHyperlink(const char* str) 		{hyperlink = str; return *this;}
+
+private:
+	String hyperlink;
+	virtual Image CursorImage(Point p, dword keyflags) 	{return Image::Hand();}
+	virtual void LeftDown(Point p, dword keyflags) 		{LaunchWebBrowser(hyperlink);}
+};
+
+class BarDisplay : public Display {
+public:
+	BarDisplay() : ink(SColorText), value(0), align(ALIGN_LEFT) {}
+
+	virtual void Paint(Draw& w, const Rect& r, const Value& , Color, Color, dword) const {
+		int width = int(r.Width()*value);
+		w.DrawRect(r.left, r.top, width, r.bottom, color);
+		w.DrawRect(r.left + width, r.top, r.right - width, r.bottom, paper);
+		if (!text.IsEmpty()) {
+			Size sz = GetTextSize(text, StdFont());
+		    int xtext;
+		    switch (align) {
+		    case ALIGN_LEFT:	xtext = 0;							break;
+		    case ALIGN_CENTER:	xtext = (r.GetWidth() - sz.cx)/2;	break;
+		    default:			xtext = r.GetWidth() - sz.cx;
+		    }
+	    
+			w.DrawText(r.left + xtext, r.top + (r.Height() - StdFont().Info().GetHeight())/2,
+			           text, StdFont(), ink);
+		}
+	}
+	BarDisplay &SetValue(double _value) {value = _value;return *this;}
+	BarDisplay &SetText(const char *str){text = str;	return *this;}
+	BarDisplay &SetColor(Color _color, Color _paper = Null, Color _ink = SColorText) {
+		color = _color; 
+		ink = _ink;	
+		paper = _paper;	
+		return *this;
+	}
+	BarDisplay &SetAlign(int a) {align = a; return *this;}
+	
+private:
+	Color color, ink, paper;
+	String text;
+	double value;
+	int align;
+};
+
+class TextDisplay : public Display {
+public:
+	TextDisplay() : ink(SColorText), align(ALIGN_LEFT) {}
+	
+	virtual void Paint(Draw& w, const Rect& r, const Value&, Color, Color, dword) const {
+	    w.DrawRect(r.left, r.top, r.right, r.bottom, paper);
+	    
+	    Size sz = GetTextSize(text, StdFont());
+	    int xtext;
+	    switch (align) {
+	    case ALIGN_LEFT:	xtext = 0;							break;
+	    case ALIGN_CENTER:	xtext = (r.GetWidth() - sz.cx)/2;	break;
+	    default:			xtext = r.GetWidth() - sz.cx;
+	    }
+		w.DrawText(r.left + xtext, r.top + (r.Height() - StdFont().Info().GetHeight()) / 2,
+			           text, StdFont(), ink);	
+	}
+	TextDisplay &SetText(const char *str) 					{text = str;					return *this;}
+	TextDisplay &SetColor(Color _ink, Color _paper = Null)	{ink = _ink;	paper = _paper;	return *this;}
+	TextDisplay &SetInk(Color _ink)							{ink = _ink;					return *this;}
+	TextDisplay &SetPaper(Color _paper)						{paper = _paper;				return *this;}
+	TextDisplay &SetAlign(int a)             				{align = a; 					return *this;}
+	
+private:
+	Color ink, paper;
+	String text;
+	int align;
+};
+
+class InfoCtrlBar : public InfoCtrl {
+public:
+	InfoCtrlBar() {
+		Set(PaintRect(bar));
+		SetColor(SColorFace);
+	}
+	InfoCtrlBar &SetValue(double value) 											{bar.SetValue(value);				return *this;}	
+	InfoCtrlBar &SetText(const char *str) 											{bar.SetText(str);					return *this;}
+	InfoCtrlBar &SetColor(Color color, Color paper = Null, Color ink = SColorText)	{bar.SetColor(color, paper, ink);	return *this;}
+	InfoCtrlBar &SetAlign(int a)             										{bar.SetAlign(a);					return *this;}
+	
+private:
+	BarDisplay bar;
+};
+
+class InfoCtrlText : public InfoCtrl {
+public:
+	InfoCtrlText() {Set(PaintRect(text));}
+
+	InfoCtrlText &SetText(const char *str) 					{text.SetText(str);			return *this;}
+	InfoCtrlText &SetColor(Color ink, Color paper = Null)	{text.SetColor(ink, paper);	return *this;}
+	InfoCtrlText &SetInk(Color ink)							{text.SetInk(ink);			return *this;}
+	InfoCtrlText &SetPaper(Color paper)						{text.SetPaper(paper);		return *this;}
+	InfoCtrlText &SetAlign(int a)             				{text.SetAlign(a);			return *this;}
+	
+private:
+	TextDisplay text;
+};
+	
+	
+//END_UPP_NAMESPACE
 
 #endif

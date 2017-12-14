@@ -1,7 +1,7 @@
 #include "Web.h"
 #pragma hdrstop
 
-NAMESPACE_UPP
+namespace Upp {
 
 #define LLOG(x)       // RLOG(x)
 #define LLOGBLOCK(x)  // RLOGBLOCK(x)
@@ -177,7 +177,7 @@ String HttpClient::Execute(Gate2<int, int> progress)
 	LLOG("host = " << host << ", port = " << port);
 	LLOG("request: " << request);
 	int written = 0;
-	while(msecs() < end_time) {
+	while(msecs() - end_time < 0) {
 		int nwrite = socket.WriteWait(request.GetIter(written), request.GetLength() - written, 1000);
 		if(socket.IsError()) {
 			error = Socket::GetErrorText();
@@ -418,4 +418,4 @@ String HttpClientGet(String url, String *server_headers, String *error,
 	return HttpClientGet(url, Null, Null, Null, server_headers, error, progress, timeout, max_redirect, retries);
 }
 
-END_UPP_NAMESPACE
+}

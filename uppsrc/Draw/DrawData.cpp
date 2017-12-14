@@ -1,6 +1,6 @@
 #include "Draw.h"
 
-NAMESPACE_UPP
+namespace Upp {
 
 #define LTIMING(x)
 // #define BENCHMARK_RLE
@@ -15,17 +15,16 @@ static StaticCriticalSection sDataDrawer;
 
 void DataDrawer::AddFormat(const char *id, Factory factory)
 {
-	INTERLOCKED_(sDataDrawer)
-		Map().Add(id, (void *)factory);
+	Mutex::Lock __(sDataDrawer);
+	Map().Add(id, (void *)factory);
 }
 
 One<DataDrawer> DataDrawer::Create(const String& id)
 {
-	INTERLOCKED_(sDataDrawer) {
-		Factory q = (Factory) Map().Get(id, NULL);
-		if(q)
-			return (*q)();
-	}
+	Mutex::Lock __(sDataDrawer);
+	Factory q = (Factory) Map().Get(id, NULL);
+	if(q)
+		return (*q)();
 	return NULL;
 }
 
@@ -92,7 +91,6 @@ void DrawImageBandRLE(Draw& w, int x, int y, const Image& m, int minp)
 
 void Draw::DrawDataOp(int x, int y, int cx, int cy, const String& data, const char *id)
 {
-	DrawLock __;
 	bool tonative = !IsNative();
 	if(tonative) {
 		BeginNative();
@@ -102,10 +100,10 @@ void Draw::DrawDataOp(int x, int y, int cx, int cy, const String& data, const ch
 	One<DataDrawer> dd = DataDrawer::Create(id);
 	if(dd) {
 		dd->Open(data, cx, cy);
-		if((cx > 2048 || cy > 2048) && GetInfo() & DATABANDS) {
+		if((cx > 2048 || cy > 2048) && (GetInfo() & DATABANDS)) {
 			int yy = 0;
 			while(yy < cy) {
-				int ccy = min(cy - yy, 32);
+				int ccy = min(cy - yy, 32); // Must be multiply of 4 because of dithering
 				ImageBuffer ib(cx, ccy);
 				dd->Render(ib);
 				DrawImageBandRLE(*this, x, y + yy, ib, 16);
@@ -124,4 +122,4 @@ void Draw::DrawDataOp(int x, int y, int cx, int cy, const String& data, const ch
 
 DataDrawer::~DataDrawer() {}
 
-END_UPP_NAMESPACE
+}

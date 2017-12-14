@@ -2,9 +2,11 @@
 #define _IconDes_IconDes_h_
 
 #include <CtrlLib/CtrlLib.h>
+#include <Painter/Painter.h>
+#include <RichEdit/RichEdit.h>
 
 
-NAMESPACE_UPP
+namespace Upp {
 
 #define IMAGECLASS IconDesImg
 #define IMAGEFILE <IconDes/IconDes.iml>
@@ -74,6 +76,9 @@ public:
 	void Set(RGBA c);
 	void MaskSet(int a);
 	RGBA Get() const;
+	
+	Color GetColor() const;
+	int   GetAlpha() const;
 
 	void Mask(bool b);
 
@@ -96,6 +101,28 @@ void   MirrorHorz(Image& img, const Rect& rect);
 void   MirrorVert(Image& img, const Rect& rect);
 String PackImlData(const Vector<Image>& image);
 Image  DownSample3x(const Image& src);
+
+/*
+struct IconDraw : ImagePainter {
+	IconDraw(Size sz) : ImagePainter(sz, MODE_NOAA) {}
+};
+*/
+
+struct IconDraw : NilDraw, DDARasterizer {
+	RGBA        docolor;
+	ImageBuffer image;
+	
+	virtual void PutHorz(int x, int y, int cx);
+	virtual void PutVert(int x, int y, int cy);
+
+	virtual void DrawRectOp(int x, int y, int cx, int cy, Color color);
+	virtual void DrawLineOp(int x1, int y1, int x2, int y2, int width, Color color);
+	virtual void DrawEllipseOp(const Rect& r, Color color, int pen, Color pencolor);
+	
+	operator Image() { return image; }
+	
+	IconDraw(Size sz) { image.Create(sz); Cy(sz.cy); }
+};
 
 class IconDes : public Ctrl {
 public:
@@ -142,13 +169,32 @@ private:
 
 	SplitterFrame  leftpane;
 	SplitterFrame  bottompane;
-	ArrayCtrl      list;
+
+	ParentCtrl     imgs;
+	ArrayCtrl      ilist;
+	EditString     search;
+
 	RGBACtrl       rgbactrl;
 	IconShow       iconshow;
 	Image          cursor_image;
 	Image          fill_cursor;
+	bool           single_mode;
+	ParentCtrl     single;
+	Label          info;
+	Button         resize;
 
 	Array<Slot>    removed;
+
+
+	struct TextDlg : WithIconDesTextLayout<TopWindow> {
+		typedef TextDlg CLASSNAME;
+		
+		Font GetFont();
+		
+		TextDlg();
+	};
+	
+	TextDlg        textdlg;
 
 	void  PenSet(Point p, dword flags);
 
@@ -165,7 +211,11 @@ private:
 
 	void  HotSpotTool(Point p, dword f);
 
-	bool         IsCurrent()            { return list.IsCursor(); }
+	void  Text();
+	void  PasteText();
+	void  CloseText();
+
+	bool         IsCurrent()            { return !IsNull(ilist.GetKey()); }
 	Slot&        Current();
 
 	Image&       CurrentImage();
@@ -186,7 +236,8 @@ private:
 	void  RefreshPixel(int x, int y, int cx = 1, int cy = 1);
 	Point GetPos(Point p);
 	void  Set(Point p, RGBA rgba, dword flags);
-	void  ApplyDraw(const ImageDraw& iw, dword flags);
+	void  ApplyDraw(IconDraw& iw, dword flags);
+	void  ApplyImage(Image m, dword flags, bool alpha = false);
 
 	void  SyncImage();
 	void  Reset();
@@ -261,13 +312,18 @@ private:
 	void  Contrast();
 	void  Alpha();
 	void  Colors();
+	void  Smoothen();
 
+	void  Search();
+	void  GoTo(int q);
 	void  SyncList();
 	void  ListCursor();
 	void  PrepareImageDlg(WithImageLayout<TopWindow>& dlg);
+	void  PrepareImageSizeDlg(WithImageSizeLayout<TopWindow>& dlg);
 	void  ImageInsert(const String& name, const Image& m, bool exp = false);
 	void  InsertImage();
 	void  InsertRemoved(int ii);
+	void  EditImageSize();
 	void  EditImage();
 	void  RemoveImage();
 	void  Duplicate();
@@ -277,6 +333,8 @@ private:
 	void  InsertIml();
 	void  MoveSlot(int d);
 	void  ChangeSlot(int d);
+	void  DnDInsert(int line, PasteClip& d);
+	void  Drag();
 
 	static FileSel& ImgFile();
 
@@ -310,6 +368,7 @@ public:
 	Image  GetImage(int ii) const;
 	String GetName(int ii) const;
 	bool   GetExport(int ii) const;
+	bool   FindName(const String& name);
 
 	String GetCurrentName() const;
 
@@ -317,6 +376,9 @@ public:
 	void    SetEditPos(const EditPos& o);
 
 	void    SerializeSettings(Stream& s);
+	
+	void    SingleMode();
+	bool    IsSingleMode() const                  { return single_mode; }
 
 	typedef IconDes CLASSNAME;
 
@@ -332,6 +394,6 @@ struct ImlImage {
 bool   LoadIml(const String& data, Array<ImlImage>& img, int& format);
 String SaveIml(const Array<ImlImage>& iml, int format);
 
-END_UPP_NAMESPACE
+}
 
 #endif

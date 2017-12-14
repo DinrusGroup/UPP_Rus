@@ -6,7 +6,7 @@
 	#define OLERENDER_DRAW	1
 #endif
 
-#define CY void *
+#define CY tagCY
 
 #include <windows.h>
 #include <Mshtml.h>  
@@ -15,6 +15,8 @@
 #include "ActiveX_base.h"
 #include <Exdisp.h> 
 #include "plugin/vlc/axvlc_idl.h"
+
+//NAMESPACE_UPP
 
 static const CLSID CLSID_MozillaBrowser = {0x1339B54C, 0x3453, 0x11D2, {0x93, 0xB9, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}};	//http://www.iol.ie/~locka/mozilla/control.htm
 
@@ -32,7 +34,8 @@ public:
 	String GetReadyState();
 	bool GoHome();
 	bool RefreshPage();
-	bool Stop();	
+	bool Stop();
+	bool SetSilent(bool val);
 
 private:	
 	class IIWebBrowser {
@@ -69,6 +72,7 @@ public:
 	bool GoHome();
 	bool RefreshPage();
 	bool Stop();
+	bool SetSilent(bool val = true);
 
 private:
 	class IIWebBrowser {
@@ -133,5 +137,6 @@ private:
 	};
 };
 
+//END_UPP_NAMESPACE
 
 #endif

@@ -4,7 +4,7 @@ uses
 	CtrlLib;
 
 file
-	RichEdit.h,
+	RichEdit.h options(BUILDER_OPTION) PCH,
 	Ruler.cpp,
 	UnitEdit.cpp,
 	Editor.cpp,
@@ -19,12 +19,12 @@ file
 	ParaFormat.cpp,
 	TableUndo.cpp,
 	Table.cpp,
-	Find.cpp optimize_speed,
+	Find.cpp,
 	Tool.cpp,
 	Clip.cpp,
 	StyleKeys.cpp,
+	HeaderFooter.cpp,
 	RichEdit.t charset "UTF-8",
-	RichEdit.icpp,
 	RichEdit.lay,
 	RichEdit.iml,
 	Info readonly separator,

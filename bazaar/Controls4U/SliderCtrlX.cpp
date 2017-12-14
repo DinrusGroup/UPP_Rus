@@ -18,6 +18,8 @@ using namespace Upp;
 
 #include "SliderCtrlX.h"
 
+//NAMESPACE_UPP
+
 #define IMAGECLASS SliderThumbsImg
 #define IMAGEFILE <Controls4U/SliderCtrlX.iml>
 #include <Draw/iml.h>
@@ -387,8 +389,8 @@ void SliderCtrlX::MouseMove(Point pos, dword keyflags)
 {
 	if(HasCapture()) {
 		int n;
-		int p = HoVe(pos.x, pos.y);
-		int thumbPos = SliderToClient(m_vValues[0]);
+		//int p = HoVe(pos.x, pos.y);
+		//int thumbPos = SliderToClient(m_vValues[0]);
 		if (IsInverted())
 			n = ClientToSlider(HoVe(GetSize().cx-pos.x, GetSize().cy-pos.y));
 		else
@@ -573,3 +575,5 @@ int SliderCtrlX::SliderToClient(int v) const
 			
 	return v;
 }
+
+//END_UPP_NAMESPACE

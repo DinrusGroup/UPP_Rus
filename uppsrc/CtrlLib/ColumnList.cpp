@@ -1,6 +1,6 @@
 #include "CtrlLib.h"
 
-NAMESPACE_UPP
+namespace Upp {
 
 void ColumnList::MouseWheel(Point p, int zdelta, dword keyflags) {
 	sb.Wheel(zdelta);
@@ -21,7 +21,7 @@ int ColumnList::GetColumnItems() const {
 
 int  ColumnList::GetDragColumn(int x) const {
 	if (mode == MODE_ROWS)
-		return -1;	
+		return -1;
 	int cx = GetColumnCx();
 	int i = 0;
 	if(cx == 0) return -1;
@@ -70,7 +70,8 @@ int ColumnList::GetItem(Point p)
 	return i >= 0 && i < GetCount() ? i : -1;
 }
 
-void ColumnList::PointDown(Point p) {
+void ColumnList::PointDown(Point p)
+{
 	int i = GetItem(p);
 	if(i >= 0 && i < GetCount())
 		SetCursor0(i, false);
@@ -134,6 +135,7 @@ void ColumnList::LeftUp(Point p, dword flags)
 		Refresh();
 		SyncInfo();
 	}
+	ReleaseCapture();
 }
 
 void ColumnList::LeftDrag(Point p, dword keyflags)
@@ -144,8 +146,8 @@ void ColumnList::LeftDrag(Point p, dword keyflags)
 
 void ColumnList::RightDown(Point p, dword flags) {
 	int i = GetItem(p);
-	if(!(i >= 0 && i < GetCount() && multi && IsSel(i)))
-		PointDown(p);
+	if(!(i >= 0 && multi && IsSel(i))) // Do not change selection if clicking on it
+		DoClick(p, 0);
 	MenuBar::Execute(WhenBar);
 }
 
@@ -244,12 +246,12 @@ dword ColumnList::SwapKey(dword key)
 			return K_DOWN;
 		}
 	}
-	return key;	
+	return key;
 }
 
 bool ColumnList::Key(dword _key, int count) {
 	int c = cursor;
-	bool sel = _key & K_SHIFT;
+	bool sel = (_key & K_SHIFT) && multi;
 	int key = _key & ~K_SHIFT;
 	key = SwapKey(key);
 	switch(key) {
@@ -392,7 +394,7 @@ void ColumnList::Paint(Draw& w) {
 	if(!GetColumnCx(0) || !cy) return;
 	if (mode == MODE_ROWS)
 		return PaintRows(w, sz);
-	else {	
+	else {
 		int x = 0;
 		int i = GetSbPos(sz);
 		int coli = 0;
@@ -489,23 +491,23 @@ void ColumnList::SetSb()
 	case MODE_LIST:
 		sb.SetTotal(GetCount());
 		sb.SetPage(GetPageItems());
-		sb.SetLine(1);		
+		sb.SetLine(1);
 		break;
 	case MODE_COLUMN: {
 		int icnt = max(1, GetColumnItems());
 		int ccnt = GetCount()/icnt;
-		ccnt += (GetCount() % icnt) ? 1 : 0;	
+		ccnt += (GetCount() % icnt) ? 1 : 0;
 		sb.SetTotal(ccnt);
 		sb.SetPage(ncl);
-		sb.SetLine(1);		
+		sb.SetLine(1);
 		break;
 		}
 	case MODE_ROWS:	{
 		int rcnt = GetCount()/ncl;
 		rcnt += (GetCount() % ncl) ? 1 : 0;
 		sb.SetTotal(rcnt*cy);
-		sb.SetPage((GetSize().cy/cy)*cy);	
-		sb.SetLine(cy);	
+		sb.SetPage((GetSize().cy/cy)*cy);
+		sb.SetLine(cy);
 		break;
 		}
 	}
@@ -540,11 +542,11 @@ void ColumnList::Scroll()
 	case MODE_LIST:
 		sz.cy = sz.cy / cy * cy;
 		scroller.Scroll(*this, sz, sb, cy);
-		break;		
+		break;
 	case MODE_COLUMN:
 		sz.cy = sz.cy / cy * cy;
 		scroller.Scroll(*this, sz, Point(sb, 0), Size(GetColumnCx(0), 0));
-		break;		
+		break;
 	case MODE_ROWS:
 		scroller.Scroll(*this, sz, sb, 1);
 		break;
@@ -598,7 +600,7 @@ void ColumnList::SetCursor(int c)
 	SetCursor0(c, true);
 }
 
-int ColumnList::GetSbPos(const Size &sz) const
+int ColumnList::GetSbPos(const Size& sz) const
 {
 	switch (mode) {
 	case MODE_ROWS:
@@ -799,28 +801,28 @@ void ColumnList::Set(int ii, const Value& key, const Value& val, bool canselect)
 	m.display = NULL;
 	RefreshItem(ii);
 	SyncInfo();
-	SetSb();	
+	SetSb();
 }
 
 void ColumnList::Set(int ii, const Value& key, const Value& val, const Display& display, bool canselect)
 {
 	Set(ii, key, val, canselect);
 	item[ii].display = &display;
-	SyncInfo();	
+	SyncInfo();
 }
 
 void ColumnList::Set(const Value &key, const Value& val, const Display& display, bool canselect)
 {
 	int ii = Find(key);
 	if (ii >= 0)
-		Set(ii, key, val, display, canselect);		
+		Set(ii, key, val, display, canselect);
 }
 
 void ColumnList::Set(const Value &key, const Value& val, bool canselect)
 {
 	int ii = Find(key);
 	if (ii >= 0)
-		Set(ii, key, val, canselect);			
+		Set(ii, key, val, canselect);
 }
 
 void ColumnList::Remove(int ii)
@@ -935,9 +937,11 @@ void ColumnList::DragLeave()
 
 void ColumnList::RemoveSelection()
 {
+	KillCursor();
 	for(int i = GetCount() - 1; i >= 0; i--)
 		if(IsSel(i))
-			Remove(i); // Optimize!
+			Remove(i);
+	selcount = 0;
 }
 
 int ColumnList::Find(const Value &key) const
@@ -1051,7 +1055,7 @@ ColumnList::ColumnList() {
 	clickkill = false;
 	ncl = 1;
 	cx = 50;
-	cy = Draw::GetStdFontCy();
+	cy = max(DPI(18), Draw::GetStdFontCy());
 	cursor = -1;
 	ListMode();
 	AddFrame(sb);
@@ -1069,4 +1073,4 @@ ColumnList::ColumnList() {
 
 ColumnList::~ColumnList() {}
 
-END_UPP_NAMESPACE
+}

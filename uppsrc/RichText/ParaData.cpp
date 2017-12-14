@@ -1,8 +1,8 @@
 #include "RichText.h"
 
-NAMESPACE_UPP
+namespace Upp {
 
-static StaticMutex sCacheMutex;
+StaticMutex RichPara::cache_lock;
 
 Array<RichPara>& RichPara::Cache()
 {
@@ -25,11 +25,11 @@ RichPara::RichPara()
 
 RichPara::~RichPara()
 {
-	if(cacheid && !part.IsPicked() && !incache) {
-		Mutex::Lock __(sCacheMutex);
+	if(cacheid && part.GetCount() && !incache) {
+		Mutex::Lock __(cache_lock);
 		Array<RichPara>& cache = Cache();
 		incache = true;
-		cache.InsertPick(0, *this);
+		cache.InsertPick(0, pick(*this));
 		int total = 0;
 		for(int i = 1; i < cache.GetCount(); i++) {
 			total += cache[i].GetLength();
@@ -37,7 +37,6 @@ RichPara::~RichPara()
 				cache.SetCount(i);
 				break;
 			}
-			i++;
 		}
 	}
 }
@@ -56,10 +55,12 @@ PaintInfo::PaintInfo()
 	highlightpara = -1;
 	highlight = Yellow();
 	indexentry = LtGreen();
+	indexentrybg = false;
 	coloroverride = false;
 	context = NULL;
 	showlabels = false;
 	shrink_oversized_objects = false;
+	textcolor = Null;
 }
 
 String RichPara::Number::AsText(const RichPara::NumberFormat& format) const
@@ -153,15 +154,6 @@ bool NumberingDiffers(const RichPara::Format& fmt1, const RichPara::Format& fmt2
 	       memcmp(fmt1.number, fmt2.number, sizeof(fmt1.number));
 }
 
-bool operator==(const Vector<RichPara::Tab>& a, const Vector<RichPara::Tab>& b)
-{
-	if(a.GetCount() != b.GetCount()) return false;
-	for(int i = 0; i < a.GetCount(); i++)
-		if(a[i].pos != b[i].pos || a[i].align != b[i].align || a[i].fillchar != b[i].fillchar)
-			return false;
-	return true;
-}
-
 RichPara::CharFormat::CharFormat()
 {
 	(Font &)*this = Arial(100);
@@ -178,8 +170,9 @@ RichPara::Format::Format()
 	align = ALIGN_LEFT;
 	ruler = before = lm = rm = indent = after = 0;
 	rulerink = Black;
+	rulerstyle = RULER_SOLID;
 	bullet = 0;
-	keep = newpage = keepnext = orphan = false;
+	keep = newpage = keepnext = orphan = newhdrftr = false;
 	tabsize = 296;
 	memset(number, 0, sizeof(number));
 	reset_number = false;
@@ -282,7 +275,7 @@ void RichPara::Cat(Id field, const String& param, const RichPara::CharFormat& f)
 	VectorMap<String, Value> dummy;
 	FieldType *ft = fieldtype().Get(field, NULL);
 	if(ft)
-		p.fieldpart ^= ft->Evaluate(param, dummy, f);
+		p.fieldpart = pick(ft->Evaluate(param, dummy, f));
 }
 
 struct TabLess {
@@ -306,8 +299,9 @@ void RichPara::PackParts(Stream& out, const RichPara::CharFormat& chrstyle,
 		cf = p.format;
 		if(p.field) {
 			out.Put(FIELD);
-			out.Put32(p.field.AsNdx());
-			String s = p.fieldparam;
+			String s = ~p.field;
+			out % s;
+			s = p.fieldparam;
 			out % s;
 			StringStream oout;
 			CharFormat subf = cf;
@@ -347,6 +341,9 @@ String RichPara::Pack(const RichPara::Format& style, Array<RichObject>& obj) con
 	if(format.tab != style.tab)                 pattr |= 0x8000;
 	if(format.ruler != style.ruler)             pattr |= 0x10000;
 	if(format.rulerink != style.rulerink)       pattr |= 0x20000;
+	if(format.rulerstyle != style.rulerstyle)   pattr |= 0x40000;
+	if(format.newhdrftr != style.newhdrftr)     pattr |= 0x80000;
+	
 	out.Put32(pattr);
 	if(pattr & 1)      out.Put16(format.align);
 	if(pattr & 2)      out.Put16(format.before);
@@ -392,6 +389,18 @@ String RichPara::Pack(const RichPara::Format& style, Array<RichObject>& obj) con
 		Color c = format.rulerink;
 		c.Serialize(out);
 	}
+	if(pattr & 0x40000)
+		out.Put16(format.rulerstyle);
+
+	if(pattr & 0x80000) {
+		out.Put(format.newhdrftr);
+		if(format.newhdrftr) {
+			String t = format.header_qtf;
+			String f = format.footer_qtf;
+			out % t % f;
+		}
+	}
+
 	obj.Clear();
 	CharFormat cf = style;
 	if(part.GetCount())
@@ -522,7 +531,9 @@ void RichPara::UnpackParts(Stream& in, const RichPara::CharFormat& chrstyle,
 			}
 			in.Get();
 			Part& p = part.Top();
-			p.field = Id(in.Get32());
+			String id;
+			in % id;
+			p.field = id;
 			in % p.fieldparam;
 			String s;
 			in % s;
@@ -561,11 +572,11 @@ void RichPara::Unpack(const String& data, const Array<RichObject>& obj,
 	format = style;
 	
 	if(cacheid) {
-		Mutex::Lock __(sCacheMutex);
+		Mutex::Lock __(cache_lock);
 		Array<RichPara>& cache = Cache();
 		for(int i = 0; i < cache.GetCount(); i++)
 			if(cache[i].cacheid == cacheid) {
-				*this = cache[i];
+				*this = pick(cache[i]);
 				incache = false;
 				cache.Remove(i);
 				return;
@@ -612,6 +623,15 @@ void RichPara::Unpack(const String& data, const Array<RichObject>& obj,
 		format.ruler = in.Get16();
 	if(pattr & 0x20000)
 		format.rulerink.Serialize(in);
+	if(pattr & 0x40000)
+		format.rulerstyle = in.Get16();
+
+	if(pattr & 0x80000) {
+		format.newhdrftr = in.Get();
+		if(format.newhdrftr)
+			in % format.header_qtf % format.footer_qtf;
+	}
+
 	part.Clear();
 	int oi = 0;
 	UnpackParts(in, style, part, obj, oi);
@@ -641,15 +661,13 @@ WString RichPara::GetText() const
 	return r;
 }
 
-typedef VectorMap<Id, RichPara::FieldType *> FieldTypeMap;
-GLOBAL_VAR(FieldTypeMap, fieldtype0)
-
-const VectorMap<Id, RichPara::FieldType *>& RichPara::fieldtype()
+VectorMap<Id, RichPara::FieldType *>& RichPara::fieldtype0()
 {
-	return fieldtype0();
+	static VectorMap<Id, RichPara::FieldType *> h;
+	return h;
 }
 
-void RichPara::Register(Id id, FieldType& ft) init_
+void RichPara::Register(Id id, FieldType& ft)
 {
 	AssertST();
 	fieldtype0().GetAdd(id, &ft);
@@ -663,7 +681,7 @@ bool RichPara::EvaluateFields(VectorMap<String, Value>& vars)
 		if(p.field) {
 			FieldType *f = fieldtype().Get(p.field, NULL);
 			if(f) {
-				p.fieldpart ^= f->Evaluate(p.fieldparam, vars, p.format);
+				p.fieldpart = pick(f->Evaluate(p.fieldparam, vars, p.format));
 				b = true;
 			}
 		}
@@ -758,7 +776,7 @@ void RichPara::ApplyStyle(const Format& newstyle)
 void RichPara::Dump()
 {
 	LOG("RichPara dump" << LOG_BEGIN);
-	LOG("RULER: " << format.ruler << " " << format.rulerink);
+	LOG("RULER: " << format.ruler << " " << format.rulerink << " " << format.rulerstyle);
 	LOG("BEFORE: " << format.before);
 	LOG("INDENT: " << format.indent);
 	LOG("LM: " << format.lm);
@@ -830,4 +848,4 @@ String RichPara::Format::ToString() const
 
 #endif
 
-END_UPP_NAMESPACE
+}

@@ -39,18 +39,21 @@
 #define LONGRAW(x)                 COLUMN("long raw", String, x, 0, 0)
 #define LONGRAW_(x)                COLUMN_("long raw", String, x, 0, 0)
 
-#define BLOB(x)                    COLUMN("blob", String, x, 0, 0)
-#define BLOB_(x)                   COLUMN_("blob", String, x, 0, 0)
+#define BLOB(x)                    COLUMN("blob", String, x, INT_MAX/2, 0)
+#define BLOB_(x)                   COLUMN_("blob", String, x, INT_MAX/2, 0)
 
-#define CLOB(x)                    COLUMN("clob", String, x, 0, 0)
-#define CLOB_(x)                   COLUMN_("clob", String, x, 0, 0)
+#define CLOB(x)                    COLUMN("clob", String, x, INT_MAX/2, 0)
+#define CLOB_(x)                   COLUMN_("clob", String, x, INT_MAX/2, 0)
 
 #define SEQUENCE(x)                SCHEMA("create sequence " #x " start with 1;",\
                                           "drop sequence " #x ";") \
                                    UPGRADE("create sequence " #x " start with 1;")
 #define SEQUENCE_(x)               DOID(x) SEQUENCE(x)
 
+#ifndef PRIMARY_KEY
 #define PRIMARY_KEY                INLINE_ATTRIBUTE("primary key")
+#endif
+
 #define NOT_NULL                   INLINE_ATTRIBUTE("not null")
 #define UNIQUE                     INLINE_ATTRIBUTE("unique")
 #define SQLDEFAULT(v)              INLINE_ATTRIBUTE("default " v)

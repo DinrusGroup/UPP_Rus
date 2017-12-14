@@ -1,14 +1,13 @@
+#ifdef _WIN32
+
 #include <Core/Core.h>
 
 using namespace Upp;
 
-#ifndef PLATFORM_WIN32
-#error Sorry: This platform is not supported!. Look for OfficeAutomation in Bazaar Upp Forum to search for info and new news
-#endif
-
 #include <winnls.h>
 
 #include <Functions4U/Functions4U.h>
+#include <SysInfo/SysInfo.h>
 #include "OfficeAutomation.h"
 #include "OfficeAutomationBase.h"
 
@@ -21,6 +20,8 @@ VariantOle::VariantOle() {
 VariantOle::~VariantOle() {
     if (var.vt == VT_BSTR)
         SysFreeString(var.bstrVal);
+    else if ((var.vt == (VT_ARRAY | VT_VARIANT)) && (var.parray != 0))
+        SafeArrayDestroy(var.parray);
 }
 
 void VariantOle::Bool(bool val) {
@@ -78,43 +79,79 @@ void VariantOle::Time(Upp::Time t) {
     SystemTimeToVariantTime(&stime, &(var.date));
 }
 
-void VariantOle::ArrayDim(int sizeX) {
+bool VariantOle::ArrayDim(int sizeX) {
     var.vt = VT_ARRAY | VT_VARIANT;
     SAFEARRAYBOUND sab[1];		// 1 dimension
 	sab[0].lLbound = 1; sab[0].cElements = sizeX;
 	var.parray = SafeArrayCreate(VT_VARIANT, 1, sab);
+	return var.parray != 0;
 }
 
-void VariantOle::ArrayDim(int sizeX, int sizeY) {
+bool VariantOle::ArrayDim(int sizeX, int sizeY) {
     var.vt = VT_ARRAY | VT_VARIANT;
     SAFEARRAYBOUND sab[2];		// 2 dimension
 	sab[0].lLbound = 1; sab[0].cElements = sizeY;
 	sab[1].lLbound = 1; sab[1].cElements = sizeX;
 	var.parray = SafeArrayCreate(VT_VARIANT, 2, sab);
+	return var.parray != 0;
 }
 
-void VariantOle::ArraySetValue(int x, ::Value value) {
+bool VariantOle::ArrayDestroy() { 
+	bool ret = SafeArrayDestroy(var.parray) == S_OK;
+	var.parray = 0;
+	return ret;
+}
+
+bool VariantOle::ArraySetValue(int x, ::Value value) {
 	VariantOle tmp;
 	tmp.Value(value);
 	long indices[] = {x};
-	SafeArrayPutElement(var.parray, indices, (void *)&tmp);
+	return S_OK == SafeArrayPutElement(var.parray, indices, (void *)&tmp);
 }
 
-void VariantOle::ArraySetVariant(int x, VariantOle &value) {
+bool VariantOle::ArraySetVariant(int x, VariantOle &value) {
 	long indices[] = {x};
-	SafeArrayPutElement(var.parray, indices, (void *)&value);
+	return S_OK == SafeArrayPutElement(var.parray, indices, (void *)&value);
 }
 
-void VariantOle::ArraySetValue(int x, int y, ::Value value) {
+bool VariantOle::ArraySetValue(int x, int y, ::Value value) {
 	VariantOle tmp;
 	tmp.Value(value);
 	long indices[] = {y, x};
-	SafeArrayPutElement(var.parray, indices, (void *)&tmp);
+	return S_OK == SafeArrayPutElement(var.parray, indices, (void *)&tmp);
 }
 
-void VariantOle::ArraySetVariant(int x, int y, VariantOle &value) {
+bool VariantOle::ArraySetVariant(int x, int y, VariantOle &value) {
 	long indices[] = {y, x};
-	SafeArrayPutElement(var.parray, indices, (void *)&value);
+	return S_OK == SafeArrayPutElement(var.parray, indices, (void *)&value);
+}
+
+bool VariantOle::ArrayGetValue(int x, ::Value &value) {
+	VariantOle tmp;
+	long indices[] = {x};
+	if (S_OK != SafeArrayGetElement(var.parray, indices, (void *)&tmp))
+		return false;
+	value = GetVARIANT(tmp.var);
+	return true;
+}
+
+bool VariantOle::ArrayGetVariant(int x, VariantOle &value) {
+	long indices[] = {x};
+	return S_OK == SafeArrayGetElement(var.parray, indices, (void *)&value);
+}
+
+bool VariantOle::ArrayGetValue(int x, int y, ::Value &value) {
+	VariantOle tmp;
+	long indices[] = {y, x};
+	if (S_OK != SafeArrayGetElement(var.parray, indices, (void *)&tmp))
+		return false;
+	value = GetVARIANT(tmp.var);
+	return true;
+}
+	
+bool VariantOle::ArrayGetVariant(int x, int y, VariantOle &value) {
+	long indices[] = {y, x};
+	return S_OK == SafeArrayGetElement(var.parray, indices, (void *)&value);
 }
 
 void VariantOle::Value(::Value value) {
@@ -127,9 +164,6 @@ void VariantOle::Value(::Value value) {
 	} else if(value.Is<int64>()) {
 		int64 v = value;
 		Int4((long)v);
-	//} else if(value.Is<float>()) {
-	//	float v = value;
-	//	Real4(v);
 	}  else if(value.Is<double>()) {
 		double v = value;
 		Real8(v);
@@ -145,6 +179,8 @@ void VariantOle::Value(::Value value) {
 	}        
 }
 
+	
+	
 ////////////////////////////////////////////////////////////////////////////////////////
 
 
@@ -169,14 +205,14 @@ bool Ole::Close() {	// Uninitialize COM for this thread
 		return true;
 }
 
-// Invoke() - Automation helper function
-bool Ole::Invoke(int autoType, VARIANT *pvResult, IDispatch *pDisp, String name, int cArgs ...) {
-    // Begin variable-argument lis
+// Automation helper function
+bool Ole::Invoke(int autoType, VARIANT *pvResult, IDispatch *pDisp, String name, int cArgs, ...) {
+    // Begin variable-argument list
     va_list marker;
     va_start(marker, cArgs);
 
     if(!pDisp) {
-        MessageBox(NULL, t_("OfficeAutomation internal error. ObjectOle included is null"), t_("Error"), 0x10010);
+        LOG("Ole::Invoke() error. ObjectOle included is null");
         return false;
     }
     // Variables used
@@ -195,8 +231,8 @@ bool Ole::Invoke(int autoType, VARIANT *pvResult, IDispatch *pDisp, String name,
     // Get DISPID for name passed
     hr = pDisp->GetIDsOfNames(IID_NULL, (LPOLESTR *)&ptName, 1, LOCALE_USER_DEFAULT, &dispID);
     if(FAILED(hr)) {
-        sprintf(buf, t_("OfficeAutomation internal error. Command \"%s\" not found for object or problem when running it"), szName);
-        MessageBox(NULL, buf, t_("Ole error"), 0x10010);
+        sprintf(buf, "Ole::Invoke(\"%s\") not found for object or problem when running it", szName);
+        LOG(buf);
         return false;
     }
     VARIANT *pArgs = new VARIANT[cArgs+1];		// Allocate memory for arguments
@@ -218,8 +254,8 @@ bool Ole::Invoke(int autoType, VARIANT *pvResult, IDispatch *pDisp, String name,
     delete [] pArgs;
 
     if(FAILED(hr)) {
-        //sprintf(buf, "IDispatch::Invoke(\"%s\"=%08lx) failed w/err 0x%08lx", szName, dispID, hr);
-		//MessageBox(NULL, buf, "Ole::Invoke()", 0x10010);
+        sprintf(buf, "Ole::Invoke(\"%s\"=%08lx) failed w/err 0x%08lx", szName, dispID, hr);
+		LOG(buf);
         return false;
     }
     return true;
@@ -229,14 +265,14 @@ ObjectOle Ole::CreateObject(String application) {
 	CLSID clsid;
 	HRESULT hr = CLSIDFromProgID(application.ToWString(), &clsid);	// Get CLSID for our server
 	if(FAILED(hr)) {
-		//::MessageBox(NULL, "CLSIDFromProgID() failed", "Error", 0x10010);
+		LOG("CLSIDFromProgID() failed");
 		return NULL;
 	}
 	ObjectOle app;
 	// Start server and get IDispatch
 	hr = CoCreateInstance(clsid, NULL, CLSCTX_LOCAL_SERVER, IID_IDispatch, (void **)&app);
 	if(FAILED(hr)) {
-		::MessageBox(NULL, t_("OfficeAutomation internal error. Application not registered properly"), t_("Error"), 0x10010);
+		LOG("OfficeAutomation internal error. Application not registered properly");
 		return NULL;
 	}
 	return app;
@@ -399,9 +435,10 @@ MSSheet::MSSheet() {
 
 	App = Ole::CreateObject("Excel.Application");
 	if (!(Books = Ole::GetObject(App, "Workbooks"))) {
-		::MessageBox(NULL, t_("Excel workbooks not loaded properly"), t_("Error"), 0x10010);
+		LOG("Excel workbooks not loaded properly");
 		return;
 	}
+	killProcess = false;
 }
 
 MSSheet::~MSSheet() {
@@ -422,9 +459,15 @@ MSSheet::~MSSheet() {
 		Books = 0;
 	}
 	if (App) {
+		HRESULT res;
+		DWORD pid;
+		if (killProcess)
+			res = CoGetServerPID(App, &pid);
 		Quit();
 		App->Release();
 		App = 0;
+		if (killProcess && !FAILED(res)) 
+			ProcessTerminate(pid);
 	}
 }
 
@@ -434,6 +477,7 @@ bool MSSheet::IsAvailable() {
 	if (!app) 
 		return false;
 	else {
+		Ole::Method(app, "Quit");
 		app->Release();
 		return true;
 	}
@@ -469,6 +513,7 @@ bool MSSheet::Quit()
 }
 
 bool MSSheet::AddSheet(bool visible) {
+	killProcess = true;
 	if (!Books)
 		return false;
 	
@@ -482,6 +527,7 @@ bool MSSheet::AddSheet(bool visible) {
 }
 
 bool MSSheet::OpenSheet(String fileName, bool visible) {
+	killProcess = true;
 	if (!Books)
 		return false;
 
@@ -521,21 +567,80 @@ bool MSSheet::Select() {
 	return Ole::Method(Range, "Select");
 }
 
-void MSSheet::DefMatrix(int width, int height) {
-	Matrix.ArrayDim(width, height);
+bool MSSheet::EnableCommandVars(bool enable) {
+	ObjectOle commandBars;
+	if(!(commandBars = Ole::GetObject(App, "CommandBars")))
+		return false;	
+
+	VariantOle vEnabled;
+	vEnabled.Int4(enable? 1: 0);
+	return Ole::SetValue(App, "Enabled", vEnabled);
 }
 
-void MSSheet::SetMatrixValue(int x, int y, ::Value value) {
-	Matrix.ArraySetValue(x, y, value);
+bool MSSheet::MatrixAllocate(int width, int height) {
+	return Matrix.ArrayDim(width, height);
 }
 
-bool MSSheet::FillSelectionMatrix() {
+bool MSSheet::MatrixDelete() {
+	return Matrix.ArrayDestroy();
+}
+
+bool MSSheet::MatrixSetValue(int x, int y, ::Value value) {
+	return Matrix.ArraySetValue(x, y, value);
+}
+
+bool MSSheet::MatrixSetSelection() {
 	if (!Range)
 		return false;
 
-	bool ret = Ole::Invoke(DISPATCH_PROPERTYPUT, NULL, Range, "Value", 1, Matrix.var);
+	bool ret = Ole::Invoke(DISPATCH_PROPERTYPUT, NULL, Range, "Value", 1, VARIANT(Matrix.var));
 
 	return ret;
+}
+
+bool MSSheet::MatrixSet(int fromX, int fromY, Vector<Vector<Value> > &data) {
+	if (data.IsEmpty())
+		return false;
+	int height = data.GetCount();
+	int width = data[0].GetCount();
+	int toX = fromX + width - 1;	
+	int toY = fromY + height - 1;
+	if (!Select(fromX, fromY, toX, toY)) return false;
+	if (!MatrixAllocate(width, height)) return false;
+	try {
+		for (int row = 0; row < height; ++row)
+			for (int col = 0; col < width; ++col)
+				if (!MatrixSetValue(col + 1, row + 1, data[row][col]))  throw;
+		if (!MatrixSetSelection()) throw;
+	} catch (...) {
+		MatrixDelete();
+		return false;
+	}
+	return MatrixDelete();
+}
+
+bool MSSheet::MatrixGetValue(int x, int y, ::Value &value) {
+	return Matrix.ArrayGetValue(x, y, value);
+}
+
+bool MSSheet::MatrixGet(int fromX, int fromY, int width, int height, Vector<Vector<Value> > &data) {
+	data.SetCount(height);
+	for (int i = 0; i < height; i++)
+		data[i].SetCount(width);
+	int toX = fromX + width - 1;	
+	int toY = fromY + height - 1;
+	if (!Select(fromX, fromY, toX, toY)) return false;
+	if (!MatrixAllocate(width, height)) return false;
+	try {
+		for (int row = 0; row < height; ++row)
+			for (int col = 0; col < width; ++col)
+				if (!MatrixGetValue(col + 1, row + 1, data[row][col]))  throw;
+		if (!MatrixSetSelection()) throw;
+	} catch (...) {
+		MatrixDelete();
+		return false;
+	}
+	return MatrixDelete();
 }
 
 // cell in textual format like "B14" 
@@ -1134,7 +1239,7 @@ MSDoc::MSDoc() {
 	
 	App = Ole::CreateObject("Word.Application");
 	if (!(Docs = Ole::GetObject(App, "Documents"))) {
-		::MessageBox(NULL, t_("Word document not loaded properly"), t_("Error"), 0x10010);
+		LOG("Word document not loaded properly");
 		return;
 	}
 }
@@ -1142,9 +1247,11 @@ MSDoc::MSDoc() {
 MSDoc::~MSDoc() {
 	if (Selection)
 		Selection->Release();
-	if (Doc)
+	if (Doc) {
+		Close();
 		Doc->Release();
-	if (Docs)
+	}
+	if (Docs) 
 		Docs->Release();
 	if (App) {
 		Quit();
@@ -1168,6 +1275,7 @@ bool MSDoc::IsAvailable() {
 	if (!app) 
 		return false;
 	else {
+		Ole::Method(app, "Quit");
 		app->Release();
 		return true;
 	}
@@ -1180,6 +1288,10 @@ bool MSDoc::SetSaved(bool saved) {
 	VariantOle vSaved;
 	vSaved.Int4(saved? 1: 0);
 	return Ole::SetValue(Doc, "Saved", vSaved);
+}
+
+bool MSDoc::Close() {
+	return Ole::Method(Doc, "Close"); 
 }
 
 bool MSDoc::Quit() {
@@ -1219,6 +1331,17 @@ bool MSDoc::OpenDoc(String fileName, bool visible) {
 	SetVisible(visible);
 	return true;
 }
+
+bool MSDoc::EnableCommandVars(bool enable) {
+	ObjectOle commandBars;
+	if(!(commandBars = Ole::GetObject(App, "CommandBars")))
+		return false;	
+
+	VariantOle vEnabled;
+	vEnabled.Int4(enable? 1: 0);
+	return Ole::SetValue(App, "Enabled", vEnabled);
+}
+
 
 bool MSDoc::SaveAs(String fileName, String type) {
 	if (!Doc)
@@ -1503,7 +1626,7 @@ OPENSheet::~OPENSheet() {
 	if (Document)
 		Document->Release();
 	if (Desktop) {
-		Quit();
+		Quit();											
 		Desktop->Release();
 	}
 	if (CoreReflection)
@@ -1531,7 +1654,10 @@ bool OPENSheet::SetSaved(bool saved) {
 bool OPENSheet::Quit() {
 	if (!quit) {
 		quit = true;
-		return Ole::Method(Desktop, "Terminate");
+		if (Desktop) {
+			//Ole::Method(Desktop, "Dispose");				Commented 12/2014
+			return Ole::Method(Desktop, "Terminate");
+		}
 	}
 	return true;
 }
@@ -1727,16 +1853,45 @@ bool OPENSheet::Select() {
 	return true;
 }
 
-void OPENSheet::DefMatrix(int width, int height) {
-	return;
-}
-
-void OPENSheet::SetMatrixValue(int x, int y, ::Value value) {
-	return;
-}
-
-bool OPENSheet::FillSelectionMatrix() {
+bool OPENSheet::MatrixAllocate(int width, int height) {
 	return false;
+}
+
+bool OPENSheet::MatrixDelete() {
+	return false;
+}
+
+bool OPENSheet::MatrixSetValue(int x, int y, ::Value value) {
+	return false;
+}
+
+bool OPENSheet::MatrixGetValue(int x, int y, ::Value &value) {
+	return false;
+}
+
+bool OPENSheet::MatrixSetSelection() {
+	return false;
+}
+
+bool OPENSheet::MatrixSet(int fromX, int fromY, Vector<Vector<Value> > &data) {
+	if (data.IsEmpty())
+		return false;
+	int height = data.GetCount();
+	int width = data[0].GetCount();
+	for (int row = 0; row < height; ++row)
+		for (int col = 0; col < width; ++col)
+			SetValue(col + fromX, row + fromY, data[row][col]);	
+	return true;
+}
+
+bool OPENSheet::MatrixGet(int fromX, int fromY, int width, int height, Vector<Vector<Value> > &data) {
+	data.SetCount(height);
+	for (int i = 0; i < height; i++)
+		data[i].SetCount(width);
+	for (int row = 0; row < height; ++row)
+		for (int col = 0; col < width; ++col)
+			data[row][col] = GetValue(col + fromX, row + fromY);	
+	return true;
 }
 
 bool OPENSheet::Replace(Value search, Value replace) {
@@ -1909,6 +2064,11 @@ bool OPENSheet::SetHyperlink(String address, String text) {
 	return false;
 }
 
+bool OPENSheet::EnableCommandVars(bool enable) {
+/**/	
+	return false;
+}
+	
 bool OPENSheet::SetItalic(String cell, bool italic) {
 	int col, row;
 	OfficeSheet::CellToColRow(cell, col, row);
@@ -2239,7 +2399,7 @@ OPENDoc::~OPENDoc() {
 	if (Document)
 		Document->Release();
 	if (Desktop) {
-		Quit();
+		//Quit();				Commented 12/2014
 		Desktop->Release();
 	}
 	if (CoreReflection)
@@ -2435,6 +2595,11 @@ bool OPENDoc::Print() {
 
 	return Ole::Method(Document, "print", vArrayPrint);
 }
+
+bool OPENDoc::EnableCommandVars(bool enable) {
+/**/	
+	return false;
+}
 	
 bool OPENDoc::SetSaved(bool saved) {
 	VariantOle vval;
@@ -2485,8 +2650,12 @@ bool OPENDoc::SaveAs(String fileName, String type) {
 bool OPENDoc::Quit() {
 	if (!quit) {
 		quit = true;
-		if (Document)
-			return Ole::Method(Document, "Dispose");
+		if (Document) {
+			Ole::Method(Document, "Dispose");
+			return Ole::Method(Document, "Terminate");
+		}
 	}
 	return true;
 }
+
+#endif

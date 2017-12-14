@@ -1,10 +1,10 @@
-topic "Sql Tutorial";
+topic "SQL Tutorial";
 [2 $$0,0#00000000000000000000000000000000:Default]
 [l288;i1120;a17;O9;~~~.1408;2 $$1,0#10431211400427159095818037425705:param]
 [a83;*R6 $$2,5#31310162474203024125188417583966:caption]
 [H4;b83;*4 $$3,5#07864147445237544204411237157677:title]
 [i288;O9;C2 $$4,6#40027414424643823182269349404212:item]
-[b42;a42;2 $$5,5#45413000475342174754091244180557:text]
+[b42;a42;ph2 $$5,5#45413000475342174754091244180557:text]
 [l288;b17;a17;2 $$6,6#27521748481378242620020725143825:desc]
 [l321;C@5;1 $$7,7#20902679421464641399138805415013:code]
 [b2503;2 $$8,0#65142375456100023862071332075487:separator]
@@ -22,8 +22,22 @@ topic "Sql Tutorial";
 [C2 $$20,20#70211524482531209251820423858195:class`-nested]
 [b50;2 $$21,21#03324558446220344731010354752573:Par]
 [{_}%EN-US 
-[s2; Sql Tutorial&]
-[s3; 1. SqlSession, Sql, opening database connection&]
+[s2; SQL Tutorial&]
+[s3; Table of contents&]
+[s0; &]
+[s0; [^topic`:`/`/Sql`/srcdoc`/tutorial`$en`-us`#1^ 1. SqlSession, 
+Sql, opening database connection]&]
+[s0; [^topic`:`/`/Sql`/srcdoc`/tutorial`$en`-us`#2^ 2. Using global 
+main database, executing statements with parameters, getting 
+resultset info]&]
+[s0; [^topic`:`/`/Sql`/srcdoc`/tutorial`$en`-us`#3^ 3. Using SqlExp]&]
+[s0; [^topic`:`/`/Sql`/srcdoc`/tutorial`$en`-us`#4^ 4. Schema file]&]
+[s0; [^topic`:`/`/Sql`/srcdoc`/tutorial`$en`-us`#5^ 5. Using schema 
+file to define SqlId constants]&]
+[s0; [^topic`:`/`/Sql`/srcdoc`/tutorial`$en`-us`#6^ 6. Using structures 
+defined by schema files]&]
+[s0; &]
+[s3;:1: 1. SqlSession, Sql, opening database connection&]
 [s5; SqlSession derived objects represent database connection. Each 
 SQL database (Sqlite3, Microsoft SQL, Oracle, MySQL, PostgreSQL) 
 has its own session class derived from SqlSession. Sql class 
@@ -66,8 +80,8 @@ is Select, it may return a result set, which is retrieved using
 using index of column (starts with 0). Values are returned as 
 Value type.&]
 [s5; &]
-[s3; 2. Using global main database, executing statements with parameters, 
-getting resultset info&]
+[s3;:2: 2. Using global main database, executing statements with 
+parameters, getting resultset info&]
 [s5; Most applications need to work with just single database backend, 
 therefore repeating SqlSession parameter in all Sql declarations 
 would be tedious.&]
@@ -126,16 +140,18 @@ of this code).]&]
 ]to retrieve the number of columns and [* GetColumnInfo] to retrieve 
 information about columns `- returns [* SqlColumnInfo] reference 
 with information like name or type of column.&]
-[s3; 3. Using SqlExp&]
+[s5; &]
+[s3;:3: 3. Using SqlExp&]
 [s5; U`+`+ contains an unique feature, `"SqlExp`". This is a mechanism 
 where you construct SQL statements as C`+`+ expressions (using 
 heavily overloaded operators).&]
 [s5; There are three advantages to this approach:&]
-[s5;i150;O0; SQL statements are at least partially checked at compile 
-time&]
-[s5;i150;O0; As such statements are yet to be interpreted, it is 
-possible to hide some differences between DB engines&]
-[s5;i150;O0; It is much easier to create complex dynamic SQL statements&]
+[s5;l160;i150;O0; SQL statements are at least partially checked at 
+compile time&]
+[s5;l160;i150;O0; As such statements are yet to be interpreted, it 
+is possible to hide some differences between DB engines&]
+[s5;l160;i150;O0; It is much easier to create complex dynamic SQL 
+statements&]
 [s5; Database entity identifiers (like table or column names) can 
 be defined as [* SqlId] type. For the complete lest of supported 
 SQL statements, see [^topic`:`/`/Sql`/src`/SqlExp`$en`-us^ SqlExp 
@@ -174,10 +190,10 @@ in examples].&]
 [s7; -|-|Cout() << [* sql`[A`]] << `" `\`'`" << [* sql`[B`]] << `"`\`'`\n`";&]
 [s7; `}&]
 [s7; &]
-[s0; SqlId identifiers can be also used as parameter of Sql`::operator`[`] 
+[s5; SqlId identifiers can be also used as parameter of Sql`::operator`[`] 
 to retrieve particular columns of result`-set.&]
-[s0; &]
-[s3; 4. Schema file&]
+[s5; &]
+[s3;:4: 4. Schema file&]
 [s5; Schema files can be used to describe the database schema. Such 
 schema files can be used to upload the schema to the database, 
 to defined SqlId constants and also to work with database records 
@@ -246,7 +262,7 @@ schema in SQL database server.&]
 [s7; `}&]
 [s7;* &]
 [s5; &]
-[s3; 5. Using schema file to define SqlId constants&]
+[s3;:5: 5. Using schema file to define SqlId constants&]
 [s5; As names of columns are present in the database schema, it is 
 natural to recycle them to create SqlId constants.&]
 [s5; However, due to C`+`+ one definition rule (.sch files are interpreted 
@@ -315,7 +331,7 @@ mark identifiers using underscore:&]
 [s7; `}&]
 [s7; &]
 [s5; &]
-[s3; 6. Using structures defined by schema files&]
+[s3;:6: 6. Using structures defined by schema files&]
 [s5; Schema files also define structures that can be used to fetch, 
 insert or update database records. Names of such structures are 
 identical to the names of tables, with [* S`_] prefix:&]
@@ -356,4 +372,13 @@ identical to the names of tables, with [* S`_] prefix:&]
 [s7; -|while(sql.Fetch([* x]))&]
 [s7; -|-|Cout() << [* x.A] << `" `\`'`" << [* x.B] << `"`\`'`\n`";&]
 [s7; `}&]
-[s0; ]
+[s5; &]
+[s3; Recommended tutorials:&]
+[s5; If you want to learn more, we have several tutorials that you 
+can find useful:&]
+[s5;l160;i150;O0;~~~0; [^topic`:`/`/Skylark`/srcdoc`/Tutorial`$en`-us^ Skylark] 
+`- now you know everything about databases `- why not to use 
+your knowledge to become web development star?&]
+[s5;l160;i150;O0;~~~0; [^topic`:`/`/Core`/srcdoc`/CoreTutorial`$en`-us^ U`+`+ 
+Core value types] `- still not very confident with U`+`+. In 
+this tutorial you will learn basics.]]

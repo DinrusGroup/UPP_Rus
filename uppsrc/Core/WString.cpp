@@ -1,6 +1,6 @@
 #include "Core.h"
 
-NAMESPACE_UPP
+namespace Upp {
 
 wchar *WString0::Alloc(int& count)
 {
@@ -9,16 +9,17 @@ wchar *WString0::Alloc(int& count)
 		wchar *p = (wchar *)MemoryAlloc48();
 		return p;
 	}
-	size_t sz = sizeof(Atomic) + (count + 1) * sizeof(wchar);
-	Atomic *rc = (Atomic *)MemoryAlloc(sz);
-	count = ((int)(sz - sizeof(Atomic)) >> 1) - 1;
+	size_t sz = sizeof(Atomic) + ((size_t)count + 1) * sizeof(wchar);
+	Atomic *rc = (Atomic *)MemoryAllocSz(sz);
+	if(count != INT_MAX)
+		count = int(((sz - sizeof(Atomic)) >> 1) - 1);
 	*rc = 1;
 	return (wchar *)(rc + 1);
 }
 
 void WString0::Free()
 {
-	if(alloc > 0)
+	if(alloc > 0) {
 		if(IsRc()) {
 			Atomic& rc = Rc();
 			if(AtomicDec(rc) == 0)
@@ -26,6 +27,7 @@ void WString0::Free()
 		}
 		else
 			MemoryFree48(ptr);
+	}
 }
 
 #ifdef _DEBUG
@@ -41,6 +43,8 @@ wchar *WString0::Insert(int pos, int count, const wchar *s)
 {
 	ASSERT(pos >= 0 && count >= 0 && pos <= GetCount());
 	int newlen = length + count;
+	if(newlen < length)
+		Panic("WString is too big!");
 	if(newlen < alloc && !IsShared() && (!s || s < ptr || s > ptr + length)) {
 		if(pos < length)
 			memmove(ptr + pos + count, ptr + pos, (length - pos) * sizeof(wchar));
@@ -51,7 +55,7 @@ wchar *WString0::Insert(int pos, int count, const wchar *s)
 		Dsyn();
 		return ptr + pos;
 	}
-	int all = max(2 * length, newlen);
+	int all = max(length >= int((int64)2 * INT_MAX / 3) ? INT_MAX : length + (length >> 1), newlen);
 	wchar *p = Alloc(all);
 	if(pos > 0)
 		memcpy(p, ptr, pos * sizeof(wchar));
@@ -69,7 +73,7 @@ wchar *WString0::Insert(int pos, int count, const wchar *s)
 	return ptr + pos;
 }
 
-void WString0::Set(const WString0& src)
+void WString0::Set0(const WString0& src)
 {
 	if(src.alloc <= 0) {
 		static wchar h[2];
@@ -114,12 +118,18 @@ void WString0::Cat(const wchar *s, int l)
 	Dsyn();
 }
 
+void WString0::Set(const wchar *s, int length)
+{
+	Free();
+	Set0(s, length);
+}
+
 void WString0::LCat(int c)
 {
 	*Insert(length, 1, NULL) = c;
 }
 
-void WString0::Set(const wchar *s, int l)
+void WString0::Set0(const wchar *s, int l)
 {
 	alloc = length = l;
 	memcpy(ptr = Alloc(alloc), s, l * sizeof(wchar));
@@ -193,16 +203,18 @@ WString& WString::operator=(const wchar *s)
 	if(s >= str && s <= str + len)
 		return *this = WString(s, strlen__(s));
 	WString0::Free();
-	WString0::Set(s, strlen__(s));
+	WString0::Set0(s, strlen__(s));
 	return *this;
 }
 
 WString::WString(WStringBuffer& b)
 {
 	length = b.GetLength();
-	ptr = b.begin;
+	ptr = b.pbegin;
 	ptr[length] = 0;
 	alloc = b.GetAlloc();
+	if(GetAlloc() > 4 * GetLength() / 3)
+		Shrink();
 	b.Zero();
 	Dsyn();
 }
@@ -227,7 +239,7 @@ String WString::ToString() const
 	return FromUnicode(*this, CHARSET_DEFAULT);
 }
 
-Atomic WString0::voidptr[2] = { 0, 0 };
+Atomic WString0::voidptr[2];
 
 WString WString::GetVoid()
 {
@@ -240,7 +252,7 @@ WString WString::GetVoid()
 WString::WString(const std::wstring& s)
 {
 	if(sizeof(std::wstring::value_type) == sizeof(wchar)) {
-		WString0::Set((wchar *)s.c_str(), (int)s.length());
+		WString0::Set0((wchar *)s.c_str(), (int)s.length());
 	}
 	else {
 		WString0::Zero();
@@ -268,7 +280,7 @@ WString::operator std::wstring() const
 void WStringBuffer::Zero()
 {
 	static wchar h[2];
-	begin = end = limit = h;
+	pbegin = pend = limit = h;
 }
 
 wchar *WStringBuffer::Alloc(int count, int& alloc)
@@ -279,9 +291,10 @@ wchar *WStringBuffer::Alloc(int count, int& alloc)
 		return s;
 	}
 	else {
-		size_t sz = sizeof(Atomic) + (count + 1) * sizeof(wchar);
+		size_t sz = sizeof(Atomic) + ((size_t)count + 1) * sizeof(wchar);
 		Atomic *rc = (Atomic *)MemoryAlloc(sz);
-		alloc = ((int)(sz - sizeof(Atomic)) >> 1) - 1;
+		alloc = (int)min((size_t)INT_MAX, ((sz - sizeof(Atomic)) >> 1) - 1);
+		ASSERT(alloc >= 0);
 		*rc = 1;
 		return (wchar *)(rc + 1);
 	}
@@ -289,66 +302,72 @@ wchar *WStringBuffer::Alloc(int count, int& alloc)
 
 void WStringBuffer::Free()
 {
-	int all = (int)(limit - begin);
+	int all = (int)(limit - pbegin);
 	if(all == WString0::SMALL)
-		MemoryFree48(begin);
+		MemoryFree48(pbegin);
 	if(all > WString0::SMALL)
-		MemoryFree((Atomic *)begin - 1);
+		MemoryFree((Atomic *)pbegin - 1);
 }
 
-void WStringBuffer::Expand(int n, const wchar *cat, int l)
+void WStringBuffer::Expand(dword n, const wchar *cat, int l)
 {
 	int al;
-	int ep = (int)(end - begin);
+	size_t ep = pend - pbegin;
+	if(n > INT_MAX)
+		n = INT_MAX;
 	wchar *p = Alloc(n, al);
-	memcpy(p, begin, GetLength() * sizeof(wchar));
+	memcpy(p, pbegin, GetLength() * sizeof(wchar));
 	if(cat) {
+		if(ep + l > INT_MAX)
+			Panic("WStringBuffer is too big!");
 		memcpy(p + ep, cat, l * sizeof(wchar));
 		ep += l;
 	}
 	Free();
-	begin = p;
-	end = begin + ep;
-	limit = begin + al;
+	pbegin = p;
+	pend = pbegin + ep;
+	limit = pbegin + al;
 }
 
 void WStringBuffer::Expand()
 {
 	Expand(GetLength() * 2);
+	if(pend == limit)
+		Panic("WStringBuffer is too big!");
 }
 
 void WStringBuffer::SetLength(int l)
 {
-	if(l > (limit - begin))
+	if(l > (limit - pbegin))
 		Expand(l);
-	end = begin + l;
+	pend = pbegin + l;
 }
 
 void WStringBuffer::Cat(const wchar *s, int l)
 {
-	if(end + l > limit)
+	if(pend + l > limit)
 		Expand(max(GetLength(), l) + GetLength(), s, l);
 	else {
-		memcpy(end, s, l * sizeof(wchar));
-		end += l;
+		memcpy(pend, s, l * sizeof(wchar));
+		pend += l;
 	}
 }
 
 void WStringBuffer::Cat(int c, int l)
 {
-	if(end + l > limit)
+	if(pend + l > limit)
 		Expand(max(GetLength(), l) + GetLength(), NULL, l);
-	memsetw(end, c, l);
-	end += l;
+	memsetw(pend, c, l);
+	pend += l;
 }
 
 void WStringBuffer::Set(WString& s)
 {
 	s.UnShare();
 	int l = s.GetLength();
-	begin = s.ptr;
-	end = begin + l;
-	limit = begin + s.GetAlloc();
+	pbegin = s.ptr;
+	pend = pbegin + l;
+	limit = pbegin + s.GetAlloc();
 	s.Zero();
 }
 
@@ -387,4 +406,4 @@ int CompareNoCase(const WString& a, const wchar *b)
 	return IterCompare(a.Begin(), a.End(), b, b + wstrlen(b), WStringICompare__());
 }
 
-END_UPP_NAMESPACE
+}

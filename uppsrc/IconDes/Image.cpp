@@ -1,6 +1,6 @@
 #include "IconDes.h"
 
-NAMESPACE_UPP
+namespace Upp {
 
 void IconDes::Interpolate()
 {
@@ -147,21 +147,33 @@ void IconDes::SmoothRescale()
 		return;
 	WithRescaleLayout<TopWindow> dlg;
 	CtrlLayoutOKCancel(dlg, "Rescale");
-	dlg.cx <<= dlg.cy <<= dlg.Breaker();
+	dlg.cx <<= dlg.cy <<= dlg.method <<= dlg.Breaker();
 	Slot& c = Current();
 	BeginTransform();
 	Image bk = IsPasting() ? c.paste_image : c.image;
 	dlg.cx <<= bk.GetWidth();
 	dlg.cy <<= bk.GetHeight();
 	dlg.keep <<= true;
+	dlg.method.Add(Null, "Rylek");
+	dlg.method.Add(FILTER_NEAREST, "Nearest");
+	dlg.method.Add(FILTER_BILINEAR, "Bilinear");
+	dlg.method.Add(FILTER_BSPLINE, "Bspline");
+	dlg.method.Add(FILTER_COSTELLO, "Costello");
+	dlg.method.Add(FILTER_BICUBIC_MITCHELL, "Bicubic Mitchell");
+	dlg.method.Add(FILTER_BICUBIC_CATMULLROM, "Bicubic Catmull Rom");
+	dlg.method.Add(FILTER_LANCZOS2, "Lanczos 2");
+	dlg.method.Add(FILTER_LANCZOS3, "Lanczos 3");
+	dlg.method.Add(FILTER_LANCZOS4, "Lanczos 4");
+//	dlg.method.Add(FILTER_LANCZOS5, "Lanczos 5");
 	for(;;) {
 		Size sz(minmax((int)~dlg.cx, 1, 9999), minmax((int)~dlg.cy, 1, 9999));
+		Image m = RescaleFilter(bk, sz, ~dlg.method);
 		if(IsPasting()) {
-			c.paste_image = Rescale(bk, sz);
+			c.paste_image = m;
 			MakePaste();
 		}
 		else {
-			c.image = Rescale(bk, sz);
+			c.image = m;
 			Refresh();
 		}
 		SyncImage();
@@ -246,18 +258,71 @@ void IconDes::BlurSharpen()
 	}
 }
 
+Image Colorize2(const Image& img, Color color, int alpha, int gray)
+{
+	const RGBA *s = ~img;
+	const RGBA *e = s + img.GetLength();
+	ImageBuffer w(img.GetSize());
+	Unmultiply(w);
+	RGBA *t = w;
+	byte r0 = color.GetR();
+	byte g0 = color.GetG();
+	byte b0 = color.GetB();
+	alpha = alpha + (alpha >> 7);
+	if(gray == 0)
+		gray = 1;
+	while(s < e) {
+		int ga = Grayscale(*s);
+		if(gray >= 255) {
+			ga = ga + (ga >> 7);
+			t->r = (alpha * (((ga * r0) >> 8) - s->r) >> 8) + s->r;
+			t->g = (alpha * (((ga * g0) >> 8) - s->g) >> 8) + s->g;
+			t->b = (alpha * (((ga * b0) >> 8) - s->b) >> 8) + s->b;
+		}
+		else {
+			int r, g, b;
+			if(ga <= gray) {
+				r = ga * r0 / gray;
+				g = ga * g0 / gray;
+				b = ga * b0 / gray;
+			}
+			else {
+				int div = 255 - gray;
+				int ao = ga - gray;
+				int ac = div - ao;
+				r = (ao * s->r + ac * r0) / div;
+				g = (ao * s->g + ac * g0) / div;
+				b = (ao * s->b + ac * b0) / div;
+			}
+			t->r = (alpha * (r - s->r) >> 8) + s->r;
+			t->g = (alpha * (g - s->g) >> 8) + s->g;
+			t->b = (alpha * (b - s->b) >> 8) + s->b;
+		}
+		t->a = s->a;
+		t++;
+		s++;
+	}
+	Premultiply(w);
+	w.SetHotSpots(img);
+	return w;
+}
+
 void IconDes::Colorize()
 {
-	WithColorizeLayout<TopWindow> dlg;
+	WithColorize2Layout<TopWindow> dlg;
 	CtrlLayoutOKCancel(dlg, "Colorize");
 	PlaceDlg(dlg);
-	dlg.level.Max(10);
+	dlg.level.MinMax(0, 1);
 	dlg.level <<= 1;
 	dlg.level <<= dlg.Breaker();
+	dlg.gray.MinMax(0, 1);
+	dlg.gray <<= 1;
+	dlg.gray <<= dlg.Breaker();
 	Image bk = ImageStart();
 	for(;;) {
-		ImageSet(UPP::Colorize(bk, CurrentColor(),
-		         (int)(minmax((double)~dlg.level, 0.0, 1.0) * 255)));
+		ImageSet(Colorize2(bk, CurrentColor(),
+		                  (int)(minmax((double)~dlg.level, 0.0, 1.0) * 255),
+		                  (int)(minmax((double)~dlg.gray, 0.0, 1.0) * 255)));
 		switch(dlg.Run()) {
 		case IDCANCEL:
 			ImageSet(bk);
@@ -268,11 +333,10 @@ void IconDes::Colorize()
 	}
 }
 
-
 void IconDes::FreeRotate()
 {
 	WithFreeRotateLayout<TopWindow> dlg;
-	CtrlLayoutOKCancel(dlg, "Colorize");
+	CtrlLayoutOKCancel(dlg, "Rotate");
 	PlaceDlg(dlg);
 	dlg.angle <<= 0;
 	dlg.angle <<= dlg.Breaker();
@@ -422,4 +486,4 @@ void IconDes::Colors()
 	}
 }
 
-END_UPP_NAMESPACE
+}

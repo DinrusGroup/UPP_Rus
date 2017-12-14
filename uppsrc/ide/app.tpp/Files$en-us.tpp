@@ -1,4 +1,4 @@
-topic "RusIDE and Ultimate++ File Types";
+topic "TheIDE and Ultimate++ File Types";
 [ $$0,0#00000000000000000000000000000000:Default]
 [l288;i704;a17;O9;~~~.992; $$1,0#10431211400427159095818037425705:param]
 [a83;*R6 $$2,5#31310162474203024125188417583966:caption]
@@ -19,15 +19,15 @@ topic "RusIDE and Ultimate++ File Types";
 [l321;b83;a83;*C$7 $$17,17#07531550463529505371228428965313:result`-line]
 [l160;t4167;*C+117 $$18,5#88603949442205825958800053222425:package`-title]
 [{_}%EN-US 
-[s0;= [*R6 RusIDE and Ultimate`+`+ File Types]&]
+[s0;= [*R6 TheIDE and Ultimate`+`+ File Types]&]
 [s0;2 &]
 [s0;2 &]
-[s0; [*2 File types recognized by RusIDE][2 :]&]
+[s0; [*2 File types recognized by TheIDE][2 :]&]
 [s0;2 &]
-[ {{2413:7587^ [s0; [*2 .cpp, .cc, .cxx, .c]&]
+[ {{2413:7587^ [s0; [*2 .cpp, .cc, .cxx, .c, .m, .mm]&]
 [s0;*2 ]
 :: [s0; [2 Files with these extensions are recognized as source files 
-by RusIDE C`+`+ builders. ]]
+by TheIDE C`+`+ builders. ]]
 :: [s0; [*2 .h, .hpp]]
 :: [s0; [2 Header files. C`+`+ builders provide automatic header dependency 
 tests. U`+`+ packages tend to use ][*2 hpp][2  instead of ][*2 h][2  
@@ -40,6 +40,8 @@ object file. This forces the file to be always linked. The rationale
 of this is that you can put module initialization code into .icpp 
 that is linked into the executable even when code is not referenced 
 from other files.]]
+:: [s0; [*2 .java]]
+:: [s0; [2 Java files (Android builder).]]
 :: [s0; [*2 .rc]]
 :: [s0; [2 Windows resource files.]]
 :: [s0; [*2 .lay]]
@@ -54,10 +56,26 @@ package to various languages.]]
 for layout designer, including visual representation description 
 using ESC scripts.]]
 :: [s0; [*2 .upt]]
-:: [s0; [2 Project templates.]]}}&]
+:: [s0; [2 Project templates.]]
+:: [s0; [*2 .defs]]
+:: [s0; [2 Fixed macro definitions overrides for Assist`+`+ C`+`+ parser.]]
+:: [s0; [*2 .png]&]
+[s0;*2 ]
+:: [s0; [2 TheIDE displays images and if they are smaller than 1024x768, 
+edits them using icon designer.]]
+:: [s0; [*2 .jpg]&]
+[s0; [*2 .gif]&]
+[s0; [*2 .bmp]]
+:: [s0; [2 TheIDE displays images.]]
+:: [s0; [*2 .qtf]]
+:: [s0; [2 U`+`+ rich text format.]]
+:: [s0; [*2 import.ext]]
+:: [s0; [2 This file contains description of ][^topic`:`/`/ide`/app`/importext`$en`-us^2 imp
+orting][2  3rd party source files contained in package.]]}}&]
 [s0;2 &]
 [s0;2 &]
-[s0; [*2 Other text files you might encounter in packages]&]
+[s0; [*2 Other text files you might encounter in packages (TheIDE might 
+have highlighting for them)]&]
 [s0;2 &]
 [ {{2353:7647^ [s0; [*2 .key]]
 :: [s0; [2 Re`-definable keys definition file.]]
@@ -69,8 +87,10 @@ for various purposes.]]
 U`+`+ database applications build database schema building scripts 
 from these files and also use them to define structures and constants 
 and variables needed for database interaction.]]
-:: [s0; [*2 COPYING]]
-:: [s0; [2 This file usually contains license info for package.]]
+:: [s0; [*2 .witz]]
+:: [s0; [2 Skylark HTML templates.]]
+:: [s0; [*2 Copying]]
+:: [s0; [2 This file contains license info for package.]]
 :: [s0; [*2 COPYING`-PLAIN]]
 :: [s0; [2 Contains license explanation.]]
 :: [s0; [*2 AUTHORS]]
@@ -82,7 +102,7 @@ directories]&]
 [s0;*2 &]
 [ {{2370:7630h1;^ [s0; [2 .][*2 upp]]
 ::= [s0; [2 Package definition file. Its name must be the same as name 
-of package folder. It is normally managed by RusIDE`'s package 
+of package folder. It is normally managed by TheIDE`'s package 
 organizer.]]
 ::^ [s0; [*2 .tpp]]
 ::= [s0; [2 Directories with this extension represent Topic`+`+ group. 
@@ -103,8 +123,8 @@ of the code.]]
 or copy your configuration settings by copying the files in the 
 installation folder.]&]
 [s0;*2 &]
-[ {{2370:7630h1;^ [s0; [*2 RusIDE.cfg]]
-::= [s0; [2 This is a binary file file takes its name from RusIDE.exe or 
+[ {{2370:7630h1;^ [s0; [*2 theide.cfg]]
+::= [s0; [2 This is a binary file file takes its name from theide.exe or 
 whatever the name of the executable is that runs the ide.  It 
 contains configuration settings which are a serialization of 
 the Setup`->Environment dialog.]]
@@ -113,9 +133,9 @@ the Setup`->Environment dialog.]]
 in the Assembly setup dialog.]]
 ::^ [s0; [*2 .bm]]
 ::= [s0; [2 A text file that contains the build settings associated with 
-a particular compiler/ linker.]]
+a particular compiler/ linker (`"build method`")]]
 ::^ [s0; [*2 cfg folder]]
-::= [s0; [2 This folder holds cache files from RusIDE (tdx,cache,pkg`_cache) 
-`+ cfg (per package settings `- opened files, cursor positions 
-etc.)]]}}&]
-[s0; ]
+::= [s0; [2 This folder holds cache files of theide (tdx,cache,pkg`_cache) 
+`+ and configuration files (per package settings `- opened files, 
+cursor positions etc.)]]}}&]
+[s0; ]]

@@ -19,6 +19,8 @@ struct LoadingError : StreamError {};
 
 enum EOLenum { EOL };
 
+class Huge;
+
 class Stream {
 protected:
 	int64  pos;
@@ -45,7 +47,6 @@ private:
 	int       _Get16();
 	int       _Get32();
 	int64     _Get64();
-	bool      _IsEof() const;
 
 public:
 	virtual   void  Seek(int64 pos);
@@ -70,31 +71,46 @@ public:
 	void      SetLastError()         { SetError(errno); }
 #endif
 	int       GetError() const       { return errorcode; }
-	void      ClearError()           { style &= ~STRM_ERROR; errorcode = 0; }
+	String    GetErrorText() const;
+	void      ClearError()           { style = style & ~STRM_ERROR; errorcode = 0; }
 
 	int64     GetPos() const         { return dword(ptr - buffer) + pos; }
-	bool      IsEof() const          { return ptr >= rdlim && _IsEof(); }
 	int64     GetLeft() const        { return GetSize() - GetPos(); }
 	void      SeekEnd(int64 rel = 0) { Seek(GetSize() + rel); }
 	void      SeekCur(int64 rel)     { Seek(GetPos() + rel); }
 
+	bool      IsEof()                { return ptr >= rdlim && _Term() < 0; }
+
 	void      Put(int c)             { if(ptr < wrlim) *ptr++ = c; else _Put(c); }
 	int       Term()                 { return ptr < rdlim ? *ptr : _Term(); }
+	int       Peek()                 { return Term(); }
 	int       Get()                  { return ptr < rdlim ? *ptr++ : _Get(); }
 
-	const byte *Peek(int size = 1)   { ASSERT(size > 0); return ptr + size <= rdlim ? ptr : NULL; }
+	const byte *PeekPtr(int size = 1){ ASSERT(size > 0); return ptr + size <= rdlim ? ptr : NULL; }
+	const byte *GetPtr(int size = 1) { ASSERT(size > 0); if(ptr + size <= rdlim) { byte *p = ptr; ptr += size; return p; }; return NULL; }
 	byte       *PutPtr(int size = 1) { ASSERT(size > 0); if(ptr + size <= wrlim) { byte *p = ptr; ptr += size; return p; }; return NULL; }
+	const byte *GetSzPtr(int& size)  { Term(); size = int(rdlim - ptr); byte *p = ptr; ptr += size; return p; }
 
-	void      Put(const void *data, dword size)  { if(ptr + size <= wrlim) { memcpy(ptr, data, size); ptr += size; } else _Put(data, size); }
-	dword     Get(void *data, dword size)        { if(ptr + size <= rdlim) { memcpy(data, ptr, size); ptr += size; return size; } return _Get(data, size); }
+	void      Put(const void *data, int size)  { ASSERT(size >= 0); if(ptr + size <= wrlim) { memcpy(ptr, data, size); ptr += size; } else _Put(data, size); }
+	int       Get(void *data, int size)        { ASSERT(size >= 0); if(ptr + size <= rdlim) { memcpy(data, ptr, size); ptr += size; return size; } return _Get(data, size); }
 
-	void      Put(const String& s)               { Put((const char *) s, s.GetLength()); }
-	String    Get(dword size);
-
+	void      Put(const String& s)   { Put((const char *) s, s.GetLength()); }
+	String    Get(int size);
+	String    GetAll(int size);
+	
+	int       Skip(int size);
+	
 	void      LoadThrowing()         { style |= STRM_THROW; }
 	void      LoadError();
 
-	bool      GetAll(void *data, dword size);
+	bool      GetAll(void *data, int size);
+
+	void      Put64(const void *data, int64 size);
+	int64     Get64(void *data, int64 size);
+	bool      GetAll64(void *data, int64 size);
+
+	size_t    Get(Huge& h, size_t size);
+	bool      GetAll(Huge& h, size_t size);
 
 	int       Get8()                 { return ptr < rdlim ? *ptr++ : _Get8(); }
 #ifdef CPU_X86
@@ -180,30 +196,36 @@ public:
 //  Stream as serialization streamer
 	void      SetLoading()                 { ASSERT(style & STRM_READ); style |= STRM_LOADING; }
 	void      SetStoring()                 { ASSERT(style & STRM_WRITE); style &= ~STRM_LOADING; }
-	bool      IsLoading()                  { return style & STRM_LOADING; }
-	bool      IsStoring()                  { return !IsLoading(); }
+	bool      IsLoading() const            { return style & STRM_LOADING; }
+	bool      IsStoring() const            { return !IsLoading(); }
 
-	void      SerializeRaw(byte *data, dword count);
-	void      SerializeRaw(word *data, dword count);
-	void      SerializeRaw(dword *data, dword count);
-	void      SerializeRaw(uint64 *data, dword count);
+	void      SerializeRaw(byte *data, int64 count);
+	void      SerializeRaw(word *data, int64 count);
+	void      SerializeRaw(dword *data, int64 count);
+	void      SerializeRaw(uint64 *data, int64 count);
 
-	void      SerializeRLE(byte *data, dword count);
+	String    GetAllRLE(int size);
+	void      SerializeRLE(byte *data, int count);
+	
+	Stream&   SerializeRaw(byte *data)     { if(IsLoading()) *data = Get(); else Put(*data); return *this; }
+	Stream&   SerializeRaw(word *data)     { if(IsLoading()) *data = Get16le(); else Put16le(*data); return *this; }
+	Stream&   SerializeRaw(dword *data)    { if(IsLoading()) *data = Get32le(); else Put32le(*data); return *this; }
+	Stream&   SerializeRaw(uint64 *data)   { if(IsLoading()) *data = Get64le(); else Put64le(*data); return *this; }
 
-	Stream&   operator%(bool& d);
-	Stream&   operator%(char& d);
-	Stream&   operator%(signed char& d);
-	Stream&   operator%(unsigned char& d);
-	Stream&   operator%(short& d);
-	Stream&   operator%(unsigned short& d);
-	Stream&   operator%(int& d);
-	Stream&   operator%(unsigned int& d);
-	Stream&   operator%(long& d);
-	Stream&   operator%(unsigned long& d);
-	Stream&   operator%(float& d);
-	Stream&   operator%(double& d);
-	Stream&   operator%(int64& d);
-	Stream&   operator%(uint64& d);
+	Stream&   operator%(bool& d)           { return SerializeRaw((byte *)&d); }
+	Stream&   operator%(char& d)           { return SerializeRaw((byte *)&d); }
+	Stream&   operator%(signed char& d)    { return SerializeRaw((byte *)&d); }
+	Stream&   operator%(unsigned char& d)  { return SerializeRaw((byte *)&d); }
+	Stream&   operator%(short& d)          { return SerializeRaw((word *)&d); }
+	Stream&   operator%(unsigned short& d) { return SerializeRaw((word *)&d); }
+	Stream&   operator%(int& d)            { return SerializeRaw((dword *)&d); }
+	Stream&   operator%(unsigned int& d)   { return SerializeRaw((dword *)&d); }
+	Stream&   operator%(long& d)           { return SerializeRaw((dword *)&d); }
+	Stream&   operator%(unsigned long& d)  { return SerializeRaw((dword *)&d); }
+	Stream&   operator%(float& d)          { return SerializeRaw((dword *)&d); }
+	Stream&   operator%(double& d)         { return SerializeRaw((uint64 *)&d); }
+	Stream&   operator%(int64& d)          { return SerializeRaw((uint64 *)&d); }
+	Stream&   operator%(uint64& d)         { return SerializeRaw((uint64 *)&d); }
 
 	Stream&   operator%(String& s);
 	Stream&   operator/(String& s);
@@ -212,10 +234,10 @@ public:
 	Stream&   operator/(WString& s);
 
 	void      Pack(dword& i);
-	Stream&   operator/(int& i)            { dword w = i + 1; Pack(w); i = w - 1; return *this; }
-	Stream&   operator/(unsigned int& i)   { dword w = i + 1; Pack(w); i = w - 1; return *this; }
-	Stream&   operator/(long& i)           { dword w = i + 1; Pack(w); i = w - 1; return *this; }
-	Stream&   operator/(unsigned long& i)  { dword w = i + 1; Pack(w); i = w - 1; return *this; }
+	Stream&   operator/(int& i);
+	Stream&   operator/(unsigned int& i);
+	Stream&   operator/(long& i);
+	Stream&   operator/(unsigned long& i);
 
 	void      Magic(dword magic = 0x7d674d7b);
 
@@ -227,7 +249,7 @@ public:
 	void      Pack(bool& a, bool& b, bool& c);
 	void      Pack(bool& a, bool& b);
 
-//* deprecated
+#ifdef DEPRECATED
 	int       GetW()                 { return Get16(); }
 	int       GetL()                 { return Get32(); }
 	int       GetIW()                { return Get16le(); }
@@ -240,7 +262,7 @@ public:
 	void      PutIL(int c)           { Put32le(c); }
 	void      PutMW(int c)           { Put16be(c); }
 	void      PutML(int c)           { Put32be(c); }
-//*/
+#endif
 private: // No copy
 	Stream(const Stream& s);
 	void operator=(const Stream& s);
@@ -265,6 +287,7 @@ protected:
 	String         data;
 	StringBuffer   wdata;
 	dword          size;
+	int            limit = INT_MAX;
 
 	void           InitReadMode();
 	void           SetWriteBuffer();
@@ -277,7 +300,11 @@ public:
 	void        Reserve(int n);
 
 	String      GetResult();
-	operator    String()                     { return GetResult(); }
+	operator    String()                              { return GetResult(); }
+	
+	void        Limit(int sz)                         { limit = sz; }
+	
+	struct LimitExc : public StreamError {};
 
 	StringStream()                           { Create(); }
 	StringStream(const String& data)         { Open(data); }
@@ -294,10 +321,10 @@ public:
 	virtual   bool  IsOpen() const;
 
 public:
-	void Create(void *data, int size);
+	void Create(void *data, int64 size);
 
 	MemStream();
-	MemStream(void *data, int size);
+	MemStream(void *data, int64 size);
 #ifdef flagSO
 	virtual ~MemStream();
 #endif
@@ -305,9 +332,9 @@ public:
 
 class MemReadStream : public MemStream {
 public:
-	void Create(const void *data, int size);
+	void Create(const void *data, int64 size);
 
-	MemReadStream(const void *data, int size);
+	MemReadStream(const void *data, int64 size);
 	MemReadStream();
 };
 
@@ -349,11 +376,12 @@ public:
 		READ, CREATE, APPEND, READWRITE,
 
 		NOWRITESHARE = 0x10,
+		SHAREMASK = 0x70,
+#ifdef DEPRECATED
 		DELETESHARE = 0x20,
 		NOREADSHARE = 0x40,
-		SHAREMASK = 0x70,
+#endif
 	};
-//	typedef int OpenMode; // obsolete, use dword
 
 	dword     GetBufferSize() const           { return pagesize; }
 	void      SetBufferSize(dword newsize);
@@ -418,13 +446,11 @@ public:
 class FileOut : public FileStream {
 public:
 #ifdef PLATFORM_POSIX
-	bool Open(const char *fn, mode_t acm = 0644)
-	{ return FileStream::Open(fn, FileStream::CREATE, acm); }
+	bool Open(const char *fn, mode_t acm = 0644);
 #endif
 #ifdef PLATFORM_WIN32
-	bool Open(const char *fn)              { return FileStream::Open(fn, FileStream::CREATE); }
+	bool Open(const char *fn);
 #endif
-
 
 	FileOut(const char *fn)                { Open(fn); }
 	FileOut()                              {}
@@ -432,7 +458,7 @@ public:
 
 class FileAppend : public FileStream {
 public:
-	bool Open(const char *fn)         { return FileStream::Open(fn, FileStream::APPEND); }
+	bool Open(const char *fn)         { return FileStream::Open(fn, FileStream::APPEND|FileStream::NOWRITESHARE); }
 
 	FileAppend(const char *fn)        { Open(fn); }
 	FileAppend()                      {}
@@ -452,19 +478,16 @@ protected:
 	virtual void  _Put(const void *data, dword size);
 
 public:
-	virtual void  Seek(int64 pos);
 	virtual int64 GetSize() const;
-	virtual void  SetSize(int64 size);
 	virtual bool  IsOpen() const;
 
 protected:
-	int64   size;
-	byte    h[128];
+	byte    h[256];
 
 public:
 	operator int64() const            { return GetSize(); }
 
-	void     Open()                   { ptr = buffer; size = 0; }
+	void     Open()                   { ptr = buffer; ClearError(); }
 
 	SizeStream();
 };
@@ -488,7 +511,7 @@ private:
 	int64    size;
 	byte     h[128];
 
-	void     Compare(int64 pos, const void *data, dword size);
+	void     Compare(int64 pos, const void *data, int size);
 
 public:
 	void     Open(Stream& aStream);
@@ -501,7 +524,8 @@ public:
 };
 
 class OutStream : public Stream {
-	byte     h[128];
+	byte *h;
+
 protected:
 	virtual  void  _Put(int w);
 	virtual  void  _Put(const void *data, dword size);
@@ -512,6 +536,7 @@ protected:
 	void     Flush();
 	
 	OutStream();
+	~OutStream();
 };
 
 class TeeStream : public OutStream {
@@ -538,7 +563,7 @@ public:
 	bool        Open(const char *file, bool delete_share = false);
 	bool        Create(const char *file, int64 filesize, bool delete_share = false);
 	bool        Expand(int64 filesize);
-	bool        Map(int64 offset, dword len);
+	bool        Map(int64 offset, size_t len);
 	bool        Unmap();
 	bool        Close();
 
@@ -546,25 +571,25 @@ public:
 
 	int64       GetFileSize() const       { return filesize; }
 	Time        GetTime() const;
-	String      GetData(int64 offset, dword len);
+	String      GetData(int64 offset, int len);
 
 	int64       GetOffset() const         { return offset; }
-	dword       GetCount() const          { return size; }
+	size_t      GetCount() const          { return size; }
 
 	int64       GetRawOffset() const      { return rawoffset; }
-	dword       GetRawCount() const       { return rawsize; }
+	size_t      GetRawCount() const       { return rawsize; }
 
 	const byte *operator ~ () const       { ASSERT(IsOpen()); return base; }
 	const byte *Begin() const             { ASSERT(IsOpen()); return base; }
 	const byte *End() const               { ASSERT(IsOpen()); return base + size; }
-	const byte *GetIter(int i) const      { ASSERT(IsOpen() && i >= 0 && (dword)i <= size); return base + i; }
-	const byte& operator [] (int i) const { ASSERT(IsOpen() && i >= 0 && (dword)i < size); return base[i]; }
+	const byte *GetIter(int i) const      { ASSERT(IsOpen() && i >= 0 && (size_t)i <= size); return base + i; }
+	const byte& operator [] (int i) const { ASSERT(IsOpen() && i >= 0 && (size_t)i < size); return base[i]; }
 
 	byte       *operator ~ ()             { ASSERT(IsOpen()); return base; }
 	byte       *Begin()                   { ASSERT(IsOpen()); return base; }
 	byte       *End()                     { ASSERT(IsOpen()); return base + size; }
-	byte       *GetIter(int i)            { ASSERT(IsOpen() && i >= 0 && (dword)i <= size); return base + i; }
-	byte&       operator [] (int i)       { ASSERT(IsOpen() && i >= 0 && (dword)i < size); return base[i]; }
+	byte       *GetIter(int i)            { ASSERT(IsOpen() && i >= 0 && (size_t)i <= size); return base + i; }
+	byte&       operator [] (int i)       { ASSERT(IsOpen() && i >= 0 && (size_t)i < size); return base[i]; }
 
 private:
 #ifdef PLATFORM_WIN32
@@ -581,8 +606,8 @@ private:
 	int64       filesize;
 	int64       offset;
 	int64       rawoffset;
-	dword       size;
-	dword       rawsize;
+	size_t      size;
+	size_t      rawsize;
 	bool        write;
 };
 
@@ -590,13 +615,16 @@ private:
 String LoadStream(Stream& in);
 bool   SaveStream(Stream& out, const String& data);
 
-int64        CopyStream(Stream& dest, Stream& src, int64 count);
-inline int64 CopyStream(Stream& dest, Stream& src) { return CopyStream(dest, src, src.GetLeft()); }
+int64        CopyStream(Stream& dest, Stream& src, int64 count = INT64_MAX);
 
 #ifndef PLATFORM_WINCE
+void    CoutUTF8();
 Stream& Cout();
 Stream& Cerr();
 String  ReadStdIn();
+String  ReadSecret();
+void    EnableEcho(bool b = true);
+void    DisableEcho();
 #endif
 
 Stream& NilStream();

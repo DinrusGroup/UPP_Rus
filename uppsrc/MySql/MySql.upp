@@ -1,4 +1,4 @@
-description "Интерфейс MySQL\377";
+description "MySQL interface\377";
 
 acceptflags
 	NOMYSQL,
@@ -10,11 +10,11 @@ uses
 
 library(WIN32 !NOMYSQL MSC DEBUG !(SO | MYSQLDLL)) debug/mysqlclient.lib;
 
-library(WIN32 !NOMYSQL MSC !DEBUG !(SO | MYSQLDLL)) opt/mysqlclient.lib;
+library(WIN32 !NOMYSQL MSC !DEBUG !(SO | MYSQLDLL)) mysqlclient.lib;
 
 library(WIN32 !NOMYSQL MSC DEBUG (SO | MYSQLDLL)) debug/libmysql.lib;
 
-library(WIN32 !NOMYSQL MSC !DEBUG (SO | MYSQLDLL)) opt/libmysql.lib;
+library(WIN32 !NOMYSQL MSC !DEBUG (SO | MYSQLDLL)) libmysql.lib;
 
 library(WIN32 !NOMYSQL MSC) ws2_32.lib;
 

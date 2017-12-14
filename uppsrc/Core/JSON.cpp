@@ -1,14 +1,25 @@
 #include "Core.h"
 
-NAMESPACE_UPP
+namespace Upp {
 
 Value ParseJSON(CParser& p)
 {
 	p.UnicodeEscape();
-	if(p.IsNumber())
+	if(p.IsDouble())
 		return p.ReadDouble();
-	if(p.IsString())
-		return p.ReadString();
+	if(p.IsString()) {
+		bool dt = p.IsChar2('\"', '\\');
+		String s = p.ReadString();
+		if(dt) {
+			CParser p(s);
+			if(p.Char('/') && p.Id("Date") && p.Char('(') && p.IsInt()) {
+				int64 n = p.ReadInt64();
+				if(!IsNull(n))
+					return Time(1970, 1, 1) + n / 1000;
+			}
+		}
+		return s;
+	}
 	if(p.Id("null"))
 		return Null;
 	if(p.Id("true"))
@@ -17,24 +28,25 @@ Value ParseJSON(CParser& p)
 		return false;
 	if(p.Char('{')) {
 		ValueMap m;
-		if(!p.IsChar('}'))
-			do {
-				String key = p.ReadString();
-				p.PassChar(':');
-				m.Add(key, ParseJSON(p));
-			}
-			while(p.Char(','));
-		p.PassChar('}');
+		while(!p.Char('}')) {
+			String key = p.ReadString();
+			p.PassChar(':');
+			m.Add(key, ParseJSON(p));
+			if(p.Char('}')) // Stray ',' at the end of list is allowed...
+				break;
+			p.PassChar(',');
+		}
 		return m;
 	}
 	if(p.Char('[')) {
 		ValueArray va;
-		if(!p.IsChar(']'))
-			do
-				va.Add(ParseJSON(p));
-			while(p.Char(','));
-		p.PassChar(']');
-		return va;		
+		while(!p.Char(']')) {
+			va.Add(ParseJSON(p));
+			if(p.Char(']')) // Stray ',' at the end of list is allowed...
+				break;
+			p.PassChar(',');
+		}
+		return va;
 	}
 	p.ThrowError("Unrecognized JSON element");
 	return Null;
@@ -46,9 +58,35 @@ Value ParseJSON(const char *s)
 		CParser p(s);
 		return ParseJSON(p);
 	}
-	catch(CParser::Error) {
-		return ErrorValue();
+	catch(CParser::Error e) {
+		return ErrorValue(e);
 	}
+}
+
+String AsJSON(Time tm)
+{
+	return IsNull(tm) ? "null" : "\"\\/Date(" + AsString(1000 * (tm - Time(1970, 1, 1))) + ")\\/\"";
+}
+
+String AsJSON(Date dt)
+{
+	return AsJSON(ToTime(dt));
+}
+
+Json& Json::CatRaw(const char *key, const String& val)
+{
+	if(text.GetCount())
+		text << ',';
+	text << AsJSON(key) << ":" << val;
+	return *this;
+}
+
+JsonArray& JsonArray::CatRaw(const String& val)
+{
+	if(text.GetCount())
+		text << ',';
+	text << val;
+	return *this;
 }
 
 String AsJSON(const Value& v, const String& sep, bool pretty)
@@ -71,7 +109,7 @@ String AsJSON(const Value& v, const String& sep, bool pretty)
 			}
 			if(pretty)
 				r << sep1;
-			r << AsCString((String)m.GetKeys()[i]) << (pretty ? ": " : ":")
+			r << AsJSON((String)m.GetKey(i)) << (pretty ? ": " : ":")
 			  << AsJSON(va[i], sep1, pretty);
 		}
 		if(pretty)
@@ -111,8 +149,12 @@ String AsJSON(const Value& v, const String& sep, bool pretty)
 	if(IsNumber(v))
 		return Format("%.16g", (double)v);
 	if(IsString(v))
-		return AsCString((String)v);
-	NEVER();
+		return AsCString((String)v, INT_MAX, NULL, ASCSTRING_JSON);
+	if(IsDateTime(v))
+		return AsJSON((Time)v);
+	if(IsNull(v))
+		return "null";
+	NEVER_("Non-JSON value in AsJSON: " + v.GetTypeName());
 	return "null";
 }
 
@@ -121,4 +163,209 @@ String AsJSON(const Value& v, bool pretty)
 	return AsJSON(v, String(), pretty);
 }
 
-END_UPP_NAMESPACE
+template<> void Jsonize(JsonIO& io, double& var)
+{
+	if(io.IsLoading()) {
+		const Value& v = io.Get();
+		if(IsNull(v)) {
+			var = Null;
+			return;
+		}
+		if(IsNumber(v)) {
+			var = io.Get();
+			return;
+		}
+		if(IsString(v)) {
+			double h = ScanDouble((String)v);
+			if(!IsNull(h)) {
+				var = h;
+				return;
+			}
+		}
+		throw JsonizeError("number expected");
+	}
+	else
+		io.Set(var);
+}
+
+template<> void Jsonize(JsonIO& io, int& var)
+{
+	double v = IntDbl(var);
+	Jsonize(io, v);
+	if(io.IsLoading()) {
+		if(IsNull(v))
+			var = Null;
+		else
+		if(v >= INT_MIN && v <= INT_MAX && (int)v == v)
+			var = (int)v;
+		else
+			throw JsonizeError("number is not integer");
+	}
+}
+
+template<> void Jsonize(JsonIO& io, int16& var)
+{
+	double v = var;
+	Jsonize(io, v);
+	if(io.IsLoading()) {
+		if(v >= -32768 && v <= 32767 && (int)v == v)
+			var = (int16)v;
+		else
+			throw JsonizeError("16-bit integer expected");
+	}
+}
+
+template<> void Jsonize(JsonIO& io, bool& var)
+{
+	if(io.IsLoading()) {
+		const Value& v = io.Get();
+		if(IsNumber(v) && !IsNull(v))
+			var = (bool)v;
+		else
+			throw JsonizeError("boolean expected");
+	}
+	else
+		io.Set(var);
+}
+
+template<> void Jsonize(JsonIO& io, int64& var)
+{
+	if(io.IsLoading()) {
+		const Value& v = io.Get();
+		if(IsNull(v)) {
+			var = Null;
+			return;
+		}
+		if(v.Is<int64>() || v.Is<int>()) {
+			var = v;
+			return;
+		}
+		if(IsNumber(v)) {
+			double d = v;
+			if(d >= INT64_MIN && d <= INT64_MAX) {
+				var = (int64)d;
+				return;
+			}
+		}
+		else
+		if(IsString(v)) {
+			int64 h = ScanInt64((String)v);
+			if(!IsNull(h)) {
+				var = h;
+				return;
+			}
+		}
+		throw JsonizeError("invalid int64 value");
+	}
+	else
+		if(IsNull(var))
+			io.Set(Null);
+		else
+		if(var >= I64(-9007199254740992) && var <= I64(9007199254740991))
+			io.Set(var);
+		else
+			io.Set(AsString(var));
+}
+
+template<> void Jsonize(JsonIO& io, String& var)
+{
+	if(io.IsLoading()) {
+		const Value& v = io.Get();
+		if(IsNull(v))
+			var = Null;
+		else
+		if(IsString(v))
+			var = v;
+		else
+			throw JsonizeError("string expected");
+	}
+	else
+		io.Set(var);
+}
+
+template<> void Jsonize(JsonIO& io, WString& var)
+{
+	if(io.IsLoading()) {
+		const Value& v = io.Get();
+		if(IsNull(v))
+			var = Null;
+		else
+		if(IsString(v))
+			var = v;
+		else
+			throw JsonizeError("string expected");
+	}
+	else
+		io.Set(var);
+}
+
+template<> void Jsonize(JsonIO& io, Date& var)
+{
+	if(io.IsLoading()) {
+		const Value& v = io.Get();
+		if(IsNull(v)) {
+			var = Null;
+			return;
+		}
+		if(IsString(v)) {
+			String text = v;
+			if(text.GetCount() > 6) {
+				Date d;
+				d.year = ScanInt(text.Left(4));
+				d.month = ScanInt(text.Mid(4, 2));
+				d.day = ScanInt(text.Mid(6));
+				if(d.IsValid()) {
+					var = d;
+					return;
+				}
+			}
+		}
+		throw JsonizeError("string expected for Date value");
+	}
+	else
+		if(IsNull(var))
+			io.Set(Null);
+		else
+			io.Set(Format("%04d%02d%02d", var.year, var.month, var.day));
+}
+
+template<> void Jsonize(JsonIO& io, Time& var)
+{
+	if(io.IsLoading()) {
+		const Value& v = io.Get();
+		if(IsNull(v)) {
+			var = Null;
+			return;
+		}
+		if(IsString(v)) {
+			String text = v;
+			if(text.GetCount() > 15) {
+				Time tm;
+				tm.year = ScanInt(text.Left(4));
+				tm.month = ScanInt(text.Mid(4, 2));
+				tm.day = ScanInt(text.Mid(6, 2));
+				tm.hour = ScanInt(text.Mid(9, 2));
+				tm.minute = ScanInt(text.Mid(12, 2));
+				tm.second = ScanInt(text.Mid(15));
+				if(tm.IsValid()) {
+					var = tm;
+					return;
+				}
+			}
+		}
+		throw JsonizeError("string expected for Time value");
+	}
+	else
+		if(IsNull(var))
+			io.Set(Null);
+		else
+			io.Set(Format("%04d%02d%02d`T%02d:%02d:%02d",
+				          var.year, var.month, var.day, var.hour, var.minute, var.second));
+}
+
+String sJsonFile(const char *file)
+{
+	return file ? String(file) : ConfigFile(GetExeTitle() + ".json");
+}
+
+}

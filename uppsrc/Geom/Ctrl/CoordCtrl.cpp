@@ -1,7 +1,6 @@
 #include "GeomCtrl.h"
-#pragma hdrstop
 
-NAMESPACE_UPP
+namespace Upp {
 
 EditDegree::EditDegree()
 {
@@ -45,4 +44,4 @@ bool EditDegree::Key(dword key, int repcnt)
 	return EditValue<double, ConvertDegree>::Key(key, repcnt);
 }
 
-END_UPP_NAMESPACE
+}

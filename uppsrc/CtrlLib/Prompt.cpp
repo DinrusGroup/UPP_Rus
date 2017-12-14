@@ -1,6 +1,6 @@
 #include "CtrlLib.h"
 
-NAMESPACE_UPP
+namespace Upp {
 
 struct PromptDlgWnd__ : TopWindow {
 	bool    esc;
@@ -28,13 +28,40 @@ static void sAdd(Ctrl& dlg, int fcy, int bcy, int& bx, int bcx, int gap, Button&
 	}
 }
 
-int Prompt(Callback1<const String&> WhenLink,
+void sExecutePrompt(PromptDlgWnd__ *dlg, int *result)
+{
+	dlg->Open();
+	Vector<Ctrl *> wins = Ctrl::GetTopWindows();
+	for(int i = 0; i < wins.GetCount(); i++) {
+		TopWindow *w = dynamic_cast<TopWindow *>(wins[i]);
+		if(w && w->IsTopMost()) {
+			dlg->TopMost();
+			break;
+		}
+	}
+	*result = dlg->RunAppModal();
+	dlg->Close();
+}
+                        
+RedirectPromptFn RedirectPrompt;
+
+void RedirectPrompts(RedirectPromptFn r)
+{
+	RedirectPrompt = r;
+}
+
+int Prompt(Event<const String&> WhenLink,
            const char *title, const Image& iconbmp, const char *qtf, bool okcancel,
            const char *button1, const char *button2, const char *button3,
 		   int cx,
 		   Image im1, Image im2, Image im3)
 {
+	if(RedirectPrompt)
+		return (*RedirectPrompt)(WhenLink, title, iconbmp, qtf, okcancel,
+                                 button1, button2, button3,
+                                 cx, im1, im2, im3);
 	int fcy = Draw::GetStdFontCy();
+	EnterGuiMutex(); // Ctrl derived classes can only be initialized with GuiLock
 	PromptDlgWnd__ dlg;
 	RichTextCtrl qtfctrl;
 	Icon         icon;
@@ -61,12 +88,12 @@ int Prompt(Callback1<const String&> WhenLink,
 	}
 	int nbtn = !!button1 + !!button2 + !!button3;
 	dlg.esc = okcancel && nbtn == 1;
-	cx = min(550, max(nbtn * bcx + (1 + nbtn) * fcy, cx));
+	cx = min(Zx(520), max(nbtn * bcx + (1 + nbtn) * fcy, cx));
 	int qcx = cx - 2 * fcy;
 	if(bsz.cx)
 		qcx -= bsz.cx + fcy;
 	int ccy = qtfctrl.GetHeight(qcx);
-	int qcy = min(400, ccy);
+	int qcy = min(Zy(400), ccy);
 	if(qcy <= ccy) {
 		qcx += ScrollBarSize() + fcy;
 		cx += ScrollBarSize() + fcy;
@@ -106,20 +133,14 @@ int Prompt(Callback1<const String&> WhenLink,
 		sAdd(dlg, fcy, bcy, bx, bcx, gap, b3, button3, im3);
 	}
 	dlg.WhenClose = dlg.Breaker(button3 ? -1 : 0);
-	dlg.Open();
-	Vector<Ctrl *> wins = Ctrl::GetTopWindows();
-	for(int i = 0; i < wins.GetCount(); i++) {
-		TopWindow *w = dynamic_cast<TopWindow *>(wins[i]);
-		if(w && w->IsTopMost()) {
-			dlg.TopMost();
-			break;
-		}
-	}
 	dlg.Title(title);
-	return dlg.RunAppModal();
+	LeaveGuiMutex();
+	int result;
+	Ctrl::Call(callback2(sExecutePrompt, &dlg, &result));
+	return result;
 }
 
-int Prompt(Callback1<const String&> WhenLink,
+int Prompt(Event<const String&> WhenLink,
            const char *title, const Image& icon, const char *qtf, bool okcancel,
            const char *button1, const char *button2, const char *button3,
 		   int cx)
@@ -157,9 +178,19 @@ void ShowExc(const Exc& exc) {
 	Prompt(Ctrl::GetAppName(), CtrlImg::exclamation(), DeQtf(exc), t_("OK"));
 }
 
+void ErrorOK(const char *qtf) {
+	BeepError();
+	Prompt(Ctrl::GetAppName(), CtrlImg::error(), qtf, t_("OK"));
+}
+
 int PromptOKCancel(const char *qtf) {
 	BeepQuestion();
-	return Prompt(Ctrl::GetAppName(), CtrlImg::question(), qtf, t_("OK"), t_("Отмена"));
+	return Prompt(Ctrl::GetAppName(), CtrlImg::question(), qtf, t_("OK"), t_("Cancel"));
+}
+
+int ErrorOKCancel(const char *qtf) {
+	BeepError();
+	return Prompt(Ctrl::GetAppName(), CtrlImg::error(), qtf, t_("OK"), t_("Cancel"));
 }
 
 CH_IMAGE(YesButtonImage, Null);
@@ -171,7 +202,15 @@ int PromptYesNo(const char *qtf) {
 	BeepQuestion();
 	return Prompt(callback(LaunchWebBrowser),
 	              Ctrl::GetAppName(), CtrlImg::question(), qtf, false,
-	              t_("&Да"), t_("&Нет"), NULL, 0,
+	              t_("&Yes"), t_("&No"), NULL, 0,
+	              YesButtonImage(), NoButtonImage(), Null);
+}
+
+int ErrorYesNo(const char *qtf) {
+	BeepError();
+	return Prompt(callback(LaunchWebBrowser),
+	              Ctrl::GetAppName(), CtrlImg::error(), qtf, false,
+	              t_("&Yes"), t_("&No"), NULL, 0,
 	              YesButtonImage(), NoButtonImage(), Null);
 }
 
@@ -179,7 +218,15 @@ int PromptYesNoCancel(const char *qtf) {
 	BeepQuestion();
 	return Prompt(callback(LaunchWebBrowser),
 	              Ctrl::GetAppName(), CtrlImg::question(), qtf, true,
-	              t_("&Да"), t_("&Нет"), t_("Отмена"), 0,
+	              t_("&Yes"), t_("&No"), t_("Cancel"), 0,
+	              YesButtonImage(), NoButtonImage(), Null);
+}
+
+int ErrorYesNoCancel(const char *qtf) {
+	BeepError();
+	return Prompt(callback(LaunchWebBrowser),
+	              Ctrl::GetAppName(), CtrlImg::error(), qtf, true,
+	              t_("&Yes"), t_("&No"), t_("Cancel"), 0,
 	              YesButtonImage(), NoButtonImage(), Null);
 }
 
@@ -187,7 +234,15 @@ int PromptAbortRetry(const char *qtf) {
 	BeepExclamation();
 	return Prompt(callback(LaunchWebBrowser),
 	              Ctrl::GetAppName(), CtrlImg::exclamation(), qtf, false,
-	              t_("&Прервать"), t_("&Повторить"), NULL, 0,
+	              t_("&Abort"), t_("&Retry"), NULL, 0,
+	              AbortButtonImage(), RetryButtonImage(), Null);
+}
+
+int ErrorAbortRetry(const char *qtf) {
+	BeepError();
+	return Prompt(callback(LaunchWebBrowser),
+	              Ctrl::GetAppName(), CtrlImg::error(), qtf, false,
+	              t_("&Abort"), t_("&Retry"), NULL, 0,
 	              AbortButtonImage(), RetryButtonImage(), Null);
 }
 
@@ -195,7 +250,15 @@ int PromptRetryCancel(const char *qtf) {
 	BeepExclamation();
 	return Prompt(callback(LaunchWebBrowser),
 	              Ctrl::GetAppName(), CtrlImg::exclamation(), qtf, true,
-	              t_("&Повторить"), t_("Отмена"), NULL, 0,
+	              t_("&Retry"), t_("Cancel"), NULL, 0,
+	              RetryButtonImage(), Null, Null);
+}
+
+int ErrorRetryCancel(const char *qtf) {
+	BeepError();
+	return Prompt(callback(LaunchWebBrowser),
+	              Ctrl::GetAppName(), CtrlImg::error(), qtf, true,
+	              t_("&Retry"), t_("Cancel"), NULL, 0,
 	              RetryButtonImage(), Null, Null);
 }
 
@@ -203,8 +266,24 @@ int PromptAbortRetryIgnore(const char *qtf) {
 	BeepExclamation();
 	return Prompt(callback(LaunchWebBrowser),
 	              Ctrl::GetAppName(), CtrlImg::exclamation(), qtf, false,
-	              t_("&Прервать"), t_("&Повторить"), t_("&Игнорировать"), 0,
+	              t_("&Abort"), t_("&Retry"), t_("&Ignore"), 0,
 	              AbortButtonImage(), RetryButtonImage(), Null);
 }
 
-END_UPP_NAMESPACE
+int ErrorAbortRetryIgnore(const char *qtf) {
+	BeepError();
+	return Prompt(callback(LaunchWebBrowser),
+	              Ctrl::GetAppName(), CtrlImg::error(), qtf, false,
+	              t_("&Abort"), t_("&Retry"), t_("&Ignore"), 0,
+	              AbortButtonImage(), RetryButtonImage(), Null);
+}
+
+int PromptSaveDontSaveCancel(const char *qtf) {
+	BeepQuestion();
+	return Prompt(callback(LaunchWebBrowser),
+	              Ctrl::GetAppName(), CtrlImg::question(), qtf, true,
+	              t_("&Save"), t_("&Don't Save"), t_("Cancel"), 0,
+	              CtrlImg::save(), NoButtonImage(), Null);
+}
+
+}

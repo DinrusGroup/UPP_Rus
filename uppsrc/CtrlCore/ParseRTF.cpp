@@ -1,8 +1,8 @@
 #include "CtrlCore.h"
 
-NAMESPACE_UPP
+namespace Upp {
 
-#define LLOG(x) LOG(x)
+#define LLOG(x) // DLOG(x)
 
 static int TwipDotsLim(int twips) { return minmax<int>(TwipDots(twips), 0, MAX_DOTS); }
 
@@ -86,12 +86,10 @@ private:
 	String        ReadBinHex(char& odd) const;
 
 private:
-	const char   *rtf_begin;
 	const char   *rtf;
 
 	TOKEN         token;
 	bool          is_full;
-//	bool          new_dest;
 	bool          next_command;
 	WString       text;
 	String        command;
@@ -183,27 +181,26 @@ private:
 RichText ParseRTF(const char *rtf) { return RTFParser(rtf).Run(); }
 
 RTFParser::CellInfo::CellInfo()
-: end_dots(0)
-, cellmarginunits(0, 0, 0, 0)
+: cellmarginunits(0, 0, 0, 0)
 , shading(0)
 , shading_fore(Black())
 , shading_back(White())
+, end_dots(0)
 {
 }
 
 RTFParser::Cell::Cell()
-: nbegin(0)
-, span(0, 0)
-, merge_first(false)
+: merge_first(false)
 , merge(false)
+, nbegin(0)
+, span(0, 0)
 {
 }
 
 RTFParser::RTFParser(const char *rtf)
-: rtf_begin(rtf)
-, rtf(rtf)
+:	rtf(rtf)
 {
-#ifdef _DEBUG
+#ifdef _DEBUG0
 	SaveFile(ConfigFile("rtfparser.rtf"), rtf);
 	LOG(rtf);
 #endif
@@ -227,12 +224,12 @@ RTFParser::RTFParser(const char *rtf)
 RichText RTFParser::Run()
 {
 	if(!PassGroup() || !PassCmd("rtf") || command_arg != 1 && !IsNull(command_arg))
-		return output;
+		return pick(output);
 	while(Token() != T_EOF)
 		ReadItem();
 	Flush(false, 1);
 	FlushTable(0);
-	return output;
+	return pick(output);
 }
 
 void RTFParser::FlushTable(int level)
@@ -250,7 +247,6 @@ void RTFParser::FlushTable(int level)
 		dot_index.Add(child.tableformat.lm);
 		for(int r = 0; r < child.cells.GetCount(); r++) {
 			Array<Cell>& rw = child.cells[r];
-			int pos = child.tableformat.lm;
 			for(int c = 0; c < rw.GetCount(); c++)
 				dot_index.FindAdd(rw[c].info.end_dots);
 		}
@@ -264,7 +260,7 @@ void RTFParser::FlushTable(int level)
 		table.SetFormat(child.tableformat);
 		for(int c = 1; c < dot_order.GetCount(); c++)
 			table.AddColumn(dot_order[c] - dot_order[c - 1]);
-		dot_index = dot_order;
+		dot_index = pick(dot_order);
 		int tbl_border = Null, tbl_grid = Null;
 		Color clr_border = Null, clr_grid = Null;
 		for(int r = 0; r < child.cells.GetCount(); r++) {
@@ -328,10 +324,12 @@ void RTFParser::FlushTable(int level)
 				}
 			}
 		}
-		table.format.frame = Nvl(tbl_border, 0);
-		table.format.framecolor = (table.format.frame > 0 ? clr_border : Color(Null));
-		table.format.grid = Nvl(tbl_grid, 0);
-		table.format.gridcolor = (table.format.grid > 0 ? clr_grid : Color(Null));
+		RichTable::Format tf = table.GetFormat();
+		tf.frame = Nvl(tbl_border, 0);
+		tf.framecolor = (tf.frame > 0 ? clr_border : Color(Null));
+		tf.grid = Nvl(tbl_grid, 0);
+		tf.gridcolor = (tf.grid > 0 ? clr_grid : Color(Null));
+		table.SetFormat(tf);
 		for(int r = 0; r < child.cells.GetCount(); r++) {
 			Array<Cell>& rw = child.cells[r];
 //			int pos = child.tableformat.lm;
@@ -355,22 +353,22 @@ void RTFParser::FlushTable(int level)
 				};
 				for(int b = 0; b < __countof(border_width); b++) {
 					int tbl_wd = (outer_border[b] ? tbl_border : tbl_grid);
-					Color tbl_co = (outer_border[b] ? clr_border : clr_grid);
+//					Color tbl_co = (outer_border[b] ? clr_border : clr_grid);
 					if(*border_width[b] <= tbl_wd)
 						*border_width[b] = 0;
 				}
 				table.SetFormat(r, cell.nbegin, cell.info.format);
 				cell.text.Normalize();
-				table.SetPick(r, cell.nbegin, cell.text);
+				table.SetPick(r, cell.nbegin, pick(cell.text));
 			}
 		}
 		table.Normalize();
 		table_stack.Drop();
 		if(table_stack.IsEmpty())
-			output.CatPick(table);
+			output.CatPick(pick(table));
 		else {
 			TableState& par = table_stack.Top();
-			CellAt(par, par.textcol).text.CatPick(table);
+			CellAt(par, par.textcol).text.CatPick(pick(table));
 		}
 	}
 }
@@ -407,14 +405,13 @@ void RTFParser::Flush(bool force, int itap)
 RTFParser::TOKEN RTFParser::Fetch()
 {
 	is_full = true;
-	text = WString();
+	text.Clear();
 	if(next_command)
 	{
 		next_command = false;
 		return token = T_COMMAND;
 	}
 
-	text = Null;
 	command = Null;
 	command_arg = Null;
 
@@ -451,6 +448,7 @@ RTFParser::TOKEN RTFParser::Fetch()
 				case '_':
 				case ':': {
 					command = String(rtf - 1, 1);
+					LLOG("Command " << command);
 					if(text.IsEmpty())
 						return token = T_COMMAND;
 					next_command = true;
@@ -475,6 +473,7 @@ RTFParser::TOKEN RTFParser::Fetch()
 						if(*rtf == '*') {
 							rtf += 2;
 							state.new_dest = true;
+							LLOG("NewDest");
 						}
 						const char *b = rtf;
 						while(IsAlpha(*++rtf))
@@ -491,6 +490,7 @@ RTFParser::TOKEN RTFParser::Fetch()
 							nskip = state.uc_value;
 						}
 						else { // command - quit reading text
+							LLOG("Command " << command);
 							if(text.IsEmpty())
 								return token = T_COMMAND;
 							next_command = true;
@@ -505,8 +505,10 @@ RTFParser::TOKEN RTFParser::Fetch()
 		skip = nskip;
 	}
 
-	if(!text.IsEmpty())
+	if(!text.IsEmpty()) {
+		LLOG("TEXT, size: " << text.GetCount());
 		return token = T_TEXT;
+	}
 
 	if(*rtf == '{') {
 		stack.Add(state);
@@ -538,6 +540,7 @@ bool RTFParser::PassEndGroup(int level)
 
 void RTFParser::Skip()
 {
+	LLOG("Skip");
 	bool is_group = (token == T_GROUP || token == T_COMMAND && state.new_dest);
 	is_full = false;
 	if(is_group)
@@ -559,8 +562,11 @@ void RTFParser::ReadItem()
 		ReadText();
 	if(rtf == p && is_full) {
 		is_full = false;
-		if(token == T_COMMAND && state.new_dest)
+		if(token == T_COMMAND && state.new_dest && command != "shppict") {
+			LLOG("SkipGroup new_dest " << command);
 			SkipGroup();
+		}
+		state.new_dest = false;
 	}
 }
 
@@ -752,6 +758,8 @@ void RTFParser::ReadMisc()
 {
 	if(PassQ("field"))
 		ReadField();
+	else if(PassQ("nonshppict"))
+		SkipGroup();
 	else if(PassQ("pict"))
 		ReadPict();
 	else if(PassQ("shpinst"))
@@ -827,7 +835,7 @@ bool RTFParser::ReadField(const char *p)
 			face = Font::FindFaceNameIndex(symdef[f + 1]);
 		f = symdef.Find("\\s");
 		if(f >= 0 && f + 1 < symdef.GetCount())
-			height = PointDots(fround(2 * atof(symdef[f + 1]))) >> 1;
+			height = PointDots(fround(2 * Atof(symdef[f + 1]))) >> 1;
 		if(face < 0)
 #ifdef PLATFORM_WIN32
 			face = Font::SYMBOL;
@@ -989,6 +997,7 @@ void RTFParser::ReadShape()
 	int level = Level();
 	while(!PassEndGroup(level))
 		if(PassCmd("shppict")) {
+			LLOG("* shppict");
 			state.new_dest = false;
 			ReadItemGroup();
 		}
@@ -998,18 +1007,14 @@ void RTFParser::ReadShape()
 
 void RTFParser::ReadPict()
 {
+	LLOG("* ReadPict");
 	Size log_size(1, 1), out_size(1, 1), scaling(100, 100);
 	Rect crop(0, 0, 0, 0);
-	enum BLIPTYPE { UNK_BLIP, EMF_BLIP, PNG_BLIP, JPEG_BLIP, WMF_BLIP, DIB_BLIP };
+	enum BLIPTYPE { UNK_BLIP, WMF_BLIP, PNG_BLIP, JPEG_BLIP, DIB_BLIP };
 	BLIPTYPE blip_type = UNK_BLIP;
-#ifdef PLATFORM_WIN32
-#ifndef PLATFORM_WINCE
-	int wmf_mode = MM_ANISOTROPIC;
-#endif
-#endif
 	String blip_data;
 	char odd = 0;
-	while(!PassEndGroup())
+	while(!PassEndGroup()) {
 		if(PassText())
 			blip_data.Cat(ReadBinHex(odd));
 		else if(Token() == T_COMMAND) {
@@ -1023,39 +1028,34 @@ void RTFParser::ReadPict()
 			else if(PassQ("piccropt"))   crop.top    = TwipDotSize(command_arg);
 			else if(PassQ("piccropr"))   crop.right  = TwipDotSize(command_arg);
 			else if(PassQ("piccropb"))   crop.bottom = TwipDotSize(command_arg);
-			else if(PassQ("emfblip"))    blip_type    = EMF_BLIP;
+			else if(PassQ("emfblip"))    blip_type    = WMF_BLIP;
 			else if(PassQ("pngblip"))    blip_type    = PNG_BLIP;
 			else if(PassQ("jpegblip"))   blip_type    = JPEG_BLIP;
-#ifdef GUI_WIN
-#ifndef PLATFORM_WINCE
-			else if(PassQ("wmetafile"))  { blip_type = WMF_BLIP; wmf_mode = command_arg; }
-#endif
-#endif
-			else if(PassQ("dibitmap"))   blip_type = DIB_BLIP;
-			else Skip();
+			else if(PassQ("wmetafile"))  blip_type    = WMF_BLIP;
+			else if(PassQ("dibitmap"))   blip_type    = DIB_BLIP;
+			else {
+				LLOG("Command skip " << command);
+				Skip();
+			}
 		}
-		else
+		else {
+			LLOG("Non command skip");
 			Skip();
+		}
+	}
 	Size final_size = minmax(iscale(out_size, scaling, Size(100, 100)), Size(1, 1), Size(30000, 30000));
 	Size drawing_size;
 	DrawingDraw dd;
 	RichObject object;
+	LLOG("Pict format " << (int)blip_type << ", data size: " << blip_data.GetCount());
+	if(blip_data.IsEmpty())
+		return;
 #ifdef GUI_WIN
 #ifndef PLATFORM_WINCE
-	if(blip_type == EMF_BLIP || blip_type == WMF_BLIP) {
+	if(blip_type == WMF_BLIP) {
 		log_size = min(log_size, GetFitSize(log_size, final_size));
 		dd.Create(drawing_size = log_size);
-		WinMetaFile wmf;
-		if(blip_type == EMF_BLIP)
-			wmf = WinMetaFile(SetEnhMetaFileBits(blip_data.GetLength(), blip_data));
-		else {
-			METAFILEPICT mfp;
-			Zero(mfp);
-			mfp.mm = wmf_mode;
-			mfp.xExt = log_size.cx;
-			mfp.yExt = log_size.cy;
-			wmf = WinMetaFile(SetWinMetaFileBits(blip_data.GetLength(), blip_data, ScreenHDC(), &mfp));
-		}
+		WinMetaFile wmf(blip_data);
 		wmf.Paint(dd, log_size);
 		object = CreateDrawingObject(dd, out_size, final_size);
 	}
@@ -1063,8 +1063,8 @@ void RTFParser::ReadPict()
 #endif
 #endif
 	if(blip_type == DIB_BLIP || blip_type == PNG_BLIP || blip_type == JPEG_BLIP) {
-		//FIXIMAGE
 		Image image = StreamRaster::LoadStringAny(blip_data);
+		LLOG("Image size: " << image.GetSize());
 		object = CreatePNGObject(image, out_size, final_size);
 	}
 	if(object) {
@@ -1084,9 +1084,8 @@ String RTFParser::ReadBinHex(char& odd) const
 			: *s >= 'A' && *s <= 'F' ? *s - 'A' + 10
 			: *s >= 'a' && *s <= 'f' ? *s - 'a' + 10
 			: 255);
-		if(w < 16)
-			if(v >= 16)
-			{
+		if(w < 16) {
+			if(v >= 16) {
 				t = *s;
 				v = w;
 			}
@@ -1095,6 +1094,7 @@ String RTFParser::ReadBinHex(char& odd) const
 				out.Cat(16 * v + w);
 				v = 255;
 			}
+		}
 	}
 	odd = (v < 16 ? t : 0);
 	return out;
@@ -1278,4 +1278,4 @@ void RTFParser::ReadTableStyle()
 		CellInfoAt(ts.stylecol).format.align = ALIGN_BOTTOM;
 }
 
-END_UPP_NAMESPACE
+}

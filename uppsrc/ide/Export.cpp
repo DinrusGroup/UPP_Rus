@@ -5,7 +5,7 @@ void Ide::ExportMakefile(const String& ep)
 	SaveMakeFile(AppendFileName(ep, "Makefile"), true);
 }
 
-void Ide::ExportProject(const String& ep, bool all, bool gui)
+void Ide::ExportProject(const String& ep, bool all, bool gui, bool deletedir)
 {
 	SaveFile(false);
 	::Workspace wspc;
@@ -27,25 +27,24 @@ void Ide::ExportProject(const String& ep, bool all, bool gui)
 					used.FindAdd(SourcePath(pn, f.depends[q].text));
 			}
 		}
-		used.FindAdd(SourcePath(pn, "init"));
 	}
 	if(FileExists(ep)) {
-		if(gui && !PromptYesNo(DeQtf(ep) + " существующий файл.&"
-		                "Хотите его удалить?")) return;
+		if(gui && !PromptYesNo(DeQtf(ep) + " is existing file.&"
+		                "Do you want to delete it?")) return;
 		FileDelete(ep);
 	}
-	if(DirectoryExists(ep)) {
-		if(gui && !PromptYesNo(DeQtf(ep) + " существующая папка.&"
-		                "Хотите её заменить?")) return;
+	if(deletedir && DirectoryExists(ep)) {
+		if(gui && !PromptYesNo(DeQtf(ep) + " is existing directory.&"
+		                "Do you want to replace it?")) return;
 		DeleteFolderDeep(ep);
 	}
 
-	Progress pi("Проект экспортируется");
+	Progress pi("Exporting project");
 	pi.SetTotal(wspc.GetCount());
 	for(int i = 0; i < wspc.GetCount(); i++) {
 		if(gui && pi.StepCanceled())
 			return;
-		CopyFolder(AppendFileName(ep, wspc[i]), PackageDirectory(wspc[i]), used, all);
+		CopyFolder(AppendFileName(ep, wspc[i]), PackageDirectory(wspc[i]), used, all, true);
 	}
 	Vector<String> upp = GetUppDirs();
 	for(int i = 0; i < upp.GetCount(); i++) {
@@ -58,11 +57,11 @@ void Ide::ExportProject(const String& ep, bool all, bool gui)
 				String fn = ff.GetName();
 				String path = AppendFileName(d, fn);
 				if(all || used.Find(path) >= 0)
-					Upp::SaveFile(AppendFileName(ep, fn), LoadFile(path));
+					CopyFile(AppendFileName(ep, fn), path, true);
 			}
 			ff.Next();
 		}
-		CopyFolder(AppendFileName(ep, wspc[i]), PackageDirectory(wspc[i]), used, all);
+		CopyFolder(AppendFileName(ep, wspc[i]), PackageDirectory(wspc[i]), used, all, true);
 	}
 	ExportMakefile(ep);
 }

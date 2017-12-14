@@ -1,3 +1,5 @@
+#ifdef _WIN32
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //
 // File: MAPIAppointment.cpp
@@ -14,7 +16,6 @@
 
 // Ported to U++ Framework by Koldo. See License.txt file
 
-#include "MapiUtil.h"
 #include "MAPIEx.h"
 
 /////////////////////////////////////////////////////////////
@@ -131,4 +132,5 @@ String MAPIAppointment::GetMeetingUID() {
 	return strUID;
 }
 
+#endif
 #endif

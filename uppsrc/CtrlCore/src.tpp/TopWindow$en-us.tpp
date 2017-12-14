@@ -42,7 +42,7 @@ defined, performs RejectBreak(IDCANCEL). Otherwise, if there
 is Breaker with IDYES (as assigned to exit Ctrl by CtrlLayoutExit), 
 performs AcceptBreak(IDYES). If none if that is true, AcceptBreak(IDOK) 
 is performed.&]
-[s2; If ToWindow does not run modal loop, it is closed `- in this 
+[s2; If TopWindow does not run modal loop, it is closed `- in this 
 case, any state backup created by Backup method is scratched.&]
 [s3; &]
 [s4;%- &]
@@ -97,7 +97,9 @@ workspace. Exceeding parts are trimmed (decreasing window size).&]
 [s5;:TopWindow`:`:Breaker`(int`):%- [_^Callback^ Callback]_[* Breaker]([@(0.0.255) int]_[*@3 I
 D]_`=_IDEXIT)&]
 [s2; Returns Callback that, when invoked, invokes [* Break] with the 
-specified exit code.&]
+specified exit code. Note that Callback as return value is used 
+for backward compatibility with pre`-C`+`+11 U`+`+ and for practical 
+purposes, you could consider Event<> being returned.&]
 [s7; [%-*C@3 ID]-|Message loop exit code.&]
 [s7; [*/ Return value]-|Callback.&]
 [s3; &]
@@ -105,7 +107,9 @@ specified exit code.&]
 [s5;:TopWindow`:`:Acceptor`(int`):%- [_^Callback^ Callback]_[* Acceptor]([@(0.0.255) int]_[*@3 I
 D])&]
 [s2; Returns Callback that, when invoked, invokes [* AcceptBreak] with 
-the specified exit code.&]
+the specified exit code. Note that Callback as return value is 
+used for backward compatibility with pre`-C`+`+11 U`+`+ and for 
+practical purposes, you could consider Event<> being returned.&]
 [s7; [%-*C@3 ID]-|Message loop exit code.&]
 [s7; [*/ Return value]-|Callback.&]
 [s3; &]
@@ -113,7 +117,9 @@ the specified exit code.&]
 [s5;:TopWindow`:`:Rejector`(int`):%- [_^Callback^ Callback]_[* Rejector]([@(0.0.255) int]_[*@3 I
 D])&]
 [s2; Returns Callback that, when invoked, invokes [* RejectBreak] with 
-the specified exit code.&]
+the specified exit code. Note that Callback as return value is 
+used for backward compatibility with pre`-C`+`+11 U`+`+ and for 
+practical purposes, you could consider Event<> being returned.&]
 [s7; [%-*C@3 ID]-|Message loop exit code.&]
 [s7; [*/ Return value]-|Callback.&]
 [s3; &]
@@ -146,20 +152,20 @@ to WhenAction method of specified Ctrl.&]
 [s3; &]
 [s4;%- &]
 [s5;:TopWindow`:`:NoCenter`(`):%- [_^TopWindow^ TopWindow][@(0.0.255) `&]_[* NoCenter]()&]
-[s2; Sets TopWindow not to be centered when opening.&]
-[s7; [*/ Return value]-|`*this.&]
+[s2; Sets TopWindow not to be centered when being created on the 
+screen. Returns `*this.&]
 [s3; &]
 [s4;%- &]
 [s5;:TopWindow`:`:CenterOwner`(`):%- [_^TopWindow^ TopWindow][@(0.0.255) `&]_[* CenterOwner
 ]()&]
-[s2; Sets TopWindow to be centered w.r.t. its owner. This is default.&]
-[s7; [*/ Return value]-|`*this.&]
+[s2; Sets TopWindow to be centered w.r.t. its owner when being created 
+on the screen. This is default. Returns `*this.&]
 [s3; &]
 [s4;%- &]
 [s5;:TopWindow`:`:CenterScreen`(`):%- [_^TopWindow^ TopWindow][@(0.0.255) `&]_[* CenterScre
 en]()&]
-[s2; Sets TopWindow to be desktop centered.&]
-[s7; [*/ Return value]-|`*this.&]
+[s2; Sets TopWindow to be desktop centered when being created on 
+the screen. Returns `*this.&]
 [s3; &]
 [s4;%- &]
 [s5;:TopWindow`:`:SetMinSize`(Size`):%- [@(0.0.255) virtual] [@(0.0.255) void]_[* SetMinSiz
@@ -454,6 +460,15 @@ its child windows before opening. This method disables this behaviour.&]
 [s7; [*/ Return value]-|`*this.&]
 [s3; &]
 [s4;%- &]
+[s5;:TopWindow`:`:CloseBoxRejects`(bool`):%- [_^TopWindow^ TopWindow][@(0.0.255) `&]_[* Clo
+seBoxRejects]([@(0.0.255) bool]_[*@3 b]_`=_[@(0.0.255) true])&]
+[s2; When active, pressing window title close button always rejects 
+the dialog. When not active, the action depends on Acceptors/Rejectors 
+present, performing first of IDCANCEL `-> reject, IDNO `-> reject, 
+IDEXIT `-> accept, IDYES `-> Accept, and IDOK `-> Accept as default 
+action if nothing else is present.&]
+[s3; &]
+[s4;%- &]
 [s5;:TopWindow`:`:Icon`(const Image`&`):%- [_^TopWindow^ TopWindow][@(0.0.255) `&]_[* Icon](
 [@(0.0.255) const]_[_^Image^ Image][@(0.0.255) `&]_[*@3 m])&]
 [s2; Defines icon for TopWindow that is usually displayed in window 
@@ -497,4 +512,4 @@ the stream, minimized state is not restored.&]
 [s5;:TopWindow`:`:`~TopWindow`(`):%- [@(0.0.255) `~][* TopWindow]()&]
 [s2; Destructor.&]
 [s3; &]
-[s0; ]
+[s0; ]]

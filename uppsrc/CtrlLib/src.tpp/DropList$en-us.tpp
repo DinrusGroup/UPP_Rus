@@ -17,10 +17,7 @@ ultiButton][3 , ][@(0.0.255)3 public][3 _][*@3;3 Convert]&]
 [s0;%% &]
 [s2;%% 
 @@image:337&143
-€ƒ¶€—€€€ƒéÿ€€€€ø¯œí×Ï‰Â°Ş˜‡áìçÛàÕ™ÜÀ©¼ÎùÕŠ•ªÑ±©¨˜¼©•±˜‰Ä´ğÁ¨‰Ùâ×­ş‚˜ŞÚÃ’–úĞÃÿ
-¥èÜéÿÕÔè”õ‚Ì‘Şƒ›½ß—Êí­İ½ğ²çÂ„ôéêÎæÌ”ğ¢®óœ˜Â¡„³¤»ñ‰ğ¼ÑœŞŒŠıÌ³ùÙá“²¾ğúãÖ”¥œ­òªÖï
-çÚ¹¿ƒ”ÆË£³Éà¨Úú»âÀá°½Ñ–äÕÌ© ğ°¸ÚÂ¬Œª‚Š£ÜùÖÌòœı å°¿Û»™¿˜‰üö¦»ÎÁÀ÷Ê¤•§ Ò°–©§”°ü
-ï›²Ã—†˜Çü×ãçú€ãÖó±
+(AzYAFwAAAOn/AAAAAHic7dfPCcIwGIfh7OcOjuDVGdzAKbx51YqVKlGxqBg8qRWxGMQNNPBBKAniVy3+ghjeQ5IW+tBD/+hc6X9V1Gh1AswR3gMb3xfK7a3dPXAyZ0KEdGlO5kyUcKKunJhCIYSzpPGJcLzRnF4KfcyzeVlhsr5weuMeViUcrXKqVm/aub8DFMbLs8lgKFr6O0DhMD1RluTMKaBwsDjaLIwqHgIKo3lWzPKcfaCwP9s7GZ6/CXwe9qY7TsB3SiQVJ6AwliknlDD8b5uywxcGGPzX42d6AOPWczE=)
 &]
 [s0;%% &]
 [s9;%% This widget provides the selection of values from the drop`-down 
@@ -55,12 +52,15 @@ base class.&]
 code can (re)create the list in the callback.&]
 [s3; &]
 [s4; &]
-[s5;:DropList`:`:Add`(const Value`&`,const Value`&`): [_^DropList^ DropList][@(0.0.255) `&
-]_[* Add]([@(0.0.255) const]_[_^Value^ Value][@(0.0.255) `&]_[*@3 key], 
-[@(0.0.255) const]_[_^Value^ Value][@(0.0.255) `&]_[*@3 value])&]
+[s5;:Upp`:`:DropList`:`:Add`(const Upp`:`:Value`&`,const Upp`:`:Value`&`,bool`): [_^Upp`:`:DropList^ D
+ropList][@(0.0.255) `&]_[* Add]([@(0.0.255) const]_[_^Upp`:`:Value^ Value][@(0.0.255) `&]_[*@3 k
+ey], [@(0.0.255) const]_[_^Upp`:`:Value^ Value][@(0.0.255) `&]_[*@3 value], 
+[@(0.0.255) bool]_[*@3 enable] `= [@(0.0.255) true])&]
 [s2;%% Adds a new item to the list, [%-*@3 key] determines the value 
 of item, [%-*@3 value] is displayed in the value area and in the 
-list.&]
+list. If [%-*@3 enable] is false, DropList can be assigned this 
+[%-*@3 key]and displays corresponding [%-*@3 value], but does not 
+include it in drop list popup.&]
 [s3; &]
 [s4; &]
 [s5;:DropList`:`:Add`(const Value`&`): [_^DropList^ DropList][@(0.0.255) `&]_[* Add]([@(0.0.255) c
@@ -88,12 +88,7 @@ selected.&]
 [s4; &]
 [s5;:DropList`:`:Drop`(`): [@(0.0.255) void]_[* Drop]()&]
 [s2;%% Forces the list to `"drop`".&]
-[s3; &]
-[s4; &]
-[s5;:DropList`:`:SetDropLines`(int`): [_^DropList^ DropList][@(0.0.255) `&]_[* SetDropLines
-]([@(0.0.255) int]_[*@3 d])&]
-[s2;%% Sets the number of lines in dropped list.&]
-[s3; &]
+[s3;%% &]
 [s4; &]
 [s5;:DropList`:`:SetIndex`(int`): [@(0.0.255) void]_[* SetIndex]([@(0.0.255) int]_[*@3 i])&]
 [s2;%% Sets the value of list item [%-*@3 i] to be the current value.&]
@@ -101,7 +96,7 @@ selected.&]
 [s4; &]
 [s5;:DropList`:`:GetIndex`(`)const: [@(0.0.255) int]_[* GetIndex]()_[@(0.0.255) const]&]
 [s2;%% Returns the index of current value of DropList in the list. 
-Note that the current value isnot required to be in the list, 
+Note that the current value is not required to be in the list, 
 in that case `-1 is returned.&]
 [s3; &]
 [s4; &]
@@ -203,6 +198,16 @@ list.  &]
 show items.&]
 [s3; &]
 [s4; &]
+[s5;:DropList`:`:SetDropLines`(int`): [_^DropList^ DropList][@(0.0.255) `&]_[* SetDropLines
+]([@(0.0.255) int]_[*@3 d])&]
+[s2;%% Sets the number of lines in dropped list.&]
+[s3; &]
+[s4; &]
+[s5;:DropList`:`:SetValueConvert`(const Convert`&`): [_^DropList^ DropList][@(0.0.255) `&
+]_[* SetValueConvert]([@(0.0.255) const]_[_^Convert^ Convert][@(0.0.255) `&]_[*@3 cv])&]
+[s2;%% Sets the converting object for the value in view area.&]
+[s3; &]
+[s4; &]
 [s5;:DropList`:`:SetConvert`(const Convert`&`): [_^DropList^ DropList][@(0.0.255) `&]_[* Se
 tConvert]([@(0.0.255) const]_[_^Convert^ Convert][@(0.0.255) `&]_[*@3 cv])&]
 [s2;%% Sets the converting object for list values `- list values 
@@ -294,6 +299,16 @@ nt]_[*@3 w])&]
 the width according to current standard GUI font zooming.&]
 [s3;%% &]
 [s4; &]
+[s5;:DropList`:`:Wheel`(bool`): [_^DropList^ DropList][@(0.0.255) `&]_[* Wheel]([@(0.0.255) b
+ool]_[*@3 b]_`=_[@(0.0.255) true])&]
+[s2;%% If active, the value of DropList can be changed by the mouse 
+wheel. Default is active.&]
+[s3;%% &]
+[s4; &]
+[s5;:DropList`:`:NoWheel`(`): [_^DropList^ DropList][@(0.0.255) `&]_[* NoWheel]()&]
+[s2;%% Same as Wheel(false).&]
+[s3; &]
+[s4; &]
 [s5;:DropList`:`:SetScrollBarStyle`(const ScrollBar`:`:Style`&`): [_^DropList^ DropList
 ][@(0.0.255) `&]_[* SetScrollBarStyle]([@(0.0.255) const]_[_^ScrollBar`:`:Style^ ScrollBa
 r`::Style][@(0.0.255) `&]_[*@3 s])&]
@@ -312,22 +327,54 @@ list.&]
 [s9;%% These are simple utility function for filling DropList`'s 
 list and MapConvert.&]
 [s3;%% &]
-[s0;%% &]
-[s5;:Add`(DropList`&`,const VectorMap`<Value`,Value`>`&`): [@(0.0.255) void]_[* Add]([_^DropList^ D
-ropList][@(0.0.255) `&]_[*@3 list], [@(0.0.255) const]_[_^VectorMap^ VectorMap][@(0.0.255) <
-][_^Value^ Value], [_^Value^ Value][@(0.0.255) >`&]_[*@3 values])&]
+[s3;%% &]
+[s5;:Append`(DropList`&`,const VectorMap`<Value`,Value`>`&`): [@(0.0.255) void]_[* Append
+]([_^DropList^ DropList][@(0.0.255) `&]_[*@3 list], [@(0.0.255) const]_[_^VectorMap^ Vector
+Map]<[_^Value^ Value], [_^Value^ Value]>`&_[*@3 values])&]
+[s5;:Append`(DropList`&`,const VectorMap`<int`,String`>`&`): [@(0.0.255) void]_[* Append](
+[_^DropList^ DropList][@(0.0.255) `&]_[*@3 list], [@(0.0.255) const]_[_^VectorMap^ VectorMa
+p]<[@(0.0.255) int], [_^String^ String]>`&_[*@3 values])&]
 [s2;%% Fills the DropList from VectorMap.&]
-[s3; &]
+[s3;%% &]
 [s4; &]
-[s5;:Add`(MapConvert`&`,const VectorMap`<Value`,Value`>`&`): [@(0.0.255) void]_[* Add]([_^MapConvert^ M
-apConvert][@(0.0.255) `&]_[*@3 convert], [@(0.0.255) const]_[_^VectorMap^ VectorMap][@(0.0.255) <
-][_^Value^ Value], [_^Value^ Value][@(0.0.255) >`&]_[*@3 values])&]
+[s5;:Append`(MapConvert`&`,const VectorMap`<Value`,Value`>`&`): [@(0.0.255) void]_[* Appe
+nd]([_^MapConvert^ MapConvert][@(0.0.255) `&]_[*@3 convert], [@(0.0.255) const]_[_^VectorMap^ V
+ectorMap]<[_^Value^ Value], [_^Value^ Value]>`&_[*@3 values])&]
+[s5;:Append`(MapConvert`&`,const VectorMap`<int`,String`>`&`): [@(0.0.255) void]_[* Appen
+d]([_^MapConvert^ MapConvert][@(0.0.255) `&]_[*@3 convert], [@(0.0.255) const]_[_^VectorMap^ V
+ectorMap]<[@(0.0.255) int], [_^String^ String]>`&_[*@3 values])&]
 [s2;%% Fills the MapConvert from VectorMap.&]
-[s3; &]
+[s3;%% &]
 [s4; &]
-[s5;:Add`(DropList`&`,const MapConvert`&`): [@(0.0.255) void]_[* Add]([_^DropList^ DropList
-][@(0.0.255) `&]_[*@3 list], [@(0.0.255) const]_[_^MapConvert^ MapConvert][@(0.0.255) `&]_[*@3 c
-onvert])&]
+[s5;:Append`(DropList`&`,const MapConvert`&`): [@(0.0.255) void]_[* Append]([_^DropList^ Dr
+opList][@(0.0.255) `&]_[*@3 list], [@(0.0.255) const]_[_^MapConvert^ MapConvert][@(0.0.255) `&
+]_[*@3 convert])&]
 [s2;%% Fills the DropList from MapConvert.&]
-[s3; &]
-[s0; ]
+[s3;%% &]
+[s4; &]
+[s5;:operator`*`=`(DropList`&`,const VectorMap`<Value`,Value`>`&`): [@(0.0.255) void]_[* o
+perator`*`=]([_^DropList^ DropList][@(0.0.255) `&]_[*@3 list], [@(0.0.255) const]_[_^VectorMap^ V
+ectorMap]<[_^Value^ Value], [_^Value^ Value]>`&_[*@3 values])&]
+[s5;:operator`*`=`(DropList`&`,const VectorMap`<int`,String`>`&`): [@(0.0.255) void]_[* o
+perator`*`=]([_^DropList^ DropList][@(0.0.255) `&]_[*@3 list], [@(0.0.255) const]_[_^VectorMap^ V
+ectorMap]<[@(0.0.255) int], [_^String^ String]>`&_[*@3 values])&]
+[s2;%% Clears and fills the DropList from VectorMap.&]
+[s3;%% &]
+[s4; &]
+[s5;:operator`*`=`(MapConvert`&`,const VectorMap`<Value`,Value`>`&`): [@(0.0.255) void]_
+[* operator`*`=]([_^MapConvert^ MapConvert][@(0.0.255) `&]_[*@3 convert], 
+[@(0.0.255) const]_[_^VectorMap^ VectorMap]<[_^Value^ Value], [_^Value^ Value]>`&_[*@3 valu
+es])&]
+[s5;:operator`*`=`(MapConvert`&`,const VectorMap`<int`,String`>`&`): [@(0.0.255) void]_
+[* operator`*`=]([_^MapConvert^ MapConvert][@(0.0.255) `&]_[*@3 convert], 
+[@(0.0.255) const]_[_^VectorMap^ VectorMap]<[@(0.0.255) int], [_^String^ String]>`&_[*@3 va
+lues])&]
+[s2;%% Clears and fills the MapConvert from VectorMap.&]
+[s3;%% &]
+[s4; &]
+[s5;:operator`*`=`(DropList`&`,const MapConvert`&`): [@(0.0.255) void]_[* operator`*`=]([_^DropList^ D
+ropList][@(0.0.255) `&]_[*@3 list], [@(0.0.255) const]_[_^MapConvert^ MapConvert][@(0.0.255) `&
+]_[*@3 convert])&]
+[s2;%% Clears and fills the DropList from MapConvert.&]
+[s3;%% &]
+[s0;%% ]]

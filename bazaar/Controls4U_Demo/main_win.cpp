@@ -1,8 +1,7 @@
 #include <CtrlLib/CtrlLib.h>
+#include <Controls4U/Controls4U.h>
 
 using namespace Upp;
-
-#include <Controls4U/Controls4U.h>
 
 #if defined(PLATFORM_WIN32) 
 
@@ -40,13 +39,13 @@ void Firefox_Demo::SwitchOn() {
 void Firefox_Demo::Browse() {
 	if (!iexplorer.IsLoaded())
 		Exclamation("Sorry. ActiveX or program not available");	
-	iexplorer.Browse(url);
+	iexplorer.Browse(~url);
 }
 
 void Firefox_Demo::ShowHTML() {
 	if (!iexplorer.IsLoaded())
 		Exclamation("Sorry. ActiveX or program not available");	
-	iexplorer.ShowHTML(html);
+	iexplorer.ShowHTML(~html);
 	title = "";
 }
 
@@ -129,13 +128,13 @@ void IExplorer_Demo::SwitchOn() {
 void IExplorer_Demo::Browse() {
 	if (!iexplorer.IsLoaded())
 		Exclamation("Sorry. ActiveX or program not available");	
-	iexplorer.Browse(url);
+	iexplorer.Browse(~url);
 }
 
 void IExplorer_Demo::ShowHTML() {
 	if (!iexplorer.IsLoaded())
 		Exclamation("Sorry. ActiveX or program not available");	
-	iexplorer.ShowHTML(html);
+	iexplorer.ShowHTML(~html);
 	title = "";
 }
 
@@ -213,7 +212,7 @@ void VLC_Demo::SwitchOn() {
 void VLC_Demo::Load() {
 	if (!player.IsLoaded())
 		Exclamation("Sorry. ActiveX or program not available");	
-	player.AddTarget(file);
+	player.AddTarget(~file);
 }
 
 void VLC_Demo::Play() {
@@ -250,12 +249,13 @@ void VLC_Demo::UpdateInfo() {
 	if (t == -1)
 		time <<= "-";	
 	else
-		time <<= FormatDouble(t/1000., 2, FD_ZERO);
+		time <<= FormatDouble(t/1000., 2, FD_ZEROS);
 	int l = player.GetLength();
 	if (l == -1)
 		length = "-";	
 	else
-		length = FormatDouble(l/1000., 2, FD_ZERO);
+		length = FormatDouble(l/1000., 2, FD_ZEROS);
 }
+
 
 #endif

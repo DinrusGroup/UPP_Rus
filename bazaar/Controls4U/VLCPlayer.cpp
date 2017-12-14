@@ -1,11 +1,9 @@
 #ifdef _WIN32
 
 #include <CtrlLib/CtrlLib.h>
-
-using namespace Upp;
-
 #include "ActiveX.h"
 
+using namespace Upp;
 
 bool VLCPlayer::AddTarget(const String movie) {
 	if (IsPlaying())
@@ -30,7 +28,6 @@ bool VLCPlayer::AddTarget(const String movie) {
 	}
 	return true;
 }
-
 
 bool VLCPlayer::Play() {
 	IIVLC vlc(this);
@@ -176,5 +173,6 @@ int VLCPlayer::GetLength() {
 		return -1;
 	return seconds;
 }
+
 
 #endif

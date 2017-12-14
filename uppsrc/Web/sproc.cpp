@@ -7,7 +7,7 @@
 #include <sys/wait.h>
 #endif
 
-NAMESPACE_UPP
+namespace Upp {
 
 /* Mirek:unused
 static void WriteLog(const String& s)
@@ -441,7 +441,9 @@ void LocalSlaveProcess::Write(String s)
 	WriteFile(hInputWrite, s, s.GetLength(), &n, NULL);
 #endif
 #ifdef PLATFORM_POSIX
-	write(rpipe[1], s, s.GetLength());
+	IGNORE_RESULT(
+		write(rpipe[1], s, s.GetLength())
+	);
 #endif
 }
 
@@ -629,4 +631,4 @@ One<SlaveProcess> StartProcess(const char *cmdline, const char *envptr, int time
 	return rsp.Detach();
 }
 
-END_UPP_NAMESPACE
+}

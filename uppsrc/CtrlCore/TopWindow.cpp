@@ -1,10 +1,8 @@
 #include "CtrlCore.h"
 
-NAMESPACE_UPP
+namespace Upp {
 
-#define LLOG(x)  //  DLOG(x)
-
-Rect TopWindow::windowFrameMargin;
+#define LLOG(x)   // DLOG(x)
 
 String TopWindow::GetDesc() const
 {
@@ -31,7 +29,7 @@ void TopWindow::ActiveFocus0(Ctrl& ctrl)
 void TopWindow::Activate()
 {
 	LLOG("Activate " << Name() << " activefocus = " << UPP::Name(activefocus));
-	UsrLogT(3, "ACTIVATE " + Desc(this));
+	USRLOG("   ACTIVATE " + Desc(this));
 	if(activefocus && (HasFocus() || !GetFocusChildDeep()) && IsEnabled()) {
 		LLOG("activefocus->SetWantFocus()");
 		activefocus->SetWantFocus();
@@ -51,7 +49,7 @@ void TopWindow::Deactivate()
 	LLOG("DeActivate current focus " << UPP::Name(GetFocusCtrl()));
 	if(HasFocusDeep())
 		activefocus = GetFocusCtrl();
-	UsrLogT(3, "DEACTIVATE " + Desc(this));
+	USRLOG("   DEACTIVATE " + Desc(this));
 	LLOG("DeActivate " << Name() << " activefocus = " << UPP::Name(activefocus));
 }
 
@@ -68,19 +66,9 @@ bool TopWindow::IsShowEnabled() const
 	return true;
 }
 
-void TopWindow::SyncCaption()
-{
-	ICall(THISBACK(SyncCaption0));
-}
-
-void TopWindow::SyncTitle()
-{
-	ICall(THISBACK(SyncTitle0));
-}
-
 void TopWindow::DefaultBreak()
 {
-	if(FindAction(IDCANCEL))
+	if(FindAction(IDCANCEL) || close_rejects)
 		RejectBreak(IDCANCEL);
 	else
 	if(FindAction(IDNO))
@@ -157,14 +145,14 @@ void TopWindow::RejectBreak(int ID)
 	Break(ID);
 }
 
-void TopWindow::SetupRect()
+void TopWindow::SetupRect(Ctrl *owner)
 {
 	Rect r = GetRect();
 	if(r.IsEmpty())
 	   SetRect(GetDefaultWindowRect());
 	else
 	if(r.left == 0 && r.top == 0 && center == 1) {
-		Rect area = Ctrl::GetWorkArea();
+		Rect area = owner ? owner->GetWorkArea() : Ctrl::GetWorkArea();
 		SetRect(area.CenterRect(min(area.Size(), r.Size())));
 	}
 }
@@ -236,7 +224,10 @@ TopWindow& TopWindow::Rejector(Ctrl& m, int ID)
 
 void TopWindow::Paint(Draw& w)
 {
-	background.Paint(w, Rect(GetSize()), SColorText, SColorShadow);
+	if(!IsNull(st->background))
+		ChPaint(w, GetSize(), st->background);
+	else
+		background.Paint(w, GetSize(), SColorText, SColorShadow);
 }
 
 TopWindow& TopWindow::Background(const PaintRect& prect)
@@ -441,6 +432,14 @@ TopWindow& TopWindow::Urgent(bool b)
 	return *this;
 }
 
+TopWindow& TopWindow::FrameLess(bool b)
+{
+	GuiLock __;
+	frameless = b;
+	SyncCaption();
+	return *this;
+}
+
 void TopWindow::ShutdownWindow()
 {
 }
@@ -473,25 +472,42 @@ struct DialogBackground : public Display {
 	}
 };
 
+
+CH_STYLE(TopWindow, TopStyle, StyleDefault)
+{
+	background = Null;
+}
+
+TopWindow& TopWindow::SetStyle(const TopWindow::TopStyle& s)
+{
+	st = &s;
+	RefreshLayout();
+	RefreshFrame();
+	return *this;
+}
+
 TopWindow::TopWindow()
 {
 	GuiLock __;
+	GuiPlatformConstruct();
 	TransparentBackPaint();
 	background = PaintRect(Single<DialogBackground>(), Null);
+	SetStyle(StyleDefault());
 	center = 1;
 	minsize = Size(80, 20);
-	GuiPlatformConstruct();
 	maximizebox = minimizebox = sizeable = tool = noclosebox = false;
 	state = OVERLAPPED;
 	WhenClose = THISBACK(Close);
 	overlapped.Clear();
 	dokeys = true;
 	fullscreen = frameless = urgent = false;
+	close_rejects = false;
 }
 
 TopWindow::~TopWindow()
 {
 	GuiLock __;
+	destroying = true;
 	if(InLoop())
 		EndLoop(IDOK);
 	if(!IsChild())
@@ -518,4 +534,4 @@ void ArrangeOKCancel(Ctrl& ok, Ctrl& cancel)
 	}   
 }
 
-END_UPP_NAMESPACE
+}

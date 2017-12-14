@@ -1,21 +1,20 @@
 #include "Report.h"
 
-NAMESPACE_UPP
+namespace Upp {
 
 #define LLOG(x) // LOG(x)
 
-void Print(Report& r, PrinterJob& pd, bool center)
+#define  TFILE <Report/Report.t>
+#include <Core/t.h>
+
+void Print(Report& r, PrinterJob& pd)
 {
 	Draw& w = pd;
 	Size sz = w.GetPageSize();
 	Point mg = r.GetMargins();
 	Size pgsz = r.GetPage(0).GetSize();
-	int x = 0;
-	int y = 0;
-	if(center) {
-		x = Nvl(mg.x, (sz.cx - pgsz.cx) / 2);
-		y = Nvl(mg.y, (sz.cy - pgsz.cy) / 2);
-	}
+	int	x = Nvl(mg.x, (sz.cx - pgsz.cx) / 2);
+	int y = Nvl(mg.y, (sz.cy - pgsz.cy) / 2);
 	for(int i = 0; i < pd.GetPageCount(); i++) {
 		Drawing iw = r.GetPage(pd[i]);
 		Size sz = iw.GetSize();
@@ -205,7 +204,7 @@ ReportWindow::ReportWindow()
 	pg.WhenGoPage = THISBACK(GoPage);
 	lbl.SetFont(Arial(20).Italic());
 	lbl.SetAlign(ALIGN_CENTER);
-	pg.WhenAction = Breaker(-1);
+	pg.WhenAction = THISBACK(ShowPage);
 	Sizeable();
 	MaximizeBox();
 	Icon(CtrlImg::smallreporticon());
@@ -214,10 +213,11 @@ ReportWindow::ReportWindow()
 	pdf <<= THISBACK(Pdf);
 }
 
-String Pdf(Report& report, bool pdfa)
+String Pdf(Report& report, bool pdfa, const PdfSignatureInfo *sgn)
 {
 	return GetDrawingToPdfFn() && report.GetCount() ?
-	      (*GetDrawingToPdfFn())(report.GetPages(), report.GetPage(0).GetSize(), 200, pdfa)
+	      (*GetDrawingToPdfFn())(report.GetPages(), report.GetPage(0).GetSize(),
+	                             Nvl(report.GetMargins().x, 200), pdfa, sgn)
 	      : String();
 }
 
@@ -247,6 +247,12 @@ void ReportWindow::SetButton(int i, const char *label, int id)
 		AddChildBefore(&button[i], &cancel);
 }
 
+void ReportWindow::ShowPage()
+{
+	if(pg.Get())
+		lbl = Format("%d / %d", pg.GetFirst() + 1, pg.Get()->GetCount());
+}
+
 int ReportWindow::Perform(Report& report, int zoom, const char *caption)
 {
 	this->report = &report;
@@ -261,11 +267,8 @@ int ReportWindow::Perform(Report& report, int zoom, const char *caption)
 	ActiveFocus(pg);
 	Title(caption);
 	Open();
-	int n = -1;
 	for(;;) {
-		int nn = pg.GetFirst() + 1;
-		if(n != nn)
-			lbl = Format("%d / %d", n = nn, report.GetCount());
+		ShowPage();
 		int c = Run();
 		switch(c) {
 		case IDCANCEL:
@@ -283,9 +286,11 @@ bool Perform(Report& r, const char *caption)
 	return ReportWindow().Perform(r, 100, caption);
 }
 
-bool QtfReport(const String& qtf, const char *name, bool pagenumbers)
+bool QtfReport0(const String& qtf, const char *name, bool pagenumbers, Size pagesize)
 {
 	Report r;
+	if(!IsNull(pagesize))
+		r.SetPageSize(pagesize);
 	if(pagenumbers) {
 		Report rr;
 		rr.Footer("[1> $$P]");
@@ -296,4 +301,15 @@ bool QtfReport(const String& qtf, const char *name, bool pagenumbers)
 	return Perform(r, name);
 }
 
-END_UPP_NAMESPACE
+bool QtfReport(const String& qtf, const char *name, bool pagenumbers)
+{
+	return QtfReport0(qtf, name, pagenumbers, Null);
+}
+
+bool QtfReport(Size pagesize, const String& qtf, const char *name, bool pagenumbers)
+{
+	return QtfReport0(qtf, name, pagenumbers, pagesize);
+}
+
+
+}

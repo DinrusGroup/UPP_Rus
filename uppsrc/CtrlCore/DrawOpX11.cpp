@@ -2,7 +2,7 @@
 
 #ifdef GUI_X11
 
-NAMESPACE_UPP
+namespace Upp {
 
 #define LLOG(x)     // LOG(x)
 #define LTIMING(x)  // TIMING(x)
@@ -13,7 +13,7 @@ void SystemDraw::BeginOp()
 	Vector<Rect> newclip;
 	newclip <<= clip.Top();
 	f.clipi = clip.GetCount();
-	clip.Add() = newclip;
+	clip.Add() = pick(newclip);
 	cloff.Add(f);
 }
 
@@ -35,7 +35,7 @@ bool SystemDraw::ClipOp(const Rect& r)
 	Vector<Rect> newclip = Intersect(clip.Top(), r + actual_offset, ch);
 	if(ch) {
 		f.clipi = clip.GetCount();
-		clip.Add() = newclip;
+		clip.Add() = pick(newclip);
 	}
 	cloff.Add(f);
 	if(ch)
@@ -51,7 +51,7 @@ bool SystemDraw::ClipoffOp(const Rect& r)
 	Vector<Rect> newclip = Intersect(clip.Top(), r + actual_offset, ch);
 	if(ch) {
 		f.clipi = clip.GetCount();
-		clip.Add() = newclip;
+		clip.Add() = pick(newclip);
 	}
 	f.offseti = offset.GetCount();
 	actual_offset += r.TopLeft();
@@ -80,7 +80,7 @@ bool SystemDraw::ExcludeClipOp(const Rect& r)
 	bool ch = false;
 	Vector<Rect> ncl = Subtract(cl, r + actual_offset, ch);
 	if(ch) {
-		cl = ncl;
+		cl = pick(ncl);
 		SetClip();
 	}
 	return clip.Top().GetCount();
@@ -93,7 +93,7 @@ bool SystemDraw::IntersectClipOp(const Rect& r)
 	bool ch = false;
 	Vector<Rect> ncl = Intersect(cl, r + actual_offset, ch);
 	if(ch) {
-		cl = ncl;
+		cl = pick(ncl);
 		SetClip();
 	}
 	return clip.Top().GetCount();
@@ -144,12 +144,6 @@ void SystemDraw::DrawLineOp(int x1, int y1, int x2, int y2, int width, Color col
 	          x2 + actual_offset.x, y2 + actual_offset.y);
 }
 
-void SystemDraw::DrawImageOp(int x, int y, int cx, int cy, const Image& img, const Rect& src, Color color)
-{
-	GuiLock __;
-	StdDrawImage(*this, x, y, cx, cy, img, src, color);
-}
-
 void SystemDraw::DrawPolyPolylineOp(const Point *vertices, int vertex_count,
 	                          const int *counts, int count_count,
 	                          int width, Color color, Color doxor)
@@ -158,12 +152,12 @@ void SystemDraw::DrawPolyPolylineOp(const Point *vertices, int vertex_count,
 	ASSERT(count_count > 0 && vertex_count > 0);
 	if(vertex_count < 2 || IsNull(color))
 		return;
+	SetLineStyle(width);
 	XGCValues gcv_old, gcv_new;
-	XGetGCValues(Xdisplay, GetGC(), GCForeground | GCLineWidth | GCFunction, &gcv_old);
+	XGetGCValues(Xdisplay, GetGC(), GCForeground | GCFunction, &gcv_old);
 	gcv_new.function = IsNull(doxor) ? X11_ROP2_COPY : X11_ROP2_XOR;
 	gcv_new.foreground = GetXPixel(color) ^ (IsNull(doxor) ? 0 : GetXPixel(doxor));
-	gcv_new.line_width = width;
-	XChangeGC(Xdisplay, GetGC(), GCForeground | GCLineWidth | GCFunction, &gcv_new);
+	XChangeGC(Xdisplay, GetGC(), GCForeground | GCFunction, &gcv_new);
 	enum { REQUEST_LENGTH = 256 }; // X server XDrawLines request length (heuristic)
 	Point offset = GetOffset();
 	if(vertex_count == 2)
@@ -206,7 +200,7 @@ void SystemDraw::DrawPolyPolylineOp(const Point *vertices, int vertex_count,
 		ASSERT(so == segments + segment_count);
 		XDrawSegments(Xdisplay, GetDrawable(), GetGC(), segments, segment_count);
 	}
-	XChangeGC(Xdisplay, GetGC(), GCForeground | GCLineWidth | GCFunction, &gcv_old);
+	XChangeGC(Xdisplay, GetGC(), GCForeground | GCFunction, &gcv_old);
 }
 
 static void DrawPolyPolyPolygonRaw(SystemDraw& draw, const Point *vertices, int vertex_count,
@@ -239,9 +233,10 @@ void SystemDraw::DrawPolyPolyPolygonOp(const Point *vertices, int vertex_count,
 	if(vertex_count == 0)
 		return;
 
+	if(!IsNull(outline)) SetLineStyle(width); // Added
 	bool is_xor = !IsNull(doxor);
 	XGCValues gcv_old, gcv_new;
-	XGetGCValues(Xdisplay, GetGC(), GCForeground | GCFunction | GCLineWidth, &gcv_old);
+	XGetGCValues(Xdisplay, GetGC(), GCForeground | GCFunction, &gcv_old);
 	unsigned xor_pixel = (is_xor ? GetXPixel(doxor) : 0);
 	if(!IsNull(color))
 	{
@@ -255,8 +250,7 @@ void SystemDraw::DrawPolyPolyPolygonOp(const Point *vertices, int vertex_count,
 	if(!IsNull(outline))
 	{
 		gcv_new.foreground = GetXPixel(outline) ^ xor_pixel;
-		gcv_new.line_width = width;
-		XChangeGC(Xdisplay, GetGC(), GCForeground | GCLineWidth, &gcv_new);
+		XChangeGC(Xdisplay, GetGC(), GCForeground, &gcv_new);
 		Point offset = GetOffset();
 		for(const int *sp = subpolygon_counts, *se = sp + subpolygon_count_count; sp < se; sp++)
 		{
@@ -271,7 +265,7 @@ void SystemDraw::DrawPolyPolyPolygonOp(const Point *vertices, int vertex_count,
 			XDrawLines(Xdisplay, GetDrawable(), GetGC(), segment, *sp + 1, CoordModeOrigin);
 		}
 	}
-	XChangeGC(Xdisplay, GetGC(), GCForeground | GCFunction | GCLineWidth, &gcv_old);
+	XChangeGC(Xdisplay, GetGC(), GCForeground | GCFunction, &gcv_old);
 }
 
 void SystemDraw::DrawEllipseOp(const Rect& r, Color color, int pen, Color pencolor)
@@ -293,6 +287,7 @@ void SystemDraw::DrawEllipseOp(const Rect& r, Color color, int pen, Color pencol
 void SystemDraw::DrawArcOp(const Rect& rc, Point start, Point end, int width, Color color)
 {
 	GuiLock __;
+	SetLineStyle(width);
 	XGCValues gcv, gcv_old;
 	XGetGCValues(Xdisplay, GetGC(), GCForeground, &gcv_old);
 	Point offset = GetOffset();
@@ -311,6 +306,6 @@ void SystemDraw::DrawArcOp(const Rect& rc, Point start, Point end, int width, Co
 	XChangeGC(Xdisplay, GetGC(), GCForeground, &gcv_old);
 }
 
-END_UPP_NAMESPACE
+}
 
 #endif

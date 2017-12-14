@@ -2,13 +2,13 @@
 
 #ifdef GUI_WIN
 
-NAMESPACE_UPP
+namespace Upp {
 
-#define LLOG(x)     // DLOG(x)
+#define LLOG(x)   //   DLOG(x)
 #define LOGTIMING 0
 
 #ifdef _DEBUG
-#define LOGMESSAGES 0
+// #define LOGMESSAGES 1
 #endif
 
 #define ELOGW(x)   // RLOG(GetSysTime() << ": " << x) // Only activate in MT!
@@ -87,8 +87,8 @@ HINSTANCE Ctrl::hInstance;
 HANDLE    Ctrl::OverwatchThread;
 HWND      Ctrl::OverwatchHWND;
 
-Event Ctrl::OverwatchEndSession;
-Event Ctrl::ExitLoopEvent;
+Win32Event Ctrl::OverwatchEndSession;
+Win32Event Ctrl::ExitLoopEvent;
 #endif
 #endif
 
@@ -125,7 +125,7 @@ LRESULT CALLBACK Ctrl::OverwatchWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPAR
 			}
 		}
 		if(ShutdownBlockReasonCreate)
-			ShutdownBlockReasonCreate(hwnd, ~WString(t_("ожидание ответа пользователя")));
+			ShutdownBlockReasonCreate(hwnd, ~WString(t_("waiting for user response")));
 		EndSession();
 		ELOGW("WM_QUERYENDSESSION 1");
 		OverwatchEndSession.Wait();
@@ -195,6 +195,7 @@ LRESULT CALLBACK Ctrl::UtilityProc(HWND hWnd, UINT message, WPARAM wParam, LPARA
 	switch(message) {
 	case WM_TIMER:
 		TimerProc(GetTickCount());
+		AnimateCaret();
 		break;
 	case WM_RENDERFORMAT:
 		RenderFormat((dword)wParam);
@@ -219,8 +220,11 @@ void WakeUpGuiThread()
 	::PostThreadMessage(sMainThreadId, WM_NULL, 0, 0);
 }
 
+void AvoidPaintingCheck__();
+
 static void Win32PanicMessageBox(const char *title, const char *text)
 {
+	AvoidPaintingCheck__();
 #ifdef PLATFORM_WINCE
 	static wchar wtext[256], wtitle[256];
 	ToUnicode(wtext, text, strlen(text), CHARSET_DEFAULT);
@@ -231,10 +235,16 @@ static void Win32PanicMessageBox(const char *title, const char *text)
 #endif
 }
 
+void Ctrl::InstallPanicBox()
+{
+	InstallPanicMessageBox(&Win32PanicMessageBox);
+}
+
 void Ctrl::InitWin32(HINSTANCE hInstance)
 {
 	GuiLock __;
 	LLOG("InitWin32");
+
 	InstallPanicMessageBox(&Win32PanicMessageBox);
 //	RLOGBLOCK("Ctrl::InitWin32");
 	sMainThreadId = GetCurrentThreadId();
@@ -419,7 +429,7 @@ void  Ctrl::SetMouseCursor(const Image& image)
 	static Image img;
 	if(image.GetSerialId() != img.GetSerialId()) {
 		img = image;
-		HCURSOR hc = IconWin32(img, true);
+		HCURSOR hc = SystemDraw::IconWin32(img, true);
 		SetCursor(hc);
 		if(hCursor)
 			DestroyCursor(hCursor);
@@ -471,127 +481,53 @@ Ctrl *Ctrl::GetActiveCtrl()
 
 UDropTarget *NewUDropTarget(Ctrl *);
 
-struct Ctrl::CreateBox {
-	HWND  parent;
-	DWORD style;
-	DWORD exstyle;
-	bool  savebits;
-	int   show;
-	bool  dropshadow;
-};
+String WindowStyleAsString(dword style, dword exstyle);
 
 void Ctrl::Create(HWND parent, DWORD style, DWORD exstyle, bool savebits, int show, bool dropshadow)
 {
-	CreateBox cr;
-	cr.parent = parent;
-	cr.style = style;
-	cr.exstyle = exstyle;
-	cr.savebits = savebits;
-	cr.show = show;
-	cr.dropshadow = dropshadow;
-	ICall(callback1(this, &Ctrl::Create0, &cr));
-}
-
-#if 0
-void Ctrl::Create0(Ctrl::CreateBox *cr)
-{
 	GuiLock __;
-	ASSERT(IsMainThread());
-	LLOG("Ctrl::Create(parent = " << (void *)parent << ") in " <<UPP::Name(this) << BeginIndent);
-	ASSERT(!IsChild() && !IsOpen());
-	Rect r = GetRect();
-	AdjustWindowRectEx(r, cr->style, FALSE, cr->exstyle);
-	isopen = true;
-	top = new Top;
-	ASSERT(!cr->parent || IsWindow(cr->parent));
-	if(!IsWinXP())
-		cr->dropshadow = false;
-#ifdef PLATFORM_WINCE
-		if(parent)
-			top->hwnd = CreateWindowExW(cr->exstyle,
-			                            cr->savebits ? cr->dropshadow ? L"UPP-CLASS-SB-DS-W" : L"UPP-CLASS-SB-W"
-			                                         : cr->dropshadow ? L"UPP-CLASS-DS-W"    : L"UPP-CLASS-W",
-			                            L"", cr->style, r.left, r.top, r.Width(), r.Height(),
-			                            cr->parent, NULL, hInstance, this);
-		else
-			top->hwnd = CreateWindowW(L"UPP-CLASS-W",
-			                          L"", WS_VISIBLE, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT,
-			                          cr->parent, NULL, hInstance, this);
-#else
-	if(IsWinNT() && (!cr->parent || IsWindowUnicode(cr->parent)))
-		top->hwnd = CreateWindowExW(cr->exstyle,
-		                            cr->savebits ? cr->dropshadow ? L"UPP-CLASS-SB-DS-W" : L"UPP-CLASS-SB-W"
-		                                         : cr->dropshadow ? L"UPP-CLASS-DS-W"    : L"UPP-CLASS-W",
-		                            L"", cr->style, r.left, r.top, r.Width(), r.Height(),
-		                            cr->parent, NULL, hInstance, this);
-	else
-		top->hwnd = CreateWindowEx(cr->exstyle,
-		                           cr->savebits ? cr->dropshadow ? "UPP-CLASS-SB-DS-A" : "UPP-CLASS-SB-A"
-		                                        : cr->dropshadow ? "UPP-CLASS-DS-A"    : "UPP-CLASS-A",
-		                           "", cr->style, r.left, r.top, r.Width(), r.Height(),
-		                           cr->parent, NULL, hInstance, this);
-#endif
-
-	inloop = false;
-
-	ASSERT(top->hwnd);
-
-	::ShowWindow(top->hwnd, visible ? cr->show : SW_HIDE);
-//	::UpdateWindow(hwnd);
-	StateH(OPEN);
-	LLOG(EndIndent << "//Ctrl::Create in " <<UPP::Name(this));
-	RegisterDragDrop(top->hwnd, (LPDROPTARGET) (top->dndtgt = NewUDropTarget(this)));
-	CancelMode();
-	RefreshLayoutDeep();
-}
-#else
-// Fix to avoid black corners temorarily artifact
-void Ctrl::Create0(Ctrl::CreateBox *cr)
-{
-	GuiLock __;
-	ASSERT(IsMainThread());
+	ASSERT_(IsMainThread(), "Window creation can only happen in the main thread");
 	LLOG("Ctrl::Create(parent = " << (void *)parent << ") in " <<UPP::Name(this) << LOG_BEGIN);
 	ASSERT(!IsChild() && !IsOpen());
 	Rect r = GetRect();
-	AdjustWindowRectEx(r, cr->style, FALSE, cr->exstyle);
+	AdjustWindowRectEx(r, style, FALSE, exstyle);
 	isopen = true;
 	top = new Top;
-	ASSERT(!cr->parent || IsWindow(cr->parent));
-	cr->style &= ~WS_VISIBLE;
+	ASSERT(!parent || IsWindow(parent));
+	style &= ~WS_VISIBLE;
 	if(!IsWinXP())
-		cr->dropshadow = false;
+		dropshadow = false;
 #ifdef PLATFORM_WINCE
 		if(parent)
-			top->hwnd = CreateWindowExW(cr->exstyle,
-			                            cr->savebits ? cr->dropshadow ? L"UPP-CLASS-SB-DS-W" : L"UPP-CLASS-SB-W"
-			                                         : cr->dropshadow ? L"UPP-CLASS-DS-W"    : L"UPP-CLASS-W",
-			                            L"", cr->style, 0, 0, 0, 0,
-			                            cr->parent, NULL, hInstance, this);
+			top->hwnd = CreateWindowExW(exstyle,
+			                            savebits ? dropshadow ? L"UPP-CLASS-SB-DS-W" : L"UPP-CLASS-SB-W"
+			                                         : dropshadow ? L"UPP-CLASS-DS-W"    : L"UPP-CLASS-W",
+			                            L"", style, 0, 0, 0, 0,
+			                            parent, NULL, hInstance, this);
 		else
 			top->hwnd = CreateWindowW(L"UPP-CLASS-W",
 			                          L"", WS_VISIBLE, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT,
-			                          cr->parent, NULL, hInstance, this);
+			                          parent, NULL, hInstance, this);
 #else
-	if(IsWinNT() && (!cr->parent || IsWindowUnicode(cr->parent)))
-		top->hwnd = CreateWindowExW(cr->exstyle,
-		                            cr->savebits ? cr->dropshadow ? L"UPP-CLASS-SB-DS-W" : L"UPP-CLASS-SB-W"
-		                                         : cr->dropshadow ? L"UPP-CLASS-DS-W"    : L"UPP-CLASS-W",
-		                            L"", cr->style, 0, 0, 0, 0,
-		                            cr->parent, NULL, hInstance, this);
+	if(IsWinNT() && (!parent || IsWindowUnicode(parent)))
+		top->hwnd = CreateWindowExW(exstyle,
+		                            savebits ? dropshadow ? L"UPP-CLASS-SB-DS-W" : L"UPP-CLASS-SB-W"
+		                                         : dropshadow ? L"UPP-CLASS-DS-W"    : L"UPP-CLASS-W",
+		                            L"", style, 0, 0, 0, 0,
+		                            parent, NULL, hInstance, this);
 	else
-		top->hwnd = CreateWindowEx(cr->exstyle,
-		                           cr->savebits ? cr->dropshadow ? "UPP-CLASS-SB-DS-A" : "UPP-CLASS-SB-A"
-		                                        : cr->dropshadow ? "UPP-CLASS-DS-A"    : "UPP-CLASS-A",
-		                           "", cr->style, 0, 0, 0, 0,
-		                           cr->parent, NULL, hInstance, this);
+		top->hwnd = CreateWindowEx(exstyle,
+		                           savebits ? dropshadow ? "UPP-CLASS-SB-DS-A" : "UPP-CLASS-SB-A"
+		                                        : dropshadow ? "UPP-CLASS-DS-A"    : "UPP-CLASS-A",
+		                           "", style, 0, 0, 0, 0,
+		                           parent, NULL, hInstance, this);
 #endif
 
 	inloop = false;
 
 	ASSERT(top->hwnd);
-
 	::MoveWindow(top->hwnd, r.left, r.top, r.Width(), r.Height(), false); // To avoid "black corners" artifact effect
-	::ShowWindow(top->hwnd, visible ? cr->show : SW_HIDE);
+	::ShowWindow(top->hwnd, visible ? show : SW_HIDE);
 //	::UpdateWindow(hwnd);
 	StateH(OPEN);
 	LLOG(LOG_END << "//Ctrl::Create in " <<UPP::Name(this));
@@ -599,8 +535,6 @@ void Ctrl::Create0(Ctrl::CreateBox *cr)
 	CancelMode();
 	RefreshLayoutDeep();
 }
-
-#endif
 
 void ReleaseUDropTarget(UDropTarget *dt);
 
@@ -626,15 +560,13 @@ void Ctrl::WndFree()
 	top = NULL;
 }
 
-void Ctrl::WndDestroy0()
+void Ctrl::WndDestroy()
 {
 	GuiLock __;
-	LLOG("Ctrl::WndDestroy() in " <<UPP::Name(this) << LOG_BEGIN);
-	LLOG((DumpWindowOrder(false), ""));
 	if(top && top->hwnd) {
 		HWND hwnd = top->hwnd;
 		WndFree(); // CXL 2007-06-04 to avoid loosing focus with maximize box owned dialogs
-		::DestroyWindow(hwnd);
+		bool result = ::DestroyWindow(hwnd);
 	}
 }
 
@@ -679,6 +611,11 @@ void Ctrl::NcDestroy()
 		WndFree();
 }
 
+bool Ctrl::PreprocessMessage(MSG& msg)
+{
+	return false;
+}
+
 LRESULT CALLBACK Ctrl::WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 {
 	GuiLock __;
@@ -714,11 +651,11 @@ LRESULT CALLBACK Ctrl::WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lP
 		if(i >= 0)
 			Windows().SetKey(i, NULL);
 	}
-	#if LOGMESSAGES
+#if LOGMESSAGES
 	bool logblk = false;
 	if(message != WM_SETCURSOR && message != WM_CTLCOLORBTN && message != WM_TIMER &&
 #ifndef PLATFORM_WINCE
-	   message != WM_NCHITTEST  && message != WM_ENTERIDLE &&
+	   message != WM_NCHITTEST  &&  message != WM_ENTERIDLE &&
 #endif
 	   message != WM_CTLCOLORDLG && message != WM_CTLCOLOREDIT && message != WM_CTLCOLORLISTBOX &&
 	   message != WM_CTLCOLORMSGBOX && message != WM_CTLCOLORSCROLLBAR &&
@@ -733,11 +670,9 @@ LRESULT CALLBACK Ctrl::WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lP
 				logblk = true;
 				break;
 			}
-	#endif
+#endif
 	LRESULT l = 0;
 	if(w) {
-		try
-		{
 #if defined(_DEBUG) && LOGTIMING
 			int ticks = msecs();
 			String wname = w->Name();
@@ -757,12 +692,6 @@ LRESULT CALLBACK Ctrl::WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lP
 				msgname = NFormat("0x%04x", (int)message);
 			LLOG(NFormat("T+%d %s 0x%08x 0x%08x -> %s", msecs(ticks), msgname, (int)wParam, (int)lParam, wname));
 #endif
-		}
-		catch(Exc e)
-		{
-			LOG("Ctrl::WindowProc -> Exc: " << e);
-			NEVER();
-		}
 	}
 	else
 		l = DefWindowProc(hWnd, message, wParam, lParam);
@@ -785,9 +714,9 @@ bool PassWindowsKey(int wParam)
 	||     wParam >= 0x90; // OEM keys
 }
 
-Vector<Callback> Ctrl::hotkey;
+Vector<Event<> > Ctrl::hotkey;
 
-int Ctrl::RegisterSystemHotKey(dword key, Callback cb)
+int Ctrl::RegisterSystemHotKey(dword key, Function<void ()> cb)
 {
 	ASSERT(key >= K_DELTA);
 	int q = hotkey.GetCount();
@@ -796,7 +725,7 @@ int Ctrl::RegisterSystemHotKey(dword key, Callback cb)
 			q = i;
 			break;
 		}
-	hotkey.At(q) = cb;
+	hotkey.At(q) = Event<> () << cb;
 	dword mod = 0;
 	if(key & K_ALT)
 		mod |= MOD_ALT;
@@ -819,13 +748,31 @@ void Ctrl::UnregisterSystemHotKey(int id)
 void Ctrl::sProcessMSG(MSG& msg)
 {
 	if (msg.message == WM_HOTKEY) {
-		if(msg.wParam >= 0 && (int)msg.wParam < Ctrl::hotkey.GetCount())
+		if((int)msg.wParam >= 0 && (int)msg.wParam < Ctrl::hotkey.GetCount())
 			Ctrl::hotkey[(int)msg.wParam]();
 		return;
 	}
-	if(msg.message != WM_SYSKEYDOWN && msg.message != WM_SYSKEYUP
-	|| PassWindowsKey((dword)msg.wParam) || msg.wParam == VK_MENU) //17.11 Mirek - fix to get windows menu invoked on Alt+Space
-		TranslateMessage(&msg); // 04/09/07: TRC fix to make barcode reader going better
+	
+	if(!DHCtrl::PreprocessMessageAll(msg))
+		if(msg.message != WM_SYSKEYDOWN && msg.message != WM_SYSKEYUP
+		|| PassWindowsKey((dword)msg.wParam) || msg.wParam == VK_MENU) //17.11 Mirek - fix to get windows menu invoked on Alt+Space
+			TranslateMessage(&msg); // 04/09/07: TRC fix to make barcode reader going better
+
+#if 0
+	DDUMP(msg.hwnd);
+		for(WinMsg *m = sWinMsg; m->ID; m++)
+			if(m->ID == msg.message) {
+				RLOG(m->name << ' ' <<
+					Sprintf(", wParam = %d (0x%x), lParam = %d (0x%x)",
+					        msg.wParam, msg.wParam, msg.lParam, msg.lParam));
+				break;
+			}
+
+	char cls[200];
+	GetClassName(msg.hwnd, cls, 200);
+	DDUMP(cls);
+#endif
+
 	if(IsWindowUnicode(msg.hwnd))
 		DispatchMessageW(&msg);
 	else
@@ -834,15 +781,14 @@ void Ctrl::sProcessMSG(MSG& msg)
 
 bool Ctrl::IsWaitingEvent()
 {
+	ASSERT_(IsMainThread(), "IsWaitingEvent can only run in the main thread");
 	MSG msg;
 	return PeekMessage(&msg, NULL, 0, 0, PM_NOREMOVE);
 }
 
 bool Ctrl::ProcessEvent(bool *quit)
 {
-	ASSERT(IsMainThread());
-	if(DoCall())
-		return false;
+	ASSERT_(IsMainThread(), "ProcessEvent can only run in the main thread");
 	if(!GetMouseLeft() && !GetMouseRight() && !GetMouseMiddle())
 		ReleaseCtrlCapture();
 	MSG msg;
@@ -859,8 +805,13 @@ bool Ctrl::ProcessEvent(bool *quit)
 	return false;
 }
 
+void Ctrl::SysEndLoop()
+{
+}
+
 bool Ctrl::ProcessEvents(bool *quit)
 {
+	ASSERT_(IsMainThread(), "ProcessEvents can only run in the main thread");
 	if(ProcessEvent(quit)) {
 		while(ProcessEvent(quit) && (!LoopCtrl || LoopCtrl->InLoop())); // LoopCtrl-MF 071008
 		SweepMkImageCache();
@@ -870,10 +821,10 @@ bool Ctrl::ProcessEvents(bool *quit)
 	return false;
 }
 
-void Ctrl::EventLoop0(Ctrl *ctrl)
+void Ctrl::EventLoop(Ctrl *ctrl)
 {
 	GuiLock __;
-	ASSERT(IsMainThread());
+	ASSERT_(IsMainThread(), "EventLoop can only run in the main thread");
 	ASSERT(LoopLevel == 0 || ctrl);
 	LoopLevel++;
 	LLOG("Entering event loop at level " << LoopLevel << LOG_BEGIN);
@@ -903,12 +854,12 @@ void Ctrl::EventLoop0(Ctrl *ctrl)
 	LLOG(LOG_END << "Leaving event loop ");
 }
 
-void Ctrl::GuiSleep0(int ms)
+void Ctrl::GuiSleep(int ms)
 {
 	GuiLock __;
-	ASSERT(IsMainThread());
+	ASSERT_(IsMainThread(), "Only the main thread can perform GuiSleep");
 	ELOG("GuiSleep");
-	int level = LeaveGMutexAll();
+	int level = LeaveGuiMutexAll();
 #if !defined(flagDLL) && !defined(PLATFORM_WINCE)
 	if(!OverwatchThread) {
 		DWORD dummy;
@@ -923,19 +874,20 @@ void Ctrl::GuiSleep0(int ms)
 #else
 	MsgWaitForMultipleObjects(0, NULL, FALSE, ms, QS_ALLINPUT);
 #endif
-	EnterGMutex(level);
+	EnterGuiMutex(level);
 }
 
+#if 0
 void Ctrl::WndDestroyCaret()
 {
-	LLOG("Ctrl::WndDestroyCaret()");
+	DLOG("Ctrl::WndDestroyCaret()");
 	::DestroyCaret();
 }
 
-void Ctrl::WndCreateCaret0(const Rect& cr)
+void Ctrl::WndCreateCaret(const Rect& cr)
 {
 	GuiLock __;
-	LLOG("Ctrl::WndCreateCaret(" << cr << ") in " << UPP::Name(this));
+	DLOG("Ctrl::WndCreateCaret(" << cr << ") in " << UPP::Name(this));
 	HWND hwnd = GetHWND();
 	if(!hwnd) return;
 	Rect r;
@@ -946,6 +898,58 @@ void Ctrl::WndCreateCaret0(const Rect& cr)
 	::SetCaretPos(cr.left - p.x, cr.top - p.y);
 	::ShowCaret(hwnd);
 }
+#else
+
+int  Ctrl::WndCaretTime;
+bool Ctrl::WndCaretVisible;
+
+void  Ctrl::AnimateCaret()
+{
+	GuiLock __;
+	bool v = !(((GetTickCount() - WndCaretTime) / GetCaretBlinkTime()) & 1);
+	if(v != WndCaretVisible) {
+		WndCaretVisible = v;
+		RefreshCaret();
+	}
+}
+
+void Ctrl::PaintCaret(SystemDraw& w)
+{
+	GuiLock __;
+	LLOG("PaintCaret " << Name() << ", caretCtrl: " << caretCtrl << ", WndCaretVisible: " << WndCaretVisible);
+	if(this == caretCtrl && WndCaretVisible)
+		w.DrawRect(caretx, carety, caretcx, caretcy, InvertColor);
+}
+
+void Ctrl::SetCaret(int x, int y, int cx, int cy)
+{
+	GuiLock __;
+	LLOG("SetCaret " << Name() << " " << RectC(x, y, cx, cy));
+	if(this == caretCtrl)
+		RefreshCaret();
+	caretx = x;
+	carety = y;
+	caretcx = cx;
+	caretcy = cy;
+	if(this == caretCtrl) {
+		WndCaretTime = GetTickCount();
+		RefreshCaret();
+		AnimateCaret();
+	}
+}
+
+void Ctrl::SyncCaret() {
+	GuiLock __;
+	LLOG("SyncCaret");
+	if(focusCtrl != caretCtrl) {
+		LLOG("SyncCaret DO " << Upp::Name(caretCtrl) << " -> " << Upp::Name(focusCtrl));
+		RefreshCaret();
+		caretCtrl = focusCtrl;
+		RefreshCaret();
+	}
+}
+#endif
+
 
 Rect Ctrl::GetWndScreenRect() const
 {
@@ -957,7 +961,7 @@ Rect Ctrl::GetWndScreenRect() const
 	return r;
 }
 
-void Ctrl::WndShow0(bool b)
+void Ctrl::WndShow(bool b)
 {
 	GuiLock __;
 	HWND hwnd = GetHWND();
@@ -965,7 +969,7 @@ void Ctrl::WndShow0(bool b)
 		::ShowWindow(hwnd, b ? SW_SHOW : SW_HIDE);
 }
 
-void Ctrl::WndUpdate0()
+void Ctrl::WndUpdate()
 {
 	GuiLock __;
 	HWND hwnd = GetHWND();
@@ -1047,16 +1051,6 @@ Rect Ctrl::GetVirtualWorkArea()
 	return out;
 }
 
-Rect Ctrl::GetWorkArea(Point pt)
-{
-	Array<Rect> rc;
-	GetWorkArea(rc);
-	for(int i = 0; i < rc.GetCount(); i++)
-		if(rc[i].Contains(pt))
-			return rc[i];
-	return GetPrimaryWorkArea();
-}
-
 Rect Ctrl::GetVirtualScreenArea()
 {
 	GuiLock __;
@@ -1103,7 +1097,7 @@ int Ctrl::GetKbdSpeed()
 #endif
 }
 
-void Ctrl::SetWndForeground0()
+void Ctrl::SetWndForeground()
 {
 	GuiLock __;
 	LLOG("Ctrl::SetWndForeground() in " << UPP::Name(this));
@@ -1128,16 +1122,16 @@ bool Ctrl::IsWndForeground() const
 	return hwnd == fore;
 }
 
-void Ctrl::WndEnable0(bool *b)
+void Ctrl::WndEnable(bool b)
 {
 	GuiLock __;
 	LLOG("Ctrl::WndEnable(" << (b && *b) << ") in " << UPP::Name(this) << ", focusCtrlWnd = " << UPP::Name(~focusCtrlWnd) << ", raw = " << (void *)::GetFocus());
-	if(*b)
+	if(b)
 		ReleaseCapture();
 	LLOG("//Ctrl::WndEnable(" << (b && *b) << ") -> false " <<UPP::Name(this) << ", focusCtrlWnd = " <<UPP::Name(~focusCtrlWnd) << ", raw = " << (void *)::GetFocus());
 }
 
-void Ctrl::SetWndFocus0(bool *b)
+bool Ctrl::SetWndFocus()
 {
 	GuiLock __;
 	LLOG("Ctrl::SetWndFocus() in " << UPP::Name(this));
@@ -1146,11 +1140,10 @@ void Ctrl::SetWndFocus0(bool *b)
 		LLOG("Ctrl::SetWndFocus() -> ::SetFocus(" << (void *)hwnd << ")");
 //		::SetActiveWindow(hwnd);
 		::SetFocus(hwnd);
-		*b = true;
-		return;
+		return true;
 	}
 	LLOG("//Ctrl::SetWndFocus() in " <<UPP::Name(this) << ", active window = " << (void *)::GetActiveWindow());
-	*b = false;
+	return false;
 }
 
 bool Ctrl::HasWndFocus() const
@@ -1163,10 +1156,12 @@ bool Ctrl::HasWndFocus() const
 bool Ctrl::SetWndCapture()
 {
 	GuiLock __;
+	LLOG("Ctrl::SetWndCapture() in " << UPP::Name(this));
 	ASSERT(IsMainThread());
 	HWND hwnd = GetHWND();
 	if(hwnd) {
 		::SetCapture(hwnd);
+		LLOG("SetCapture succeeded");
 		return true;
 	}
 	return false;
@@ -1175,11 +1170,13 @@ bool Ctrl::SetWndCapture()
 bool Ctrl::ReleaseWndCapture()
 {
 	GuiLock __;
+	LLOG("Ctrl::ReleaseWndCapture() in " << UPP::Name(this));
 	ASSERT(IsMainThread());
 	HWND hwnd = GetHWND();
 	if(hwnd && HasWndCapture())
 	{
 		::ReleaseCapture();
+		LLOG("ReleaseCapture succeeded");
 		return true;
 	}
 	return false;
@@ -1192,17 +1189,19 @@ bool Ctrl::HasWndCapture() const
 	return hwnd && hwnd == ::GetCapture();
 }
 
-void Ctrl::WndInvalidateRect0(const Rect& r)
+void Ctrl::WndInvalidateRect(const Rect& r)
 {
 	GuiLock __;
+	LLOG("WndInvalidateRect " << UPP::Name(this));
 	HWND hwnd = GetHWND();
 	if(hwnd)
 		::InvalidateRect(hwnd, r, false);
 }
 
-void Ctrl::WndSetPos0(const Rect& rect)
+void Ctrl::WndSetPos(const Rect& rect)
 {
 	GuiLock __;
+	LLOG("WndSetPos " << UPP::Name(this));
 	HWND hwnd = GetHWND();
 	if(hwnd) {
 		Rect r = rect;
@@ -1218,9 +1217,10 @@ void Ctrl::WndSetPos0(const Rect& rect)
 	fullrefresh = false;
 }
 
-void Ctrl::WndUpdate0r(const Rect& r)
+void Ctrl::WndUpdate(const Rect& r)
 {
 	GuiLock __;
+	LLOG("WndUpdate " << UPP::Name(this));
 	Ctrl *top = GetTopCtrl();
 	if(top->IsOpen()) {
 		HWND hwnd = top->GetHWND();
@@ -1243,11 +1243,16 @@ void Ctrl::WndUpdate0r(const Rect& r)
 	}
 }
 
-void  Ctrl::WndScrollView0(const Rect& r, int dx, int dy)
+void  Ctrl::WndScrollView(const Rect& r, int dx, int dy)
 {
 	GuiLock __;
+	LLOG("WndScrollView " << UPP::Name(this));
 	if(caretCtrl && caretCtrl->GetTopCtrl() == this) {
+#if WINCARET
 		WndDestroyCaret();
+#else
+		RefreshCaret();
+#endif
 		caretRect.Clear();
 	}
 #ifdef PLATFORM_WINCE
@@ -1260,7 +1265,7 @@ void  Ctrl::WndScrollView0(const Rect& r, int dx, int dy)
 
 void Ctrl::PopUpHWND(HWND owner, bool savebits, bool activate, bool dropshadow, bool topmost)
 {
-	LLOG("POPUP");
+	LLOG("PopoUp " << UPP::Name(this));
 	popup = false;
 	Create(owner, WS_POPUP, topmost ? WS_EX_TOPMOST : 0, savebits,
 	       owner || !activate ? SW_SHOWNOACTIVATE : SW_SHOW,
@@ -1350,6 +1355,6 @@ Vector<WString> SplitCmdLine__(const char *cmd)
 	return out;
 }
 
-END_UPP_NAMESPACE
+}
 
 #endif

@@ -3,15 +3,17 @@
 
 #include <Sql/Sql.h>
 
-NAMESPACE_UPP
+namespace Upp {
 
+
+// Deprecated, use SqlPerformScript instead
 bool Sqlite3PerformScript(const String& text,
 #ifdef NOAPPSQL
 	StatementExecutor& se,
 #else
 	StatementExecutor& se = SQLStatementExecutor(),
 #endif
-	Gate2<int, int> progress_canceled = false
+	Gate<int, int> progress_canceled = Null
 );
 
 class Sqlite3Connection;
@@ -65,6 +67,6 @@ public:
 	~Sqlite3Session();
 };
 
-END_UPP_NAMESPACE
+}
 
 #endif

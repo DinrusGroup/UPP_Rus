@@ -51,6 +51,8 @@ public:
 		const Ctrl    *GetSlave() const                 { return slave; }
 		Ctrl          *GetCtrl()                        { return ctrl; }
 		const Ctrl    *GetCtrl() const                  { return ctrl; }
+		String         GetText() const                  { return text; }
+		PaintRect      GetPicture() const               { return pict; }
 
 		Item();
 
@@ -96,7 +98,7 @@ private:
 	int        FindInsert(Ctrl& slave);
 
 public:
-	Callback WhenSet;
+	Event<>  WhenSet;
 
 	TabCtrl::Item& Add();
 	TabCtrl::Item& Add(const char *text);
@@ -138,7 +140,7 @@ public:
 
 	Size     ComputeSize(Size pane);
 	void     Add(Ctrl& c)                        { pane.Add(c.SizePos()); }
-	TabCtrl& operator<<(Ctrl& c)                 { Add(c); return *this; }
+//	TabCtrl& operator<<(Ctrl& c)                 { Add(c); return *this; } // ambiguos with operator<<(lambda)
 
 	static const Style& StyleDefault();
 

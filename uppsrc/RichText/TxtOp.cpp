@@ -1,6 +1,6 @@
 #include "RichText.h"
 
-NAMESPACE_UPP
+namespace Upp {
 
 void RichTxt::GetAllLanguages(Index<int>& all) const
 {
@@ -303,7 +303,7 @@ WString RichTxt::GetPlainText(bool withcr) const {
 								clip.Cat('\r');
 							clip.Cat('\n');
 						}
-						clip << tab[i][j].text.GetPlainText();
+						clip << tab[i][j].text.GetPlainText(withcr);
 					}
 		}
 		else
@@ -357,4 +357,4 @@ void RichTxt::Normalize()
 	}
 }
 
-END_UPP_NAMESPACE
+}

@@ -3,8 +3,13 @@
 
 #define QLIB3
 
+#ifndef flagMT
+#define flagMT // MT is now always on
+#endif
+
 #if defined(flagMT)
 	#define _MULTITHREADED
+	#define MULTITHREADED
 	#ifdef flagDLL
 		#define flagUSEMALLOC
 	#endif
@@ -36,6 +41,16 @@
 
 #include "config.h"
 
+#ifndef CPP_11
+#error This version of U++ REQUIRES C++11
+#endif
+
+#ifdef _MSC_VER
+	#ifndef _CPPRTTI
+		#error  RTTI must be enabled !!!
+	#endif  //_CPPRTTI
+#endif
+
 #include <typeinfo>
 #include <stddef.h>
 #include <math.h>
@@ -59,6 +74,7 @@
 	#include <sys/types.h>
 	#include <sys/stat.h>
 	#include <sys/time.h>
+	#include <sys/file.h>
 	#include <time.h>
 	#include <fcntl.h>
 	#include <unistd.h>
@@ -67,7 +83,10 @@
 	#include <memory.h>
 	#include <dirent.h>
 	#include <signal.h>
-	#ifdef PLATFORM_SOLARIS
+	#include <syslog.h>
+	#include <float.h>
+ 	#include <fenv.h>
+ 	#ifdef PLATFORM_SOLARIS
 		#include <inttypes.h>
 	#else
 		#include <stdint.h>
@@ -75,7 +94,7 @@
 #endif //PLATFORM_POSIX
 
 #ifdef PLATFORM_POSIX
-#define	LOFF_T_      off_t
+#define LOFF_T_      off_t
 #define LSEEK64_     lseek
 #define FTRUNCATE64_ ftruncate
 #endif
@@ -97,6 +116,13 @@
 		#ifndef __NOASSEMBLY__
 			#define __NOASSEMBLY__
 		#endif
+	#endif
+
+	#if defined(COMPILER_MINGW)
+		#if !defined(WINVER)
+			#define WINVER 0xFFFF
+		#endif
+		#include <float.h>
 	#endif
 
 	#define DIR_SEP  '\\'
@@ -146,6 +172,7 @@
 			#include <winbase.h>
 			#include <wingdi.h>
 			#include <winuser.h>
+			#include <Wincon.h>
 			#include <float.h>
 		#define byte win32_byte_ // RpcNdr defines byte -> class with Upp::byte
 		#define CY win32_CY_
@@ -154,7 +181,17 @@
 		#undef byte
 		#undef CY
 			typedef DWORD LCTYPE;
+			#define W_P(w, p) w
+			#include <winsock2.h>
+			#include <ws2tcpip.h>
+			typedef int socklen_t;
 		#else
+			#define W_P(w, p) w
+			#if !defined(PLATFORM_CYGWIN)
+			#include <winsock2.h>
+			#include <ws2tcpip.h>
+			#endif
+			typedef int socklen_t;
 			#define _WINSOCKAPI_   /* Prevent inclusion of winsock.h in windows.h */
 			#include <windows.h>
 			#include <stdint.h>
@@ -167,9 +204,37 @@
 	#endif
 #endif
 
+#ifdef PLATFORM_POSIX
+
+#define W_P(w, p) p
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netdb.h>
+#include <netinet/in.h>
+//#include <libiberty.h>
+enum
+{
+	INVALID_SOCKET = -1,
+	TCP_NODELAY    = 1,
+	SD_RECEIVE     = 0,
+	SD_SEND        = 1,
+	SD_BOTH        = 2,
+};
+typedef int SOCKET;
+#endif
+
+#ifdef PLATFORM_WIN32
+#include <plugin/z/lib/zlib.h>
+#else
+#include <zlib.h>
+#endif
+
+#include <functional>
 #include <algorithm>
 #include <string>
 #include <complex>
+#include <type_traits>
+#include <atomic>
 
 // fix MSC8 beta problem....
 #ifdef COMPILER_MSC
@@ -180,75 +245,74 @@ namespace std {
 #endif
 #endif
 
-namespace Upp {};
-
-#ifdef flagNONAMESPACE
-#define NAMESPACE_UPP
-#define END_UPP_NAMESPACE
-#define UPP
-#else
+// deprecated, use 'namespace' directly instead of macros
 #define NAMESPACE_UPP     namespace Upp {
-#define END_UPP_NAMESPACE };
+#define END_UPP_NAMESPACE }
 #define UPP               Upp
+
+// #define atof @ // atof is broken, as it depends on setlocale - might want ',' instead of '.' breaking a lot of code
+// Use Atof instead (which accepts both '.' and ',' as decimal separator)
+
+namespace Upp {
+
+#ifndef flagNODEPRECATED
+#define DEPRECATED
 #endif
 
-NAMESPACE_UPP
+#include "Defs.h"
 
-#include <Core/Defs.h>
+class XmlIO;
+class JsonIO;
 
-END_UPP_NAMESPACE
-
-#ifdef UPP_HEAP
-#include <new>
-
-inline void *operator new(size_t size) throw(std::bad_alloc) { void *ptr = UPP::MemoryAlloc(size); return ptr; }
-inline void operator  delete(void *ptr) throw()              { UPP::MemoryFree(ptr); }
-
-inline void *operator new[](size_t size) throw(std::bad_alloc) { void *ptr = UPP::MemoryAlloc(size); return ptr; }
-inline void operator  delete[](void *ptr) throw()              { UPP::MemoryFree(ptr); }
-
-inline void *operator new(size_t size, const std::nothrow_t&) throw() { void *ptr = UPP::MemoryAlloc(size); return ptr; }
-inline void operator  delete(void *ptr, const std::nothrow_t&) throw() { UPP::MemoryFree(ptr); }
-
-inline void *operator new[](size_t size, const std::nothrow_t&) throw() { void *ptr = UPP::MemoryAlloc(size); return ptr; }
-inline void operator  delete[](void *ptr, const std::nothrow_t&) throw() { UPP::MemoryFree(ptr); }
-
-#endif
-
-NAMESPACE_UPP
-
-#include "Mt.h"
-#include "Global.h"
+#include "Ops.h"
+#include "Atomic.h"
 #include "Topt.h"
-#include "Profile.h"
+#include "Mt.h"
 #include "String.h"
 
-#include "CharSet.h"
 #include "TimeDate.h"
 #include "Path.h"
 #include "Stream.h"
 #include "Diag.h"
 
 #include "Vcont.h"
+#include "Range.h"
 #include "BiCont.h"
 #include "Index.h"
 #include "Map.h"
-#include "Tuple.h"
-#include "Other.h"
 #include "Algo.h"
-#include "Vcont.hpp"
-#include "Index.hpp"
+#include "Sorted.h"
+#include "Sort.h"
+#include "Obsolete.h"
+#include "FixedMap.h"
+#include "InVector.h"
+
+#include "CharSet.h"
+
+#include "SplitMerge.h"
+
+#include "Other.h"
 
 #include "Value.h"
-#include "Gtypes.h"
-#include "Color.h"
-#include "Complex.h"
+#include "ValueUtil.h"
+
+#include "Tuple.h"
 
 #include "Uuid.h"
 #include "Ptr.h"
 
+#include "Function.h"
+
 #include "Callback.h"
+
+#include "Color.h"
+#include "Complex.h"
+
 #include "Util.h"
+
+#include "Profile.h"
+
+#include "FilterStream.h"
 
 #include "Format.h"
 #include "Convert.h"
@@ -257,25 +321,34 @@ NAMESPACE_UPP
 #include "Hash.h"
 
 #include "Parser.h"
-#include "XML.h"
 #include "JSON.h"
+#include "XML.h"
+#include "Xmlize.h"
+
+#include "Gtypes.h"
 #include "Lang.h"
 #include "i18n.h"
 #include "Topic.h"
 
 #include "App.h"
 
-#include "Xmlize.h"
-
 #include "CoWork.h"
+
+#include "CoAlgo.h"
+#include "CoSort.h"
 
 #include "LocalProcess.h"
 
+#include "Inet.h"
+
 #include "Win32Util.h"
 
-#if (defined(HEAPDBG) || defined(TESTLEAKS)) && defined(PLATFORM_POSIX)
-extern int sMemDiagInitCount;
-#endif
+#include "Vcont.hpp"
+#include "Map.hpp"
+#include "InVector.hpp"
+#include "InMap.hpp"
+
+#include "Huge.h"
 
 #ifdef PLATFORM_WIN32
 NTL_MOVEABLE(POINT)
@@ -283,16 +356,16 @@ NTL_MOVEABLE(SIZE)
 NTL_MOVEABLE(RECT)
 #endif
 
-END_UPP_NAMESPACE
+}
 
-#if (defined(TESTLEAKS) || defined(HEAPDBG)) && defined(PLATFORM_POSIX) && !defined(PLATFORM_OSX11) && defined(UPP_HEAP)
+#if (defined(TESTLEAKS) || defined(HEAPDBG)) && defined(COMPILER_GCC) && defined(UPP_HEAP)
 
 //Place it to the begining of each file to be the first function called in whole executable...
-
+//This is now backup to init_priority attribute in heapdbg.cpp
 //$-
 struct MemDiagCls {
-	MemDiagCls() { if(!UPP::sMemDiagInitCount++) UPP::MemoryInitDiagnostics(); }
-	~MemDiagCls() { if(!--UPP::sMemDiagInitCount) UPP::MemoryDumpLeaks(); }
+	MemDiagCls();
+	~MemDiagCls();
 };
 static const MemDiagCls sMemDiagHelper__upp__;
 //$+
@@ -301,10 +374,6 @@ static const MemDiagCls sMemDiagHelper__upp__;
 #endif
 
 //some global definitions
-
-#if !defined(STLPORT) && _MSC_VER < 1600
-inline UPP::int64  abs(UPP::int64 x)          { return x < 0 ? -x : x; }
-#endif
 
 void      RegisterTopic__(const char *topicfile, const char *topic, const char *title, const UPP::byte *data, int len);
 
@@ -321,16 +390,8 @@ void      FreeDll__(DLLHANDLE dllhandle);
 using Upp::byte; // Dirty solution to Windows.h typedef byte...
 #endif
 
-#ifdef PLATFORM_WIN32
-#define DLLFILENAME "Kernel32.dll"
-#define DLIMODULE   UnicodeWin32
-#define DLIHEADER   <Core/Kernel32W.dli>
-#include <Core/dli_header.h>
-
-#define DLLFILENAME "Mpr.dll"
-#define DLIMODULE   UnicodeWin32Net
-#define DLIHEADER   <Core/Mpr32W.dli>
-#include <Core/dli_header.h>
+#ifdef MAIN_CONF
+#include <main.conf.h>
 #endif
 
 #endif //CORE_H

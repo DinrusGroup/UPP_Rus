@@ -75,6 +75,10 @@
 # if __GNUC__ >= 3
 #  define HAVE_GNUC_3
 # endif
+
+#define HAVE_SNPRINTF
+#define HAVE_VSNPRINTF
+
 #endif
 
 #ifdef __GNUC__
@@ -87,6 +91,10 @@
 #include <stddef.h>
 #include <stdarg.h>
 #include <stdio.h>
+
+#ifdef _MSC_VER
+#define HAVE__SNPRINTF
+#endif
 
 #ifndef HAVE_SNPRINTF
 # ifdef HAVE__SNPRINTF

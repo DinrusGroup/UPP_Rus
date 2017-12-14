@@ -5,14 +5,16 @@ void Ide::MakeTitle()
 	String title;
 	if(!main.IsEmpty())
 		title << main;
-	if(mainconfigname == mainconfigparam)
+	if(!mainconfigname.IsEmpty() &&  mainconfigname == mainconfigparam)
 		title << " - " << mainconfigname;
 	else
 	if(!mainconfigname.IsEmpty()) {
 		title << " - " << mainconfigname;
 		title << " ( " << mainconfigparam << " )";
 	}
-	title << " - RusIDE+Динрус";
+	if(!title.IsEmpty())
+		title << " - ";
+	title << "TheIDE";
 	if(designer) {
 		title << " - [" << designer->GetFileName();
 		int cs = designer->GetCharset();
@@ -24,9 +26,12 @@ void Ide::MakeTitle()
 	if(!editfile.IsEmpty()) {
 		title << " - [" << editfile;
 		int chrset = editor.GetCharset();
-		title << " " << (chrset == TextCtrl::CHARSET_UTF8_BOM ? "UTF-8 BOM" : CharsetName(chrset));
+		title << " " << IdeCharsetName(chrset)
+		      << " " << (findarg(Nvl(editfile_line_endings, line_endings), LF, DETECT_LF) >= 0 ? "LF" : "CRLF");
+		if(editor.IsTruncated())
+			title << " (Truncated)";
 		if(editor.IsReadOnly())
-			title << " (Только Чтение)";
+			title << " (Read Only)";
 		if(editor.IsDirty())
 			title << " *";
 		title << "]";
@@ -36,6 +41,8 @@ void Ide::MakeTitle()
 			if(NormalizePath(editfile) == NormalizePath(bookmark[i].file))
 				title << Format(" <%d>", i);
 	title << " { " << GetVarsName() << " }";
+	if(isscanning)
+		title << " (scanning files)";
 	Title(title.ToWString());
 }
 
@@ -68,14 +75,20 @@ void Ide::MakeIcon() {
 
 bool Ide::CanToggleReadOnly()
 {
-	FindFile ff(editfile);
-	if(ff && ff.IsReadOnly()) return false;
 	return NormalizePath(GetActiveFilePath()) == NormalizePath(editfile);
 }
 
 void Ide::ToggleReadOnly()
 {
 	if(CanToggleReadOnly() && IsActiveFile()) {
+#ifdef PLATFORM_WIN32
+		FindFile ff(editfile);
+		if(ff && ff.IsReadOnly()) {
+			dword attrib = GetFileAttributes(editfile);
+			attrib &= ~FILE_ATTRIBUTE_READONLY;
+			SetFileAttributes(editfile, attrib);
+		}
+#endif
 		editor.SetEditable(editor.IsReadOnly());
 		ActiveFile().readonly = editor.IsReadOnly();
 		SavePackage();
@@ -119,11 +132,12 @@ void Ide::SetMain(const String& package)
 	transferfilecache.Clear();
 	main = package;
 	export_dir = GetHomeDirFile(main);
+	history.Clear();
 	mainconfigname.Clear();
 	mainconfigparam.Clear();
 	ScanWorkspace();
-	SyncWorkspace();
 	LoadFromFile(THISBACK(SerializeWorkspace), WorkspaceFile());
+	tabs.FixIcons();
 	editorsplit.Zoom(0);
 	UpdateFormat();
 	String e = editfile;
@@ -136,10 +150,11 @@ void Ide::SetMain(const String& package)
 	SetHdependDirs();
 	SetBar();
 	HideBottom();
+	SyncUsc();
+	if(auto_check)
+		NewCodeBase();
 	if(IsNull(e))
 		e = GetFirstFile();
-	SyncRefs();
-	StartCodeBase();
 	EditFile(e);
 }
 
@@ -152,18 +167,19 @@ void Ide::Exit()
 	FlushFile();
 	console.Kill();
 	Break(IDOK);
+	IdeExit = true;
 }
 
 bool Ide::OpenMainPackage()
 {
-	String tt = "Выберите главный пакет";
+	String tt = "Select main package";
 //	tt << " (IDE " << IDE_VER_MAJOR << "." << IDE_VER_MINOR << ".r" << IDE_VER_BUILD
 //	<< ", " << ::AsString(IDE_VER_DATE) << ")";
 #ifdef bmYEAR
-	tt << " (RusIDE " << IDE_VERSION
+	tt << " (TheIDE " << IDE_VERSION
 	   << Format(" %d-%02d-%02d %d:%02d)", bmYEAR , bmMONTH, bmDAY, bmHOUR, bmMINUTE);
 #else
-	tt << " (RusIDE " << IDE_VERSION << ')';
+	tt << " (TheIDE " << IDE_VERSION << ')';
 #endif
 	String p = SelectPackage(tt, main, true, true);
 	if(p.IsEmpty()) return false;
@@ -233,7 +249,7 @@ void Ide::SetMainConfigList()
 {
 	mainconfiglist <<= mainconfigparam;
 	mainconfigname = mainconfiglist.GetValue();
-	mainconfiglist.Tip("Главная конфигурация: " + mainconfigparam);
+	mainconfiglist.Tip("Main configuration: " + mainconfigparam);
 }
 
 void Ide::OnMainConfigList()
@@ -260,9 +276,19 @@ void Ide::UscProcessDir(const String& dir)
 		UscFile(AppendFileName(dir, ff.GetName()));
 }
 
+void Ide::UscProcessDirDeep(const String& dir)
+{
+	UscProcessDir(dir);
+	for(FindFile ff(AppendFileName(dir, "*")); ff; ff.Next())
+		if(ff.IsFolder())
+			UscProcessDirDeep(ff.GetPath());
+}
+
 void Ide::SyncUsc()
 {
 	CleanUsc();
+	if(IsNull(main))
+		return;
 	::Workspace wspc;
 	wspc.Scan(main);
 	int i;
@@ -278,13 +304,19 @@ void Ide::SyncUsc()
 	UscProcessDir(GetFileFolder(ConfigFile("x")));
 }
 
+void Ide::CodeBaseSync()
+{
+	if(auto_check)
+		SyncCodeBase();
+}
+
 void Ide::SyncWorkspace()
 {
 	SyncUsc();
-	SyncCodeBase();
+	CodeBaseSync();
 }
 
-bool IsTextFile(const String& file) {
+bool IsTextFile(const String& file, int maxline) {
 	byte buffer[16384];
 	FileIn fi(file);
 	if(!fi.IsOpen())
@@ -298,7 +330,7 @@ bool IsTextFile(const String& file) {
 		if(*q < 32) {
 			int c = *q;
 			if(c == '\n') {
-				if(q - x > 2000) return false;
+				if(q - x > maxline) return false;
 				x = q;
 			}
 			else
@@ -310,243 +342,13 @@ bool IsTextFile(const String& file) {
 	return true;
 }
 
+/*
 Console& Ide::GetConsole()
 {
 	int q = btabs.GetCursor();
-	return q == BCONSOLE2 ? console2 : console;
+	return q == BFINDINFILES ? console2 : console;
 }
-
-bool Ide::FindLineError(int l, Host& host) {
-	String file;
-	int lineno;
-	int error;
-	Console& c = GetConsole();
-	if (FindLineError(c.GetUtf8Line(l), host, file, lineno, error)) {
-		file = NormalizePath(file);
-		editastext.FindAdd(file);
-		EditFile(file);
-		editor.SetCursor(editor.GetPos(editor.GetLineNo(lineno - 1)));
-		editor.CenterCursor();
-		editor.SetFocus();
-		Sync();
-		c.SetSelection(c.GetPos(l), c.GetPos(l + 1));
-		if(btabs.GetCursor() != BCONSOLE && btabs.GetCursor() != BCONSOLE2)
-			ShowConsole();
-		return true;
-	}
-	return false;
-}
-
-bool Ide::FindLineError(String ln, Host& host, String& file, int& lineno, int& error) {
-	Vector<String> wspc_paths;
-	VectorMap<String, String> bm = GetMethodVars(method);
-	bool is_java = (bm.Get("BUILDER", Null) == "JDK");
-	const char *s = ln;
-	error = ln.Find("error", 0) > 0 ? 1 : (ln.Find("warning", 0) > 0 ? 2 : 3);
-	while(*s == ' ' || *s == '\t')
-		s++;
-	for(; s < ln.End(); s++) {
-		if(*s != '\"' && (byte)*s >= 32 && *s != '(' && (file.GetLength() < 3 || *s != ':'))
-			file.Cat(*s);
-		else {
-			if(*s == '\"') {
-				file = Null;
-				s++;
-				while(*s && *s != '\"')
-					file.Cat(*s++);
-				if(*s)
-					s++;
-			}
-			int e = file.GetLength();
-			while(e > 0 && file[e - 1] == ' ')
-				e--;
-			file.Trim(e);
-			file = TrimLeft(file);
-			String upp = GetUppDir();
-			file = host.GetLocalPath(file);
-		#ifdef PLATFORM_WIN32
-			if(file[0] == '\\' || file[0] == '/')
-				file = String(upp[0], 1) + ':' + file;
-		#endif
-			if(!IsFullPath(file) && *file != '\\' && *file != '/') {
-				if(wspc_paths.IsEmpty()) {
-					::Workspace  wspc;
-					wspc.Scan(main);
-					for(int i = 0; i < wspc.GetCount(); i++)
-						wspc_paths.Add(GetFileDirectory(PackagePath(wspc[i])));
-				}
-				for(int i = 0; i < wspc_paths.GetCount(); i++) {
-					String path = AppendFileName(wspc_paths[i], file);
-					FindFile ff;
-					if(ff.Search(path) && ff.IsFile()) {
-						file = path;
-						break;
-					}
-				}
-			}
-			file = FollowCygwinSymlink(file);
-			if(IsFullPath(file) && FileExists(file) && IsTextFile(file)) {
-				while(*s && !IsDigit(*s))
-					s++;
-				lineno = 0;
-				if(IsDigit(*s))
-					lineno = stou(s);
-				Vector<String> conf = SplitFlags(mainconfigparam, true);
-				String uppout = GetVar("OUTPUT");
-				int upplen = uppout.GetLength();
-				if(is_java && file.GetLength() > upplen
-				&& !MemICmp(file, uppout, upplen) && file[upplen] == DIR_SEP) { // check for preprocessed file
-					FileIn fi(file);
-					if(fi.IsOpen())
-					{
-						String fake_file = file;
-						int fake_line = 1;
-						int file_line = 1;
-						while(!fi.IsEof())
-						{
-							String line = fi.GetLine();
-							const char *p = line;
-							if(p[0] == '/' && p[1] == '/' && p[2] == '#')
-							{
-								p += 3;
-								if(p[0] == 'l' && p[1] == 'i' && p[2] == 'n' && p[3] == 'e')
-									p += 4;
-								while(*p == ' ' || *p == '\t')
-									p++;
-								if(IsDigit(*p))
-								{
-									fake_line = stou(p, &p);
-									while(*p == ' ' || *p == '\t')
-										p++;
-									if(*p == '\"')
-										p++;
-									fake_file.Clear();
-									while(*p && *p != '\"')
-										if(*p == '/')
-										{
-											fake_file.Cat('/');
-											if(p[1] == '/')
-												p++;
-											p++;
-										}
-										else
-											fake_file.Cat(*p++);
-								}
-								file_line++;
-								continue;
-							}
-							if(lineno <= file_line) {
-								file = fake_file;
-								lineno = fake_line;
-								break;
-							}
-							file_line++;
-							fake_line++;
-						}
-					}
-				}
-				if(lineno > 0)
-					return true;
-			}
-			file.Clear();
-		}
-	}
-	return false;
-}
-
-void Ide::FindError() {
-	int l = GetConsole().GetLine(GetConsole().GetCursor());
-	One<Host> host = CreateHost(false);
-	FindLineError(l, *host);
-}
-
-void Ide::FindNextError() {
-	int ln = GetConsole().GetLine(GetConsole().GetCursor());
-	int l = ln;
-	One<Host> host = CreateHost(false);
-	for(l = ln; l < GetConsole().GetLineCount(); l++)
-		if(FindLineError(l, *host)) return;
-	for(l = 0; l < ln; l++)
-		if(FindLineError(l, *host)) return;
-}
-
-void Ide::FindPrevError() {
-	int ln = GetConsole().GetLine(GetConsole().GetCursor());
-	int l = ln;
-	One<Host> host = CreateHost(false);
-	for(l = ln - 2; l >= 0; l--)
-		if(FindLineError(l, *host)) return;
-	for(l = GetConsole().GetLineCount() - 1; l > ln; l--)
-		if(FindLineError(l, *host)) return;
-}
-
-void Ide::ClearErrorEditor()
-{
-	if(!mark_lines)
-		return;
-
-	for(int i = 0; i < filedata.GetCount(); i++) {
-		ClearErrorEditor(filedata.GetKey(i));
-	}
-	
-	SetErrorFiles(Vector<String>());
-}
-
-void Ide::ClearErrorEditor(String file)
-{
-	if(!mark_lines)
-		return;
-	if(file == editfile)
-		editor.ClearErrors();
-	else {
-		FileData& fd = Filedata(file);
-		ClearErrors(fd.lineinfo);
-	}
-}
-
-void Ide::SetErrorEditor()
-{
-	if(!mark_lines)
-		return;
-
-	bool refresh = false;
-	String file;
-	int lineno;
-	int error;
-	One<Host> host = CreateHost(false);
-	String    hfile;
-	EditorBar hbar;
-	Vector<String> errorfiles;
-	for(int i = 0; i < console.GetLineCount(); i++) {
-		if(FindLineError(console.GetUtf8Line(i), *host, file, lineno, error)) {
-			file = NormalizePath(file);
-		#ifdef PLATFORM_WIN32
-			errorfiles.Add(ToLower(file));
-		#else
-			errorfiles.Add(file);
-		#endif
-			if(editfile == file) {
-				editor.SetError(lineno - 1, error);
-				refresh = true;
-			}
-			else {
-				if(hfile != file) {
-					if(hfile.GetCount())
-						Filedata(hfile).lineinfo = hbar.GetLineInfo();
-					hbar.SetLineInfo(Filedata(file).lineinfo, -1);
-					hfile = file;
-				}
-				hbar.SetError(lineno - 1, error);
-			}
-		}
-	}
-	if(hfile.GetCount())
-		Filedata(hfile).lineinfo = hbar.GetLineInfo();
-	if(refresh)
-		editor.RefreshFrame();
-	SetErrorFiles(errorfiles);
-}
-
+*/
 void Ide::Renumber() {
 	for(int i = 0; i < filedata.GetCount(); i++)
 		::Renumber(filedata[i].lineinfo);
@@ -563,7 +365,24 @@ void Ide::CycleFiles()
 	}
 }
 
-bool Ide::Key(dword key, int count) {
+void Ide::DeactivateBy(Ctrl *new_focus)
+{
+	if(deactivate_save && issaving == 0 && !new_focus && editor.GetLength() < 1000000) {
+		DeactivationSave(true);
+		SaveFile();
+		DeactivationSave(false);
+	}
+	TopWindow::DeactivateBy(new_focus);
+}
+
+void Ide::Activate()
+{
+	InvalidateFileTimeCache();
+	TopWindow::Activate();
+}
+
+bool Ide::Key(dword key, int count)
+{
 	dword *k = IdeKeys::AK_DELLINE().key;
 	if(key == k[0] || key == k[1]) {
 		editor.DeleteLine();
@@ -588,10 +407,16 @@ bool Ide::Key(dword key, int count) {
 	case K_ALT_PAGEDOWN:
 		return package.Key(K_DOWN, 0);
 	case K_CTRL|K_ALT_LEFT:
-		TabsLR(-1);
+		TabsLR( TabBar::JumpDirLeft );
 		return true;
 	case K_CTRL|K_ALT_RIGHT:
-		TabsLR(1);
+		TabsLR( TabBar::JumpDirRight );
+		return true;
+	case K_CTRL|K_ALT_B:
+		TabsStackLR( TabBar::JumpDirLeft );
+		return true;
+	case K_CTRL|K_ALT_N:
+		TabsStackLR( TabBar::JumpDirRight );
 		return true;
 	case K_SHIFT|K_CTRL_O:
 		AddFile(WorkspaceWork::ANY_FILE);
@@ -604,6 +429,9 @@ bool Ide::Key(dword key, int count) {
 		return true;
 	case K_CTRL_TAB:
 		CycleFiles();
+		return true;
+	case K_ALT_C|K_SHIFT:
+		CodeBrowser();
 		return true;
 	case K_ALT_RIGHT:
 	default:
@@ -619,7 +447,7 @@ bool Ide::Key(dword key, int count) {
 			return true;
 		}
 	}
-	return TopWindow::Key(key, count);
+	return false;
 }
 
 void Ide::GotoBookmark(const Bookmark& b)
@@ -632,139 +460,95 @@ void Ide::GotoBookmark(const Bookmark& b)
 
 bool Ide::IsHistDiff(int i)
 {
+	if(i < 0 || i >= history.GetCount())
+		return false;
 	Bookmark& b = history[i];
-	return b.file != editfile || abs(editor.GetCursor() - b.pos.cursor) > 200;
+	return b.file != editfile || abs(editor.GetCursor() - b.pos.cursor) > 20;
+}
+
+void Ide::IdePaste(String& data)
+{
+	data.Clear();
+	if(AcceptFiles(Clipboard())) {
+		Vector<String> s = GetFiles(Clipboard());
+		for(int i = 0; i < s.GetCount(); i++)
+			if(FileExists(s[i]) && IsTextFile(s[i], 10000)) {
+				int64 len = GetFileLength(s[i]);
+				if(data.GetLength() + len > 104857600) {
+					Exclamation("The paste size breaks the 100MB limit.");
+					return;
+				}
+				data.Cat(LoadFile(s[i]));
+			}
+	}
 }
 
 void Ide::AddHistory()
 {
-	if(history.GetCount() && histi - 1 >= 0 && histi <= history.GetCount()) {
-		if(IsHistDiff(histi - 1))
+	if(history.GetCount()) {
+		if(IsHistDiff(histi))
 			++histi;
 	}
 	else
-		histi = 1;
-	history.SetCount(histi);
+		histi = 0;
+	history.At(histi);
 	Bookmark& b = history.Top();
 	b.file = editfile;
 	b.pos = editor.GetEditPos();
+	SetBar();
+}
+
+void Ide::EditorEdit()
+{
+	AddHistory();
 	TouchFile(editfile);
 }
 
-void Ide::HistoryBk()
+int  Ide::GetHistory(int d)
 {
-	while(histi > 0 && --histi < history.GetCount())
-		if(IsHistDiff(histi)) {
-			GotoBookmark(history[histi]);
-			break;
-		}
+	if(history.GetCount())
+		for(int i = histi + (d > 0); i >= 0 && i < history.GetCount(); i += d)
+			if(IsHistDiff(i))
+				return i;
+	return -1;
 }
 
-void Ide::HistoryFw()
+void Ide::History(int d)
 {
-	if(histi < history.GetCount() - 1 && ++histi >= 0)
+	int i = GetHistory(d);
+	if(i >= 0) {
+		histi = i;
 		GotoBookmark(history[histi]);
+		SetBar();
+	}
 }
 
-void Ide::BookKey(int key) {
+void Ide::BookKey(int key)
+{
 	Key(key, 1);
 }
 
-void Ide::Display() {
+void Ide::DoDisplay()
+{
 	Point p = editor.GetColumnLine(editor.GetCursor());
-	display.SetLabel(Format("Стр %d, Кол %d", p.y + 1, p.x + 1));
+	String s;
+	s << "Ln " << p.y + 1 << ", Col " << p.x + 1;
+	int l, h;
+	editor.GetSelection(l, h);
+	if(h > l)
+		s << ", Sel " << h - l;
+	display.SetLabel(s);
+	
+	ManageDisplayVisibility();
 }
 
-void Ide::SerializeWorkspace(Stream& s) {
-	int i;
-	int version = 11;
-	s / version;
-	s.Magic(0x12354);
-	if(s.IsStoring()) {
-		for(i = 0; i < filedata.GetCount(); i++) {
-			String fn = filedata.GetKey(i);
-			if(!fn.IsEmpty() && FileExists(fn)) {
-				s % fn;
-				s % filedata[i].editpos;
-				if(version >= 1)
-					s % filedata[i].columnline;
-			}
-		}
-		String h;
-		s % h;
-	}
-	else {
-		String fn;
-		filedata.Clear();
-		for(;;) {
-			s % fn;
-			if(fn.IsEmpty()) break;
-			FileData& fd = filedata.GetAdd(fn);
-			fd.Clear();
-			s % fd.editpos;
-			if(version >= 1)
-				s % fd.columnline;
-		}
-	}
-	String pk = GetActivePackage();
-	s % pk;
-	package.FindSetCursor(pk);
-	s % tablru;
-	s % mainconfigname;
-	s % mainconfigparam;
-	s % console.verbosebuild;
-	s % stoponerrors;
-	byte dummy;
-	s % dummy;
-	s % runarg;
-	s % recent_runarg;
-	s % rundir;
-	s % stdout_file % recent_stdout_file / runmode;
-	if(version >= 1)
-		s % runexternal;
-	s % editfile;
-	for(i = 0; i < 10; i++)
-		s % bookmark[i];
-	editor.Serialize(s);
-	if(version >= 5)
-		s % editorsplit;
-	if(version == 6) {
-		String n;
-		int v;
-		s / v;
-		for(int i = 0; i < 10; i++) {
-			s % n;
-			s / v;
-		}
-	}
-	if(version >= 8) {
-		bool dummyb;
-		String dummy;
-		s % dummyb;
-		s % dummy;
-	}
-	SerializeFindInFiles(s);
-	String om;
-	s % om;
-	s % recentoutput;
-	s % recentflags;
-	s / editortabsize / indent_amount % indent_spaces;
-	for(int j = 0; j < GetIdeModuleCount(); j++)
-		GetIdeModule(j).Serialize(s); // -> Workspace
-	SerializeWorkspaceConfigs(s);
-	SerializeOutputMode(s);
-	SerializeClosed(s);
-	if(version >= 10) {
-		if(tabs_serialize) {
-			s % tabs;
-		}
-	}
-	if(version >= 11) {
-		s % find_file_search_string;
-	}
+void Ide::ManageDisplayVisibility()
+{
+	display.Show(!designer);
 }
 
-void Ide::SetIdeState(int newstate) {
+void Ide::SetIdeState(int newstate)
+{
 	if(newstate != idestate)
 	{
 		if(newstate == BUILDING)
@@ -789,20 +573,21 @@ void Ide::SetIcon()
 		return;
 	}
 	else
-	if((GetTimeClick() / 800) & 1)
+	if((GetTimeClick() / 800) & 1) {
 		if(debugger)
 			new_state_icon = 2;
 		else
 		if(idestate == BUILDING)
 			new_state_icon = 3;
+	}
 	if(state_icon == new_state_icon)
 		return;
 	state_icon = new_state_icon;
 	switch(state_icon) {
-	case 1:  Icon(IdeImg::IconDebugging()); break;
-	case 2:  Icon(IdeImg::IconRunning()); break;
-	case 3:  Icon(IdeImg::IconBuilding()); break;
-	default: Icon(IdeImg::Package());
+	case 1:  Icon(IdeImg::IconDebugging(), IdeImg::IconDebuggingLarge()); break;
+	case 2:  Icon(IdeImg::IconRunning(), IdeImg::IconRunningLarge()); break;
+	case 3:  Icon(IdeImg::IconBuilding(), IdeImg::IconBuildingLarge()); break;
+	default: Icon(IdeImg::Icon(), IdeImg::PackageLarge());
 	}
 }
 
@@ -832,6 +617,20 @@ const Workspace& Ide::IdeWorkspace() const
 	return wspc;
 }
 
+void Ide::AddPackage(const String& p)
+{
+	const Workspace& wspc = IdeWorkspace();
+	for(int i = 0; i < wspc.GetCount(); i++){
+		if(wspc[i] == p)
+			return;
+	}
+	if(!PromptOKCancel("Package [* " + p + "] is not yet in the workspace.&Do you want to add it?"))
+		return;
+	OptItem& m = actual.uses.Add();
+	m.text = p;
+	SaveLoadPackage();
+}
+
 int Ide::GetPackageIndex()
 {
 	const Workspace& wspc = IdeWorkspace();
@@ -841,12 +640,27 @@ int Ide::GetPackageIndex()
 	return -1;
 }
 
+void Ide::GotoDiffLeft(int line, DiffDlg *df)
+{
+	EditFile(df->editfile);
+	editor.SetCursor(editor.GetPos(line));
+	editor.SetFocus();
+}
+
+void Ide::GotoDiffRight(int line, FileDiff *df)
+{
+	EditFile(df->GetExtPath());
+	editor.SetCursor(editor.GetPos(line));
+	editor.SetFocus();
+}
 
 void Ide::Diff()
 {
 	if(IsNull(editfile))
 		return;
 	FileDiff diffdlg(AnySourceFs());
+	diffdlg.diff.WhenLeftLine = THISBACK1(GotoDiffLeft, &diffdlg);
+	diffdlg.diff.WhenRightLine = THISBACK1(GotoDiffRight, &diffdlg);
 	diffdlg.Execute(editfile);
 }
 
@@ -862,5 +676,5 @@ void Ide::SvnHistory()
 {
 	if(IsNull(editfile))
 		return;
-	RunSvnDiff(editfile);
+	RunRepoDiff(editfile);
 }

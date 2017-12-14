@@ -2,7 +2,7 @@
 
 #ifdef GUI_X11
 
-NAMESPACE_UPP
+namespace Upp {
 
 #define LLOG(x)        //DLOG(x)
 
@@ -97,12 +97,12 @@ void Ctrl::EventProc(XWindow& w, XEvent *event)
 			if(top) {
 				Window DestW = (parent ? GetParentWindow() : Xroot);
 				XTranslateCoordinates(Xdisplay, top->window, DestW, 0, 0, &x, &y, &dummy);
+				Rect rect = RectC(x, y, e.width, e.height);
+				LLOG("CongigureNotify " << rect);
+				if(GetRect() != rect)
+					SetWndRect(rect);
+				// Synchronizes native windows (NOT the main one)
 			}
-			Rect rect = RectC(x, y, e.width, e.height);
-			LLOG("CongigureNotify " << rect);
-			if(GetRect() != rect)
-				SetWndRect(rect);
-			// Synchronizes native windows (NOT the main one)
 			SyncNativeWindows();
 // 01/12/2007 - END
 
@@ -388,6 +388,6 @@ void Ctrl::EventProc(XWindow& w, XEvent *event)
 	DropEvent(w, event);
 }
 
-END_UPP_NAMESPACE
+}
 
 #endif

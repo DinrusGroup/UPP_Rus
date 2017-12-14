@@ -1,6 +1,6 @@
 #if defined(PLATFORM_WIN32) && defined(COMPILER_MSC)
 
-NAMESPACE_UPP
+namespace Upp {
 
 #ifdef COMPILER_MSC
 typedef __int64 longlong_t;
@@ -41,10 +41,9 @@ inline void           Serialize(Stream& stream, GUID& guid) { stream.SerializeRa
 String                GetInterfaceName(const GUID& guid);
 String                GetCoClassName(const GUID& guid);
 String                GetDisplayName(const GUID& guid);
-template <> bool      IsNull(const GUID& guid);
 GUID                  GetCoClassGUID(const char *name, bool prog_id = true);
 
-class Guid : public AssignValueTypeNo<Guid, 70, Moveable<Guid> >
+class Guid : public ValueType<Guid, 70, Moveable<Guid> >
 {
 public:
 	Guid(const Nuller& = Null)               { Clear(); }
@@ -61,8 +60,8 @@ public:
 
 	Guid&    operator = (const GUID& _guid)  { guid = _guid; return *this; }
 
-	bool     IsNullInstance() const          { return UPP::IsNull(guid); }
-	bool     IsEmpty() const                 { return IsNull(guid); }
+	bool     IsNullInstance() const;
+	bool     IsEmpty() const                 { return IsNullInstance(); }
 	void     Clear()                         { Zero(guid); }
 
 	operator String () const                 { return UPP::Format(guid); }
@@ -323,6 +322,6 @@ protected:
 	int64          current_offset;
 };
 
-END_UPP_NAMESPACE
+}
 
 #endif

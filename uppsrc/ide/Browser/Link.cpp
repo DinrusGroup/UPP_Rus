@@ -15,7 +15,7 @@ struct TopicLinkDlg : WithTopicLinkLayout<TopWindow> {
 
 TopicLinkDlg::TopicLinkDlg()
 {
-	CtrlLayoutOKCancel(*this, "Гиперссылка");
+	CtrlLayoutOKCancel(*this, "Hyperlink");
 	package.WhenKillCursor = package.WhenEnterItem = THISBACK(Package);
 	group.WhenKillCursor = group.WhenEnterItem = THISBACK(Group);
 	topic.WhenKillCursor = topic.WhenEnterItem = THISBACK(Topic);
@@ -23,7 +23,7 @@ TopicLinkDlg::TopicLinkDlg()
 	const Workspace& wspc = GetIdeWorkspace();
 	for(int i = 0; i < wspc.GetCount(); i++)
 		package.Add(wspc[i]);
-	insert <<= Breaker(IDYES);
+	insert << Breaker(IDYES);
 }
 
 String TopicLinkDlg::PackageGroup(const char *name)

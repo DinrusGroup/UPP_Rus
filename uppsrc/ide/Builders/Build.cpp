@@ -1,4 +1,5 @@
 #include "Builders.h"
+#include "AndroidBuilder.h"
 
 #include <plugin/bz2/bz2.h>
 
@@ -22,7 +23,7 @@ Index<String> MakeBuild::PackageConfig(const Workspace& wspc, int package,
 {
 	String packagepath = PackagePath(wspc[package]);
 	const Package& pkg = wspc.package[package];
-	Index<String> cfg;
+	cfg.Clear();
 	mainparam << ' ' << bm.Get(targetmode ? "RELEASE_FLAGS" : "DEBUG_FLAGS", NULL);
 	cfg = SplitFlags(mainparam, package == 0, wspc.GetAllAccepts(package));
 	cfg.FindAdd(bm.Get("BUILDER", "GCC"));
@@ -35,10 +36,6 @@ Index<String> MakeBuild::PackageConfig(const Workspace& wspc, int package,
 	case 1:
 		cfg.FindAdd("SHARED");
 	}
-	if(targetmode == 2)
-		cfg.FindAdd("FORCE_SPEED");
-	if(targetmode == 3)
-		cfg.FindAdd("FORCE_SIZE");
 	int q = m.package.Find(wspc[package]);
 	if(q >= 0) {
 		const PackageMode& p = m.package[q];
@@ -46,7 +43,7 @@ Index<String> MakeBuild::PackageConfig(const Workspace& wspc, int package,
 		case 1:  cfg.FindAdd("DEBUG_MINIMAL"); break;
 		case 2:  cfg.FindAdd("DEBUG_FULL"); break;
 		}
-		if(!pkg.noblitz && (p.blitz >= 0 ? p.blitz : m.def.blitz))
+		if(!pkg.noblitz && (p.blitz >= 0 ? p.blitz : m.def.blitz) && bm.Get("DISABLE_BLITZ", "") != "1")
 			cfg.FindAdd("BLITZ");
 	}
 	else {
@@ -54,14 +51,26 @@ Index<String> MakeBuild::PackageConfig(const Workspace& wspc, int package,
 		case 1:  cfg.FindAdd("DEBUG_MINIMAL"); break;
 		case 2:  cfg.FindAdd("DEBUG_FULL"); break;
 		}
-		if(!pkg.noblitz && m.def.blitz)
+		if(!pkg.noblitz && m.def.blitz && bm.Get("DISABLE_BLITZ", "") != "1")
 			cfg.FindAdd("BLITZ");
 	}
-	host.AddFlags(cfg);
 	b.AddFlags(cfg);
+	host.AddFlags(cfg);
+	for(int i = 0; i < pkg.flag.GetCount(); i++) {
+		if(MatchWhen(pkg.flag[i].when, cfg.GetKeys())) {
+			Vector<String> h = Split(pkg.flag[i].text, ' ');
+			for(int i = 0; i < h.GetCount(); i++)
+				if(*h[i] == '-')
+					cfg.RemoveKey(h[i].Mid(1));
+				else
+					cfg.FindAdd(h[i]);
+		}
+	}
 	if(target)
 		*target = Gather(pkg.target, cfg.GetKeys(), true);
-	return cfg;
+	Index<String> h;
+	h <<= cfg; // Retain deep copy (h will be picked)
+	return h;
 }
 
 String NoCr(const char *s)
@@ -79,184 +88,34 @@ String NoCr(const char *s)
 	return out;
 }
 
-bool MakeBuild::SyncHostFiles(RemoteHost& host)
-{
-	HdependTimeDirty();
-	String query = "<";
-//	Vector<String> remotepath;
-	Vector<String> fdata;
-	ArrayMap<String, TransferFileInfo> info;
-	Vector<int> nocrsize;
-	const Workspace& wspc = GetIdeWorkspace();
-	int p;
-	for(p = 0; p < wspc.GetCount(); p++) {
-		const Package& pkg = wspc.GetPackage(p);
-		String pn = wspc[p];
-		for(int f = -1; f < pkg.file.GetCount(); f++)
-			if(f < 0 || !pkg.file[f].separator) {
-				Vector<String> pkgfiles;
-				String pk = (f >= 0 ? SourcePath(pn, pkg.file[f]) : PackagePath(pn));
-				if(!FindFile(pk).IsFile())
-					continue;
-				pkgfiles.Add(f >= 0 ? SourcePath(pn, pkg.file[f]) : PackagePath(pn));
-				pkgfiles.AppendPick(HdependGetDependencies(pkgfiles[0]));
-				for(int d = 0; d < pkgfiles.GetCount(); d++) {
-					TransferFileInfo newinfo;
-					newinfo.sourcepath = pkgfiles[d];
-					String rp = host.GetHostPath(newinfo.sourcepath);
-					if(info.Find(rp) >= 0 || (d && UnixPath(rp) == UnixPath(newinfo.sourcepath)))
-						continue;
-					FindFile ff(newinfo.sourcepath);
-					newinfo.filetime = (int)(Time(ff.GetLastWriteTime()) - RemoteHost::TimeBase());
-					newinfo.filesize = (int)ff.GetLength();
-					int pos = transferfilecache.Find(rp);
-					if(pos < 0 || transferfilecache[pos].filetime != newinfo.filetime
-						|| transferfilecache[pos].filesize != newinfo.filesize)
-					{
-						String content = NoCr(LoadFile(newinfo.sourcepath));
-						query << rp << '\t' << newinfo.filetime << '\t' << content.GetLength() << '\n';
-	//					remotepath.Add(rp);
-						fdata.Add(content);
-						info.Add(rp, newinfo);
-						nocrsize.Add(content.GetLength());
-						PutVerbose("Проверка удалённой " + rp);
-	/*
-						if(msecs(ticks) >= 0)
-						{
-							ShowConsole();
-							console.Sync();
-							ticks = msecs(-200);
-						}
-	*/				}
-				}
-			}
-	}
-	if(info.IsEmpty())
-		return true;
-//	String host = GetVar("REMOTE_HOST");
-//	int port = 2346;
-//	int ppos = host.Find(':');
-//	if(ppos >= 0)
-//	{
-//		port = ScanInt(host.GetIter(ppos + 1));
-//		host.Trim(ppos);
-//	}
-
-	Index<String> ignore;
-	{
-		PutConsole(NFormat("Получение списка обновлений для удалённой файловой системы %s", host.host));
-		ConsoleShow();
-		String out = host.RemoteExec(query);
-		if(out[0] != 'O' || out[1] != 'K') {
-			PutConsole(out);
-			return false;
-		}
-
-		const char *s = out;
-		while(*s && *s++ != '\n')
-			;
-		while(*s)
-		{
-			const char *b = s;
-			while(*s && *s != '\n')
-				s++;
-			ignore.FindAdd(NormalizePath(NativePath(String(b, s))));
-			if(*s)
-				s++;
-		}
-		if(ignore.GetCount() == info.GetCount())
-			PutConsole("Дерево удалённого источника в свежем состоянии.");
-		else
-		{
-			PutConsole(NFormat("%d файл(-ов)отсутствует в удалённом дереве исходников:", info.GetCount() - ignore.GetCount()));
-			for(p = 0; p < info.GetCount(); p++)
-			{
-//				console << "   " << remotepath[p] << " - "
-//					<< FormatInt(p) << " @ " << FormatInt(ignore.Find(remotepath[p])) << "\n";
-				if(ignore.Find(NormalizePath(NativePath(info.GetKey(p)))) < 0)
-					PutConsole(String().Cat() << "   " << info.GetKey(p));
-			}
-		}
-	}
-
-	Vector<String> update;
-	for(p = 0; p < info.GetCount(); p++)
-		if(ignore.Find(NormalizePath(NativePath(info.GetKey(p)))) < 0)
-		{
-			String rawdata = fdata[p];
-			PutConsole(String().Cat() << "Сжатие " << info[p].sourcepath << " (" << FormatInt(rawdata.GetLength()) << " B)\n");
-			ConsoleSync();
-			String bzdata = BZ2Compress(rawdata);
-			String comp = ASCII85Encode(bzdata);
-			if(update.IsEmpty() || update.Top().GetLength() + comp.GetLength() >= 500000)
-				update.Add(">");
-			update.Top() << info.GetKey(p) << '\t' << info[p].filetime << '\t' << nocrsize[p] << '\t' << comp << '\n';
-		}
-
-	for(p = 0; p < update.GetCount(); p++)
-	{
-		PutConsole(NFormat("Выгрузка блока %d / %d (%d B)", p + 1, update.GetCount(), update[p].GetLength()));
-		ConsoleShow();
-		String result = host.RemoteExec(update[p]);
-		if(result[0] != 'O' || result[1] != 'K') {
-			PutConsole(result);
-			return false;
-		}
-	}
-
-	for(p = 0; p < info.GetCount(); p++)
-		transferfilecache.GetAdd(info.GetKey(p)) = info[p];
-	return true;
-}
-
 One<Host> MakeBuild::CreateHost(bool sync_files)
 {
 	SetupDefaultMethod();
 	VectorMap<String, String> bm = GetMethodVars(method);
-	String rm = bm.Get("REMOTE_HOST", Null);
 	One<Host> outhost;
-	if(!IsNull(rm)) {
-		One<RemoteHost> host = new RemoteHost;
-		host->host = rm;
-		host->port = 2346;
-		int f = rm.Find(':');
-		if(f >= 0) {
-			host->host = rm.Left(f);
-			host->port = Nvl(ScanInt(rm.GetIter(f + 1)), host->port);
-		}
-		host->os_type = bm.Get("REMOTE_OS", "UNIX");
-		Vector<String> path_map = Split(bm.Get("REMOTE_MAP", Null), ';');
-		for(int p = 0; p < path_map.GetCount(); p++) {
-			f = path_map[p].Find('>');
-			if(f >= 0) {
-				host->path_map_local.Add(path_map[p].Left(f));
-				host->path_map_remote.Add(path_map[p].Mid(f + 1));
-			}
-		}
+	{
+		auto& host = outhost.Create<LocalHost>();
 		VectorMap<String, String> env(Environment(), 1);
-		Vector<String> exedirs = SplitDirs(bm.Get("PATH", "") + ';' + env.Get("PATH", ""));
-		env.GetAdd("PATH") = Join(exedirs, ";");
-		for(int i = 0; i < env.GetCount(); i++)
-			host->environment << env.GetKey(i) << '=' << env[i] << '\0';
-		host->environment.Cat(0);
-		if(sync_files && bm.Get("REMOTE_TRANSFER", Null) != "0")
-			SyncHostFiles(*host);
-		outhost = -host;
-	}
-	else {
-		One<LocalHost> host = new LocalHost;
-		VectorMap<String, String> env(Environment(), 1);
-		host->exedirs = SplitDirs(bm.Get("PATH", "") + ';' + env.Get("PATH", ""));
-		env.GetAdd("PATH") = Join(host->exedirs, ";");
+		host.exedirs = SplitDirs(bm.Get("PATH", "") + ';' + env.Get("PATH", ""));
+		env.GetAdd("PATH") = Join(host.exedirs, ";");
 		env.GetAdd("UPP_MAIN__") = GetFileDirectory(PackagePath(GetMain()));
+		env.GetAdd("UPP_ASSEMBLY__") = GetVar("UPP");
+		
+		// setup LD_LIBRARY_PATH on target dir, needed for all shared builds on posix
+#ifdef PLATFORM_POSIX
+		if(target != "")
+		{
+			String ldPath = GetFileFolder(target) + ";" + env.Get("LD_LIBRARY_PATH", "");
+			env.GetAdd("LD_LIBRARY_PATH") = ldPath;
+		}
+#endif
 		for(int i = 0; i < env.GetCount(); i++) {
 			LDUMP(env.GetKey(i));
 			LDUMP(env[i]);
-			host->environment << env.GetKey(i) << '=' << env[i] << '\0';
+			host.environment << env.GetKey(i) << '=' << env[i] << '\0';
 		}
-		host->environment.Cat(0);
-		host->cmdout = &cmdout;
-		outhost = -host;
+		host.environment.Cat(0);
+		host.cmdout = &cmdout;
 	}
 	return outhost;
 }
@@ -268,27 +127,75 @@ One<Builder> MakeBuild::CreateBuilder(Host *host)
 	String builder = bm.Get("BUILDER", "GCC");
 	int q = BuilderMap().Find(builder);
 	if(q < 0) {
-		PutConsole("Неверный построитель " + builder);
+		PutConsole("Invalid builder " + builder);
 		ConsoleShow();
 		return NULL;
 	}
-	One<Builder> b = (*BuilderMap().Get(builder))();
+	Builder* b = (*BuilderMap().Get(builder))();
 	b->host = host;
-	b->compiler = bm.Get("COMPILER", "");
-	b->include = SplitDirs(GetVar("UPP") + ';' + bm.Get("INCLUDE", ""));
-	const Workspace& wspc = GetIdeWorkspace();
-	for(int i = 0; i < wspc.GetCount(); i++) {
-		const Package& pkg = wspc.GetPackage(i);
-		for(int j = 0; j < pkg.include.GetCount(); j++)
-			b->include.Add(SourcePath(wspc[i], pkg.include[j].text));
-	}	
-	b->libpath = SplitDirs(bm.Get("LIB", ""));
-	b->debug_options = bm.Get("DEBUG_OPTIONS", "");
-	b->release_options = bm.Get("RELEASE_OPTIONS", "");
-	b->release_size_options = bm.Get("RELEASE_SIZE_OPTIONS", "");
-	b->debug_link = bm.Get("DEBUG_LINK", "");
-	b->release_link = bm.Get("RELEASE_LINK", "");
 	b->script = bm.Get("SCRIPT", "");
+	if(AndroidBuilder::GetBuildersNames().Find(builder) > -1) {
+		AndroidBuilder* ab = dynamic_cast<AndroidBuilder*>(b);
+		ab->sdk.SetPath((bm.Get("SDK_PATH", "")));
+		ab->ndk.SetPath((bm.Get("NDK_PATH", "")));
+		ab->SetJdk(One<Jdk>(new Jdk(bm.Get("JDK_PATH", ""), host)));
+		
+		String platformVersion = bm.Get("SDK_PLATFORM_VERSION", "");
+		if(!platformVersion.IsEmpty())
+			ab->sdk.SetPlatform(platformVersion);
+		else
+			ab->sdk.DeducePlatform();
+		String buildToolsRelease = bm.Get("SDK_BUILD_TOOLS_RELEASE", "");
+		if(!buildToolsRelease.IsEmpty())
+			ab->sdk.SetBuildToolsRelease(buildToolsRelease);
+		else
+			ab->sdk.DeduceBuildToolsRelease();
+		
+		ab->ndk_blitz = bm.Get("NDK_BLITZ", "") == "1";
+		if(bm.Get("NDK_ARCH_ARMEABI", "") == "1")
+			ab->ndkArchitectures.Add("armeabi");
+		if(bm.Get("NDK_ARCH_ARMEABI_V7A", "") == "1")
+			ab->ndkArchitectures.Add("armeabi-v7a");
+		if(bm.Get("NDK_ARCH_ARM64_V8A", "") == "1")
+			ab->ndkArchitectures.Add("arm64-v8a");
+		if(bm.Get("NDK_ARCH_X86", "") == "1")
+			ab->ndkArchitectures.Add("x86");
+		if(bm.Get("NDK_ARCH_X86_64", "") == "1")
+			ab->ndkArchitectures.Add("x86_64");
+		if(bm.Get("NDK_ARCH_MIPS", "") == "1")
+			ab->ndkArchitectures.Add("mips");
+		if(bm.Get("NDK_ARCH_MIPS64", "") == "1")
+			ab->ndkArchitectures.Add("mips64");
+		ab->ndkToolchain = bm.Get("NDK_TOOLCHAIN", "");
+		ab->ndkCppRuntime = bm.Get("NDK_CPP_RUNTIME", "");
+		ab->ndkCppFlags = bm.Get("NDK_COMMON_CPP_OPTIONS", "");
+		ab->ndkCFlags = bm.Get("NDK_COMMON_C_OPTIONS", "");
+		
+		b = ab;
+	}
+	else {
+		// TODO: cpp builder variables only!!!
+		b->compiler = bm.Get("COMPILER", "");
+		b->include = SplitDirs(GetVar("UPP") + ';' + bm.Get("INCLUDE", "") + ';' + add_includes);
+		const Workspace& wspc = GetIdeWorkspace();
+		for(int i = 0; i < wspc.GetCount(); i++) {
+			const Package& pkg = wspc.GetPackage(i);
+			for(int j = 0; j < pkg.include.GetCount(); j++)
+				b->include.Add(SourcePath(wspc[i], pkg.include[j].text));
+		}
+		b->libpath = SplitDirs(bm.Get("LIB", ""));
+		b->cpp_options = bm.Get("COMMON_CPP_OPTIONS", "");
+		b->c_options = bm.Get("COMMON_C_OPTIONS", "");
+		b->debug_options = Join(bm.Get("COMMON_OPTIONS", ""), bm.Get("DEBUG_OPTIONS", ""));
+		b->release_options = Join(bm.Get("COMMON_OPTIONS", ""), bm.Get("RELEASE_OPTIONS", ""));
+		b->common_link = bm.Get("COMMON_LINK", "");
+		b->debug_link = bm.Get("DEBUG_LINK", "");
+		b->release_link = bm.Get("RELEASE_LINK", "");
+		
+		b->main_conf = !!main_conf.GetCount();
+		b->allow_pch = bm.Get("ALLOW_PRECOMPILED_HEADERS", "") == "1";
+		b->start_time = start_time;
+	}
 	return b;
 }
 
@@ -345,19 +252,23 @@ struct OneFileHost : Host {
 	virtual void   DeleteFile(const Vector<String>& path) { host->DeleteFile(path); }
 	virtual void   DeleteFolderDeep(const String& folder) { host->DeleteFolderDeep(folder); }
 	virtual void   ChDir(const String& path) { host->ChDir(path); }
-	virtual void   RealizeDir(const String& path) { host->RealizeDir(path); }
-	virtual void   SaveFile(const String& path, const String& data) { host->SaveFile(path, data); }
+	virtual bool   RealizeDir(const String& path) { return host->RealizeDir(path); }
+	virtual bool   SaveFile(const String& path, const String& data) { return host->SaveFile(path, data); }
 	virtual String LoadFile(const String& path) { return host->LoadFile(path); }
 	virtual int    Execute(const char *c) { return host->Execute(c); }
-	virtual int    ExecuteWithInput(const char *c) { return host->ExecuteWithInput(c); }
-	virtual int    Execute(const char *c, Stream& o) { return host->Execute(c, o); }
+	virtual int    ExecuteWithInput(const char *c, bool noconvert) { return host->ExecuteWithInput(c, noconvert); }
+	virtual int    Execute(const char *c, Stream& o, bool noconvert) { return host->Execute(c, o, noconvert); }
 	virtual int    AllocSlot() { return host->AllocSlot(); }
 	virtual bool   Run(const char *cmdline, int slot, String key, int blitz_count) { return host->Run(cmdline, slot, key, blitz_count); }
 	virtual bool   Run(const char *cmdline, Stream& out, int slot, String key, int blitz_count) { return host->Run(cmdline, out, slot, key, blitz_count); }
 	virtual bool   Wait() { return host->Wait(); }
-	virtual One<SlaveProcess> StartProcess(const char *c) { return host->StartProcess(c); }
+	virtual bool   Wait(int slot) { return host->Wait(slot); }
+	virtual void   OnFinish(Event<>  cb) { return host->OnFinish(cb); }
+	virtual One<AProcess> StartProcess(const char *c) { return host->StartProcess(c); }
 	virtual void   Launch(const char *cmdline, bool) { host->Launch(cmdline); }
 	virtual void   AddFlags(Index<String>& cfg) { host->AddFlags(cfg); }
+	virtual const  Vector<String>& GetExecutablesDirs() const { return host->GetExecutablesDirs(); }
+	virtual const  HostTools& GetTools() const { return host->GetTools(); }
 
 	virtual Vector<FileInfo> GetFileInfo(const Vector<String>& path) {
 		Vector<FileInfo> fi = host->GetFileInfo(path);
@@ -371,21 +282,22 @@ struct OneFileHost : Host {
 };
 
 bool MakeBuild::BuildPackage(const Workspace& wspc, int pkindex, int pknumber, int pkcount,
-	String mainparam, String outfile, Vector<String>& linkfile, String& linkopt, bool link)
+	String mainparam, String outfile, Vector<String>& linkfile, Vector<String>& immfile,
+	String& linkopt, bool link)
 {
 	String package = wspc[pkindex];
 	String mainpackage = wspc[0];
 	const Package& pkg = wspc.package[pkindex];
 	VectorMap<String, String> bm = GetMethodVars(method);
 	if(bm.GetCount() == 0) {
-		PutConsole("Неверный метод постройки");
+		PutConsole(GetInvalidBuildMethodError(method));
 		ConsoleShow();
 		return false;
 	}
 	One<Host> host = CreateHost(false);
 	if(!IsNull(onefile)) {
 		OneFileHost *h = new OneFileHost;
-		h->host = host;
+		h->host = pick(host);
 		h->onefile = onefile;
 		host = h;
 	}
@@ -429,6 +341,7 @@ bool MakeBuild::BuildPackage(const Workspace& wspc, int pkindex, int pknumber, i
 			target = host->NormalizePath(AppendFileName(tout, mainfn));
 	}
 	b->target = target;
+	b->mainpackage = mainpackage;
 	if(IsNull(onefile)) {
 		String out;
 		out << "----- " << package << " ( " << Join(b->config.GetKeys(), " ") << " )";
@@ -438,8 +351,8 @@ bool MakeBuild::BuildPackage(const Workspace& wspc, int pkindex, int pknumber, i
 	}
 	else
 		b->config.FindAdd("NOLIB");
-	bool ok = b->BuildPackage(package, linkfile, linkopt,
-		                      GetAllUses(wspc, pkindex),
+	bool ok = b->BuildPackage(package, linkfile, immfile, linkopt,
+		                      GetAllUses(wspc, pkindex, bm, mainparam, *host, *b),
 		                      GetAllLibraries(wspc, pkindex, bm, mainparam, *host, *b),
 		                      targetmode - 1);
 	Vector<String> errors = PickErrors();
@@ -448,6 +361,7 @@ bool MakeBuild::BuildPackage(const Workspace& wspc, int pkindex, int pknumber, i
 		return false;
 	if(link) {
 		ok = b->Link(linkfile, linkopt, GetTargetMode().createmap);
+		PutLinkingEnd(ok);
 		errors = PickErrors();
 		host->DeleteFile(errors);
 		if(!ok || !errors.IsEmpty())
@@ -458,26 +372,45 @@ bool MakeBuild::BuildPackage(const Workspace& wspc, int pkindex, int pknumber, i
 
 void MakeBuild::SetHdependDirs()
 {
-	HdependSetDirs(SplitDirs(GetVar("UPP") + ';'
-	                         + GetMethodVars(method).Get("INCLUDE", "") + ';'
-	                         + Environment().Get("INCLUDE", "")));
+	Vector<String> include = SplitDirs(GetVar("UPP") + ';'
+		+ GetMethodVars(method).Get("INCLUDE", "") + ';'
+		+ Environment().Get("INCLUDE", "")
+#ifdef PLATFORM_POSIX
+		+ ";/usr/include;/usr/local/include;"
+#endif
+		+ add_includes
+		);
+	// Also adding internal includes
+	const Workspace& wspc = GetIdeWorkspace();
+	for(int i = 0; i < wspc.GetCount(); i++) {
+		const Package& pkg = wspc.GetPackage(i);
+		for(int j = 0; j < pkg.include.GetCount(); j++)
+			include.Add(SourcePath(wspc[i], pkg.include[j].text));
+	}
+
+	HdependSetDirs(pick(include));
 }
 
-Vector<String> MakeBuild::GetAllUses(const Workspace& wspc, int f)
-{ // Warning: This does not seem to do what it is supposed to do...
+Vector<String> MakeBuild::GetAllUses(const Workspace& wspc, int f,
+	const VectorMap<String, String>& bm, String mainparam, Host& host, Builder& builder)
+{ // Gathers all uses, including subpackages, to support SO builds
 	String package = wspc[f];
 	Index<String> all_uses;
 	bool warn = true;
 	int n = 0;
 	while(f >= 0) {
 		const Package& p = wspc.package[f];
-		for(int fu = 0; fu < p.uses.GetCount(); fu++)
-			if(p.uses[fu].text != package)
-				all_uses.FindAdd(p.uses[fu].text);
-			else if(warn) {
-				PutConsole(NFormat("%s: циркулярная цепочка 'использований'", package));
-				warn = false;
+		Index<String> config = PackageConfig(wspc, f, bm, mainparam, host, builder);
+		for(int fu = 0; fu < p.uses.GetCount(); fu++) {
+			if(MatchWhen(p.uses[fu].when, config.GetKeys())) {
+				if(p.uses[fu].text != package)
+					all_uses.FindAdd(p.uses[fu].text);
+				else if(warn) {
+					PutConsole(NFormat("%s: circular 'uses' chain", package));
+					warn = false;
+				}
 			}
+		}
 		f = -1;
 		while(n < all_uses.GetCount() && (f = wspc.package.Find(all_uses[n++])) < 0)
 			;
@@ -489,7 +422,7 @@ Vector<String> MakeBuild::GetAllLibraries(const Workspace& wspc, int index,
 	const VectorMap<String, String>& bm, String mainparam,
 	Host& host, Builder& builder)
 { // Warning: This does not seem to do what it is supposed to do...
-	Vector<String> uses = GetAllUses(wspc, index);
+	Vector<String> uses = GetAllUses(wspc, index, bm, mainparam, host, builder);
 	uses.Add(wspc[index]);
 	Index<String> libraries;
 	
@@ -507,12 +440,46 @@ Vector<String> MakeBuild::GetAllLibraries(const Workspace& wspc, int index,
 
 bool MakeBuild::Build(const Workspace& wspc, String mainparam, String outfile, bool clear_console)
 {
+	InitBlitz();
+
+	String hfile = outfile + ".xxx";
+	SaveFile(hfile, "");
+	start_time = GetFileTime(hfile); // Defensive way to get correct filetime of start
+	DeleteFile(hfile);
+	
 	ClearErrorEditor();
 	BeginBuilding(true, clear_console);
 	bool ok = true;
+	main_conf.Clear();
 	if(wspc.GetCount()) {
+		for(int i = 0; i < wspc.GetCount(); i++) {
+			const Package& pk = wspc.package[i];
+			for(int j = 0; j < pk.GetCount(); j++)
+				if(pk[j] == "main.conf") {
+					String pn = wspc[i];
+					String p = SourcePath(pn, "main.conf");
+					main_conf << "// " << pn << "\r\n" << LoadFile(p) << "\r\n";
+					PutConsole("Found " + p);
+				}
+		}
+
+		if(main_conf.GetCount()) {
+			VectorMap<String, String> bm = GetMethodVars(method);
+			One<Host> host = CreateHost(false);
+			One<Builder> b = CreateBuilder(~host);
+			if(b) {
+				Index<String> mcfg = PackageConfig(wspc, 0, bm, mainparam, *host, *b, NULL);
+				String outdir = OutDir(mcfg, wspc[0], bm, false);
+				String path = AppendFileName(outdir, "main.conf.h");
+				RealizePath(path);
+				SaveChangedFile(path, main_conf);
+				PutConsole("Saving " + path);
+				add_includes << outdir << ';';
+			}
+		}
+
 		Vector<int> build_order;
-		if(GetTargetMode().linkmode != 2) {
+		if(cfg.Find("SO") < 0) {
 			for(int i = 1; i < wspc.GetCount(); i++)
 				build_order.Add(i);
 		}
@@ -525,23 +492,26 @@ bool MakeBuild::Build(const Workspace& wspc, String mainparam, String outfile, b
 				for(t = 0; t < remaining.GetCount(); t++) {
 					const Package& pk = wspc.package[remaining[t]];
 					bool delay = false;
-					for(int u = 0; u < pk.uses.GetCount(); u++)
-						if(remaining.Find(wspc.package.Find(pk.uses[u].text)) >= 0) {
+					for(int u = 0; u < pk.uses.GetCount(); u++) {
+						if(remaining.Find(wspc.package.Find(UnixPath(pk.uses[u].text))) >= 0) {
 							delay = true;
 							break;
 						}
+					}
 					if(!delay)
 						break;
 				}
-				if(t >= remaining.GetCount())
+				if(t >= remaining.GetCount()) // Progress even if circular references present
 					t = 0;
 				build_order.Add(remaining[t]);
 				remaining.Remove(t);
 			}
 		}
+
 		String mainpackage = wspc[0];
-		Vector<String> linkfile;
-		String linkopt = GetMethodVars(method).Get(targetmode ? "RELEASE_LINK" : "DEBUG_LINK", Null);
+		Vector<String> linkfile, immfile;
+		String linkopt = Merge(" ", GetMethodVars(method).Get("COMMON_LINK", Null),
+		                       GetMethodVars(method).Get(targetmode ? "RELEASE_LINK" : "DEBUG_LINK", Null));
 		if(linkopt.GetCount())
 			linkopt << ' ';
 		ok = true;
@@ -549,15 +519,21 @@ bool MakeBuild::Build(const Workspace& wspc, String mainparam, String outfile, b
 		for(int i = 0; i < build_order.GetCount() && (ok || !stoponerrors); i++) {
 			int px = build_order[i];
 			ok = BuildPackage(wspc, px, i, build_order.GetCount() + 1,
-				              mainparam, Null, linkfile, linkopt) && ok;
+				              mainparam, Null, linkfile, immfile, linkopt) && ok;
 			if(msecs() - ms >= 200) {
 				DoProcessEvents();
 				ms = msecs();
 			}
 		}
-		if(ok || !stoponerrors)
+		if(ok || !stoponerrors) {
 			ok = BuildPackage(wspc, 0, build_order.GetCount(), build_order.GetCount() + 1,
-				mainparam, outfile, linkfile, linkopt, ok) && ok;
+			                  mainparam, outfile, linkfile, immfile, linkopt, ok) && ok;
+			// Set the time of target and intermediates to start-time, so that if any file
+			// changes during compilation, it is recompiled during next build
+			SetFileTime(target, start_time);
+			for(int i = 0; i < immfile.GetCount(); i++)
+				SetFileTime(immfile[i], start_time);
+		}
 	}
 	EndBuilding(ok);
 	ReQualifyCodeBase();
@@ -569,7 +545,7 @@ bool MakeBuild::Build()
 {
 	VectorMap<String, String> bm = GetMethodVars(method);
 	if(bm.GetCount() == 0) {
-		PutConsole("Неверный метод постройки");
+		PutConsole(GetInvalidBuildMethodError(method));
 		ConsoleShow();
 		return false;
 	}
@@ -586,22 +562,36 @@ bool MakeBuild::Build()
 
 void MakeBuild::CleanPackage(const Workspace& wspc, int package)
 {
-	PutConsole(NFormat("Очистка %s", wspc[package]));
+	PutConsole(NFormat("Cleaning %s", wspc[package]));
 	One<Host> host = CreateHost(false);
 	One<Builder> builder = CreateBuilder(~host);
 	if(!builder)
 		return;
-	host->DeleteFolderDeep(OutDir(PackageConfig(wspc, package, GetMethodVars(method), mainconfigparam,
-		*host, *builder), wspc[package], GetMethodVars(method)));
+	String outdir = OutDir(PackageConfig(wspc, package, GetMethodVars(method), mainconfigparam,
+	                       *host, *builder), wspc[package], GetMethodVars(method));
+	// TODO: almost perfect, but target will be detected after build. if build does not occur the target is empty :(
+	// How to make sure we know target? Target directory is where android project sandbox is.
+	builder->target = target;
+	builder->CleanPackage(wspc[package], outdir);
 }
 
 void MakeBuild::Clean()
 {
 	ConsoleClear();
+
+	One<Host> host = CreateHost(false);
+	One<Builder> builder = CreateBuilder(~host);
+	if(!builder)
+		return;
+	builder->target = target;
+	
 	const Workspace& wspc = GetIdeWorkspace();
 	for(int i = 0; i < wspc.GetCount(); i++)
 		CleanPackage(wspc, i);
-	PutConsole("...готово");
+	
+	builder->AfterClean();
+	
+	PutConsole("...done");
 }
 
 void MakeBuild::RebuildAll()
@@ -655,9 +645,12 @@ void MakeBuild::SaveMakeFile(const String& fn, bool exporting)
 		inclist << " -I" << includes[i];
 
 	makefile << "\n"
+		"Dollar := $$\n"
+		"Dollar != if [ \"$(Dollar)\" = \"$$\" ]; then echo '$$$$'; else echo '$$$$$$$$' ; fi\n"
+		"\n"
 		"UPPOUT = " << (exporting ? "_out/" : GetMakePath(AdjustMakePath(host->GetHostPath(AppendFileName(uppout, ""))), win32)) << "\n"
-		"CINC = " << inclist << "\n"
-		"Macro = ";
+		"CINC   = " << inclist << "\n"
+		"Macro  = ";
 
 	for(int i = 0; i < allconfig.GetCount(); i++)
 		makefile << " -Dflag" << allconfig[i];
@@ -670,10 +663,10 @@ void MakeBuild::SaveMakeFile(const String& fn, bool exporting)
 		b->version = tm.version;
 		b->method = method;
 		MakeFile mf;
-		b->AddMakeFile(mf, wspc[i], GetAllUses(wspc, i),
+		b->AddMakeFile(mf, wspc[i], GetAllUses(wspc, i, bm, mainconfigparam, *host, *b),
 		               GetAllLibraries(wspc, i, bm, mainconfigparam, *host, *b), allconfig,
 		               exporting);
-		if(!i) {
+		if(i == 0) { // main package
 			String tdir = mf.outdir;
 			String trg;
 			if(tm.target_override) {
@@ -686,6 +679,11 @@ void MakeBuild::SaveMakeFile(const String& fn, bool exporting)
 			output = Nvl(trg, mf.output);
 			if(exporting)
 				output = wspc[i] + ".out";
+			StringStream ss;
+			Vector<String> bi = SvnInfo(wspc[i]);
+			String svn_info;
+			for(int i = 0; i < bi.GetCount(); i++)
+				svn_info << "	echo '" << bi[i] << "' >> build_info.h\n";
 			install << "\n"
 				"OutDir = " << tdir << "\n"
 				"OutFile = " << output << "\n"
@@ -693,8 +691,21 @@ void MakeBuild::SaveMakeFile(const String& fn, bool exporting)
 				".PHONY: all\n"
 				"all: prepare $(OutFile)\n"
 				"\n"
+				".PHONY: build_info\n"
+				"build_info:\n"
+				"	(date '+#define bmYEAR    %y%n"
+				"#define bmMONTH   %-m%n"
+				"#define bmDAY     %-d%n"
+				"#define bmHOUR    %-H%n"
+				"#define bmMINUTE  %-M%n"
+				"#define bmSECOND  %-S%n"
+				"#define bmTIME    Time(%y, %-m, %-d, %-H, %-M, %-S)' && \\\n"
+				"	echo '#define bmMACHINE \"'`hostname`'\"' && \\\n"
+				"	echo '#define bmUSER    \"'`whoami`'\"') > build_info.h\n"
+				<< svn_info <<
+				"\n"
 				".PHONY: prepare\n"
-				"prepare:\n";
+				"prepare:";
 		}
 		config << mf.config;
 		install << mf.install;
@@ -707,19 +718,26 @@ void MakeBuild::SaveMakeFile(const String& fn, bool exporting)
 	makefile
 		<< config
 		<< install
-		<< "\n"
-		"$(OutFile): " << linkdep << "\n\t" << linkfiles << linkfileend << " -Wl,--end-group\n\n"
+		<< "\n\n"
+		"$(OutFile): build_info " << linkdep << "\n\t" << linkfiles << linkfileend << " -Wl,--end-group\n\n"
 		<< rules
 		<< ".PHONY: clean\n"
 		<< "clean:\n"
-		<< "\tif [ -d $(UPPOUT) ]; then rm -rf $(UPPOUT); fi;\n";
+		<< "\tif [ -d \"$(UPPOUT)\" ]; then rm -rf \"$(UPPOUT)\" ; fi\n"
+		<< "\tif [ -f build_info.h ]; then rm -f build_info.h ; fi\n";
 
 	bool sv = ::SaveFile(fn, makefile);
-	if(!exporting)
+	if(!exporting) {
 		if(sv)
-			PutConsole(NFormat("%s(1): генерация makefile завершена", fn));
+			PutConsole(NFormat("%s(1): makefile generation complete", fn));
 		else
-			PutConsole(NFormat("%s: ошибка при записи makefile", fn));
-
+			PutConsole(NFormat("%s: error writing makefile", fn));
+	}
 	EndBuilding(true);
 }
+
+String MakeBuild::GetInvalidBuildMethodError(const String& method)
+{
+	return "Invalid build method " + method + " (" + GetMethodPath(method) + ").";
+}
+ 

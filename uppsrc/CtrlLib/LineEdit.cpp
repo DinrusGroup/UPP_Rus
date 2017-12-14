@@ -1,15 +1,16 @@
 #include "CtrlLib.h"
 
-NAMESPACE_UPP
+namespace Upp {
 
 #define LLOG(x) //  LOG(x)
+#define LTIMING(x) // RTIMING(x)
 
 LineEdit::LineEdit() {
 	isdrag = false;
 	nohbar = false;
 	showtabs = false;
 	tabsize = 4;
-	font = Courier(16);
+	font = CourierZ(12);
 	SetFrame(ViewFrame());
 	sb.NoBox();
 	AddFrame(sb);
@@ -20,6 +21,11 @@ LineEdit::LineEdit() {
 	overwrite = false;
 	filter = NULL;
 	showspaces = false;
+	showlines = false;
+	showreadonly = true;
+	dorectsel = false;
+	hline = Null;
+	warnwhitespace = false;
 }
 
 LineEdit::~LineEdit() {}
@@ -68,124 +74,498 @@ Size LineEdit::GetFontSize() const {
 	return Size(max(fi['M'], fi['W']), fi.GetHeight());
 }
 
+void LineEdit::SetRectSelection(int anchor, int cursor)
+{
+	dorectsel = true;
+	SetSelection(anchor, cursor);
+	dorectsel = false;
+}
+
+void LineEdit::SetRectSelection(const Rect& rect)
+{
+	SetRectSelection(GetGPos(rect.top, rect.left), GetGPos(rect.bottom, rect.right));
+}
+
+Rect LineEdit::GetRectSelection() const
+{
+	if(IsRectSelection()) {
+		int sell, selh;
+		GetSelection(sell, selh);
+		Rect r(GetColumnLine(sell), GetColumnLine(selh));
+		if(r.left > r.right)
+			Swap(r.left, r.right);
+		return r;
+	}
+	return Null;
+}
+
+bool LineEdit::GetRectSelection(const Rect& rect, int line, int& l, int &h)
+{
+	if(line >= rect.top && line <= rect.bottom) {
+		l = GetGPos(line, rect.left);
+		h = GetGPos(line, rect.right);
+		return true;
+	}
+	return false;
+}
+
+int LineEdit::RemoveRectSelection()
+{
+	Rect rect = GetRectSelection();
+	WString txt;
+	for(int i = rect.top; i <= rect.bottom; i++) {
+		int l, h;
+		CacheLinePos(i);
+		GetRectSelection(rect, i, l, h);
+		WString s = GetWLine(i);
+		s.Remove(l - GetPos(i), h - l);
+		txt.Cat(s);
+		txt.Cat('\n');
+	}
+	int l = GetPos(rect.top);
+	int h = GetPos(rect.bottom) + GetLineLength(rect.bottom);
+	if(h < GetLength())
+		h++;
+	Remove(l, h - l);
+	Insert(l, txt);
+	return GetGPos(rect.bottom, rect.left);
+}
+
+WString LineEdit::CopyRectSelection()
+{
+	WString txt;
+	Rect rect = GetRectSelection();
+	for(int i = rect.top; i <= rect.bottom; i++) {
+		int l, h;
+		CacheLinePos(i);
+		int pos = GetPos(i);
+		GetRectSelection(rect, i, l, h);
+		txt.Cat(GetWLine(i).Mid(l - pos, h - l));
+#ifdef PLATFORM_WIN32
+		txt.Cat('\r');
+#endif
+		txt.Cat('\n');
+	}
+	return txt;
+}
+
+int LineEdit::PasteRectSelection(const WString& s)
+{
+	Vector<WString> cl = Split(s, '\n', false);
+	Rect rect = GetRectSelection();
+	int pos = cursor;
+	int n = 0;
+	for(int i = 0; i < cl.GetCount() && rect.top + i <= rect.bottom; i++) {
+		int l, h;
+		CacheLinePos(i);
+		GetRectSelection(rect, i + rect.top, l, h);
+		Remove(l, h - l);
+		int nn = Insert(l, cl[i]);
+		n += nn;
+		pos = l + nn;
+	}
+	PlaceCaret(pos);
+	return n;
+}
+
+void LineEdit::PasteColumn(const WString& text)
+{
+	Vector<WString> cl = Split(text, '\n', false);
+	if(cl.GetCount() && cl.Top().IsEmpty())
+		cl.Drop();
+	if(cl.GetCount() == 0)
+		return;
+	int pos;
+	if(IsRectSelection()) {
+		Rect t = GetRectSelection();
+		RemoveSelection();
+		Point p = t.TopLeft();
+		pos = cursor;
+		for(int i = 0; i < t.bottom - t.top + 1; i++) {
+			CacheLinePos(i + p.y);
+			int l = GetGPos(i + p.y, p.x);
+			pos = l + Insert(l, cl[i % cl.GetCount()]);
+		}
+	}
+	else {
+		RemoveSelection();
+		Point p = GetColumnLine(cursor);
+		pos = cursor;
+		for(int i = 0; i < cl.GetCount(); i++) {
+			CacheLinePos(i + p.y);
+			int li = p.y + i;
+			if(li < line.GetCount()) {
+				int l = GetGPos(i + p.y, p.x);
+				pos = l + Insert(l, cl[i]);
+			}
+			else {
+				Insert(GetLength(), cl[i] + "\n");
+				pos = GetLength();
+			}
+		}
+	}
+	PlaceCaret(pos);
+}
+
+void LineEdit::PasteColumn()
+{
+	WString w = ReadClipboardUnicodeText();
+	if(w.IsEmpty())
+		w = ReadClipboardText().ToWString();
+	PasteColumn(w);
+	Action();
+}
+
+bool sSortLineOrder(const WString& l1, const WString& l2)
+{
+	return ToUpper(l1) < ToUpper(l2);
+}
+
+void LineEdit::Sort()
+{
+	if(!IsRectSelection())
+		return;
+	CopyRectSelection();
+	Rect rect = GetRectSelection();
+	Vector<WString> key;
+	Vector<WString> ln;
+	for(int i = rect.top; i <= rect.bottom; i++) {
+		int l, h;
+		GetRectSelection(rect, i, l, h);
+		key.Add(GetW(l, h - l));
+		ln.Add(line[i]);
+	}
+	int sell = GetPos(rect.top);
+	int selh = rect.bottom + 1 < line.GetCount() ? GetPos(rect.bottom + 1) : GetLength();
+	IndexSort(key, ln, sSortLineOrder);
+	Remove(sell, selh - sell);
+	Insert(sell, Join(ln, "\n"));
+}
+
+class sOptimizedRectRenderer {
+	Draw& w;
+	Rect  cr;
+	Color color;
+
+public:
+	void DrawRect(const Rect& r, Color color);
+	void DrawRect(int x, int y, int cx, int cy, Color color) { DrawRect(RectC(x, y, cx, cy), color); }
+	void Flush();
+
+	sOptimizedRectRenderer(Draw& w) : w(w) { cr = Null; color = Null; }
+	~sOptimizedRectRenderer()              { Flush(); }
+};
+
+void sOptimizedRectRenderer::Flush()
+{
+	LTIMING("RectFlush");
+	if(!IsNull(cr)) {
+		w.DrawRect(cr, color);
+		cr = Null;
+	}
+}
+
+void sOptimizedRectRenderer::DrawRect(const Rect& r, Color c)
+{
+	LTIMING("DrawRect");
+	if(cr.top == r.top && cr.bottom == r.bottom && cr.right == r.left && c == color) {
+		cr.right = r.right;
+		return;
+	}
+	Flush();
+	cr = r;
+	color = c;
+}
+
+#if 1 // This is a more ambitious approach combining non-continual chunks of text, it is a bit faster...
+class sOptimizedTextRenderer {
+	Draw&       w;
+	int         y;
+	struct Chrs : Moveable<Chrs> {
+		Vector<int> x;
+		Vector<int> width;
+		WString     text;
+	};
+	VectorMap< Tuple2<Font, Color>, Chrs > cache;
+
+public:
+	void DrawChar(int x, int y, int chr, int width, Font afont, Color acolor);
+	void Flush();
+
+	sOptimizedTextRenderer(Draw& w) : w(w) { y = Null; }
+	~sOptimizedTextRenderer()              { Flush(); }
+};
+
+void sOptimizedTextRenderer::Flush()
+{
+	if(cache.GetCount() == 0)
+		return;
+	LTIMING("Flush");
+	for(int i = 0; i < cache.GetCount(); i++) {
+		Chrs& c = cache[i];
+		if(c.x.GetCount()) {
+			Tuple2<Font, Color> fc = cache.GetKey(i);
+			int x = c.x[0];
+			for(int i = 0; i < c.x.GetCount() - 1; i++)
+				c.x[i] = c.x[i + 1] - c.x[i];
+			c.x.Top() = c.width.Top();
+			w.DrawText(x, y, c.text, fc.a, fc.b, c.x);
+		}
+	}
+	cache.Clear();
+}
+
+void sOptimizedTextRenderer::DrawChar(int x, int _y, int chr, int width, Font font, Color color)
+{
+	LTIMING("DrawChar");
+	if(y != _y) {
+		Flush();
+		y = _y;
+	}
+	Chrs *c;
+	{
+		LTIMING("Map");
+		c = &cache.GetAdd(MakeTuple(font, color));
+	}
+	if(c->x.GetCount() && c->x.Top() > x) {
+		Flush();
+		c = &cache.GetAdd(MakeTuple(font, color));
+	}
+	c->text.Cat(chr);
+	c->width.Add(width);
+	c->x.Add(x);
+}
+#else
+class sOptimizedTextRenderer {
+	Draw&       w;
+	int         x, y;
+	int         xpos;
+	Vector<int> dx;
+	WString     text;
+	Font        font;
+	Color       color;
+
+public:
+	void DrawChar(int x, int y, int chr, int width, Font afont, Color acolor);
+	void Flush();
+
+	sOptimizedTextRenderer(Draw& w) : w(w) { y = Null; }
+	~sOptimizedTextRenderer()              { Flush(); }
+};
+
+void sOptimizedTextRenderer::Flush()
+{
+	if(text.GetCount() == 0)
+		return;
+	LTIMING("Flush");
+	w.DrawText(x, y, text, font, color, dx);
+	y = Null;
+	text.Clear();
+	dx.Clear();
+}
+
+void sOptimizedTextRenderer::DrawChar(int _x, int _y, int chr, int width, Font _font, Color _color)
+{
+	LTIMING("DrawChar");
+	if(y == _y && font == _font && color == _color && dx.GetCount() && _x >= xpos - dx.Top())
+		dx.Top() += _x - xpos;
+	else {
+		LTIMING("DrawChar flush");
+		Flush();
+		x = _x;
+		y = _y;
+		font = _font;
+		color = _color;
+	}
+	dx.Add(width);
+	text.Cat(chr);
+	xpos = _x + width;
+}
+#endif
+
 void   LineEdit::Paint0(Draw& w) {
+	LTIMING("LineEdit::Paint0");
 	int sell, selh;
 	GetSelection(sell, selh);
 	if(!IsEnabled())
 		sell = selh = 0;
+	Rect rect;
+	bool rectsel = IsRectSelection();
+	if(IsRectSelection())
+		rect = GetRectSelection();
 	Size sz = GetSize();
 	Size fsz = GetFontSize();
 	Point sc = sb;
 	int ll = min(line.GetCount(), sz.cy / fsz.cy + sc.y + 1);
 	int  y = 0;
+	sc.y = minmax(sc.y, 0, line.GetCount() - 1);
 	cpos = GetPos(sc.y);
 	cline = sc.y;
 	sell -= cpos;
 	selh -= cpos;
 	int pos = cpos;
-	Vector<int> dx, dx2;
 	int fascent = font.Info().GetAscent();
+	int cursorline = GetLine(cursor);
+	Highlight ih;
+	ih.ink = color[IsShowEnabled() ? INK_NORMAL : INK_DISABLED];
+	ih.paper = color[IsReadOnly() && showreadonly || !IsShowEnabled() ? PAPER_READONLY : PAPER_NORMAL];
+	if(nobg)
+		ih.paper = Null;
+	ih.font = font;
+	ih.chr = 0;
 	for(int i = sc.y; i < ll; i++) {
+		Color showcolor = color[WHITESPACE];
 		WString tx = line[i];
+		bool warn_whitespace = false;
+		if(warnwhitespace && !IsSelection()) {
+			int pos = GetCursor();
+			int linei = GetLinePos(pos);
+			if(linei != i || pos < tx.GetCount()) {
+				int wkind = 0;
+				bool empty = true;
+				for(const wchar *s = tx; *s; s++) {
+					if(*s == '\t') {
+						if(wkind == ' ') {
+							warn_whitespace = true;
+							break;
+						}
+						wkind = '\t';
+					}
+					else
+					if(*s == ' ')
+						wkind = ' ';
+					else
+					if(*s > ' ') {
+						empty = false;
+						wkind = 0;
+					}
+				}
+				if(wkind && !empty)
+					warn_whitespace = true;
+				if(warn_whitespace)
+					showcolor = color[WARN_WHITESPACE];
+			}
+		}
+		bool do_highlight = tx.GetCount() < 100000;
 		int len = tx.GetLength();
 		if(w.IsPainting(0, y, sz.cx, fsz.cy)) {
-			Highlight ih;
-			ih.ink = color[IsShowEnabled() ? INK_NORMAL : INK_DISABLED];
-			ih.paper = color[IsReadOnly() || !IsShowEnabled() ? PAPER_READONLY : PAPER_NORMAL];
-			if(nobg)
-				ih.paper = Null;
-			ih.font = font;
-			ih.chr = 0;
+			LTIMING("PaintLine");
 			Vector<Highlight> hl;
-			hl.SetCount(len + 1, ih);
-			for(int q = 0; q < tx.GetCount(); q++)
-				hl[q].chr = tx[q];
-			HighlightLine(i, hl, pos);
-			int ln = hl.GetCount() - 1;
-			int l = max(sell, 0);
-			int h = selh > len ? len : selh;
-			if(l < h)
-				for(int i = l; i < h; i++) {
-					hl[i].paper = color[PAPER_SELECTED];
-					hl[i].ink = color[INK_SELECTED];
-				}
-			if(sell <= len && selh > len)
-				for(int i = len; i < hl.GetCount(); i++) {
-					hl[i].paper = color[PAPER_SELECTED];
-					hl[i].ink = color[INK_SELECTED];
-				}
-			Buffer<wchar> txt(ln);
-			for(int i = 0; i < ln; i++)
-				txt[i] = hl[i].chr;
-			for(int pass = 0; pass < 2; pass++) {
+			int ln;
+			if(do_highlight) {
+				hl.SetCount(len + 1, ih);
+				for(int q = 0; q < tx.GetCount(); q++)
+					hl[q].chr = tx[q];
+				LTIMING("HighlightLine");
+				HighlightLine(i, hl, pos);
+				ln = hl.GetCount() - 1;
+			}
+			else
+				ln = tx.GetCount();
+			int lgp = -1;
+			for(int pass = 0; pass < 3; pass++) {
 				int gp = 0;
 				int scx = fsz.cx * sc.x;
+				sOptimizedRectRenderer rw(w);
 				if(ln >= 0) {
 					int q = 0;
+					int x = 0;
+					int scx2 = scx - max(2, tabsize) * fsz.cx;
+					while(q < ln && x < scx2) { // Skip part before left border
+						wchar chr = do_highlight ? hl[q++].chr : tx[q++];
+						if(chr == '\t') {
+							gp = (gp + tabsize) / tabsize * tabsize;
+							x = fsz.cx * gp;
+						}
+						else
+						if(IsCJKIdeograph(chr)) {
+							x += 2 * fsz.cx;
+							gp += 2;
+						}
+						else {
+							x += fsz.cx;
+							gp++;
+						}
+					}
+					sOptimizedTextRenderer tw(w);
+					Highlight lastHighlight;
 					while(q < ln) {
-						Highlight& h = hl[q];
-						if(txt[q] == '\t') {
+						if(q == tx.GetCount())
+							lgp = gp;
+						Highlight h;
+						if(do_highlight)
+							h = hl[q];
+						else {
+							h = ih;
+							h.chr = tx[q];
+						}
+						int pos = min(q, len); // Highligting can add chars at the end of line
+						if(rectsel ? i >= rect.top && i <= rect.bottom && gp >= rect.left && gp < rect.right
+						           : pos >= sell && pos < selh) {
+							h.paper = color[PAPER_SELECTED];
+							h.ink = color[INK_SELECTED];
+						}
+						int x = gp * fsz.cx - scx;
+						bool cjk = IsCJKIdeograph(h.chr);
+						int xx = x + (gp + 1 + cjk) * fsz.cx;
+						if(h.chr == '\t') {
 							int ngp = (gp + tabsize) / tabsize * tabsize;
 							int l = ngp - gp;
 							LLOG("Highlight -> tab[" << q << "] paper = " << h.paper);
-							if(pass == 0) {
-								w.DrawRect(gp * fsz.cx - scx, y, fsz.cx * l, fsz.cy, h.paper);
-								if(showtabs && h.paper != SColorHighlight && q < tx.GetLength()) {
-									Color c = Blend(SColorLight, SColorHighlight);
-									w.DrawRect(gp * fsz.cx - scx + 2, y + fsz.cy / 2,
-									           l * fsz.cx - 4, 1, c);
-									w.DrawRect(ngp * fsz.cx - scx - 3, y + 3,
-									           1, fsz.cy - 6, c);
+							if(x >= -fsz.cy * tabsize) {
+								if(pass == 0) {
+									rw.DrawRect(x, y, fsz.cx * l, fsz.cy, h.paper);
+									if((showtabs || warn_whitespace) &&
+									   h.paper != SColorHighlight && q < tx.GetLength()) {
+										rw.DrawRect(x + 2, y + fsz.cy / 2, l * fsz.cx - 4, 1, showcolor);
+										rw.DrawRect(ngp * fsz.cx - scx - 3, y + 3, 1, fsz.cy - 6, showcolor);
+									}
+									if(bordercolumn > 0 && bordercolumn >= gp && bordercolumn < gp + l)
+										rw.DrawRect((bordercolumn - sc.x) * fsz.cx, y, 1, fsz.cy, bordercolor);
 								}
-								if(bordercolumn > 0 && bordercolumn >= gp && bordercolumn < gp + l)
-									w.DrawRect((bordercolumn - sc.x) * fsz.cx, y, 1, fsz.cy, bordercolor);
+								if(pass == 2) // resolve underlined tabs
+									tw.DrawChar(x, y, ' ', fsz.cx * l, h.font, h.ink);
 							}
 							q++;
 							gp = ngp;
 						}
 						else
-						if(txt[q] == ' ') {
-						    LLOG("Highlight -> space[" << q << "] paper = " << h.paper);
-						    if(pass == 0) {
-						        w.DrawRect(gp * fsz.cx - scx, y, fsz.cx, fsz.cy, h.paper);
-						        if(showspaces && h.paper != SColorHighlight && q < tx.GetLength()) {
-						            Color c = Blend(SColorLight, SColorHighlight);
-						            w.DrawRect(gp * fsz.cx - scx + fsz.cx / 2, y + fsz.cy / 2,
-						                       2, 2, c);
-						        }
-						        if(bordercolumn > 0 && bordercolumn >= gp && bordercolumn < gp + 1)
-						            w.DrawRect((bordercolumn - sc.x) * fsz.cx, y, 1, fsz.cy, bordercolor);
-						    }
-						    q++;
-						    gp++;
+						if(h.chr == ' ') {
+							LLOG("Highlight -> space[" << q << "] paper = " << h.paper);
+							if(x >= -fsz.cy) {
+								if(pass == 0) {
+									rw.DrawRect(x, y, fsz.cx, fsz.cy, h.paper);
+									if((showspaces || warn_whitespace)
+									   && h.paper != SColorHighlight && q < tx.GetLength()) {
+										int n = fsz.cy / 10 + 1;
+										rw.DrawRect(x + fsz.cx / 2, y + fsz.cy / 2, n, n, showcolor);
+									}
+									if(bordercolumn > 0 && bordercolumn >= gp && bordercolumn < gp + 1)
+										rw.DrawRect((bordercolumn - sc.x) * fsz.cx, y, 1, fsz.cy, bordercolor);
+								}
+								if(pass == 2) // resolve underlined spaces
+									tw.DrawChar(x, y, ' ', fsz.cx, h.font, h.ink);
+							}
+							q++;
+							gp++;
 						}
 						else {
-							bool cjk = IsCJKIdeograph(txt[q]);
-							int p = q + 1;
-							while(p < len && h == hl[p] && txt[p] != '\t' && txt[p] != ' ' && IsCJKIdeograph(txt[p]) == cjk && p - q < 128)
-								p++;
-							int l = p - q;
-							int ll = cjk ? 2 * l : l;
 							LLOG("Highlight -> paper[" << q << "] = " << h.paper);
-							int x = gp * fsz.cx - scx;
-							int xx = x + (gp + ll) * fsz.cx;
-							if(max(x, 0) < min(xx, sz.cx))
+							if(max(x, 0) < min(xx, sz.cx) && fsz.cx >= -fsz.cy) {
 								if(pass == 0) {
-									w.DrawRect(x, y, fsz.cx * ll, fsz.cy, h.paper);
-									if(bordercolumn > 0 && bordercolumn >= gp && bordercolumn < gp + ll)
-										w.DrawRect((bordercolumn - sc.x) * fsz.cx, y, 1, fsz.cy, bordercolor);
+									rw.DrawRect(x, y, (cjk + 1) * fsz.cx, fsz.cy, h.paper);
+									if(bordercolumn > 0 && bordercolumn >= gp && bordercolumn < gp + 1 + cjk)
+										rw.DrawRect((bordercolumn - sc.x) * fsz.cx, y, 1, fsz.cy, bordercolor);
 								}
-								else {
-									if(cjk)
-										dx2.At(l, 2 * fsz.cx);
-									else
-										dx.At(l, fsz.cx);
-									w.DrawText(x,
-									           y + fascent - h.font.Info().GetAscent(),
-									           ~txt + q, h.font, h.ink, l, cjk ? dx2 : dx);
-								}
-							q = p;
-							gp += ll;
+								if(pass == 1 && (h.flags & SPELLERROR))
+									rw.DrawRect(x, max(y, y + fsz.cy - Zy(1)), (cjk + 1) * fsz.cx, Zy(1), LtRed());
+								if(pass == 2)
+									tw.DrawChar(x + (h.flags & SHIFT_L ? -fsz.cx / 6 : h.flags & SHIFT_R ? fsz.cx / 6 : 0),
+									            y + fascent - h.font.GetAscent(),
+									            h.chr, (cjk + 1) * fsz.cx, h.font, h.ink);
+							}
+							q++;
+							gp += 1 + cjk;
 							if(x > sz.cx)
 								break;
 						}
@@ -193,10 +573,28 @@ void   LineEdit::Paint0(Draw& w) {
 				}
 				if(pass == 0) {
 					int gpx = gp * fsz.cx - scx;
-					w.DrawRect(gpx, y, sz.cx - gpx, fsz.cy, hl.Top().paper);
+					rw.DrawRect(gpx, y, sz.cx - gpx, fsz.cy,
+					            !rectsel && sell <= len && len < selh ? color[PAPER_SELECTED]
+					            : (do_highlight ? hl.Top() : ih).paper);
 					if(bordercolumn > 0 && bordercolumn >= gp)
-						w.DrawRect((bordercolumn - sc.x) * fsz.cx, y, 1, fsz.cy, bordercolor);
+						rw.DrawRect((bordercolumn - sc.x) * fsz.cx, y, 1, fsz.cy, bordercolor);
 				}
+				if(pass == 0 && (showlines || warn_whitespace)) {
+					int yy = 2 * fsz.cy / 3;
+					int x = (lgp >= 0 ? lgp : gp) * fsz.cx - scx;
+					rw.DrawRect(x, y + yy, fsz.cx / 2, 1, showcolor);
+					if(fsz.cx > 2)
+						rw.DrawRect(x + 1, y + yy - 1, 1, 3, showcolor);
+					if(fsz.cx > 5)
+						rw.DrawRect(x + 2, y + yy - 2, 1, 5, showcolor);
+					rw.DrawRect(x + fsz.cx / 2, y + yy / 2, 1, yy - yy / 2, showcolor);
+				}
+				if(pass == 0 && !IsNull(hline) && sell == selh && i == cursorline) {
+					rw.DrawRect(0, y, sz.cx, 1, hline);
+					rw.DrawRect(0, y + fsz.cy - 1, sz.cx, 1, hline);
+				}
+				if(pass == 0 && rectsel && rect.left == rect.right && i >= rect.top && i <= rect.bottom)
+					rw.DrawRect(rect.left * fsz.cx - scx, y, 2, fsz.cy, Blend(color[PAPER_SELECTED], color[PAPER_NORMAL]));
 			}
 		}
 		y += fsz.cy;
@@ -204,7 +602,8 @@ void   LineEdit::Paint0(Draw& w) {
 		selh -= len + 1;
 		pos += len + 1;
 	}
-	w.DrawRect(0, y, sz.cx, sz.cy - y, color[IsReadOnly() || !IsShowEnabled() ? PAPER_READONLY : PAPER_NORMAL]);
+	
+	w.DrawRect(0, y, sz.cx, sz.cy - y, color[IsReadOnly() && showreadonly || !IsShowEnabled() ? PAPER_READONLY : PAPER_NORMAL]);
 	DrawTiles(w, DropCaret(), CtrlImg::checkers());
 }
 
@@ -253,20 +652,39 @@ void   LineEdit::Layout() {
 
 int   LineEdit::GetGPos(int ln, int cl) const {
 	ln = minmax(ln, 0, line.GetCount() - 1);
-	WString txt = line[ln];
-	const wchar *b = txt;
-	const wchar *e = txt.End();
-	const wchar *s = b;
+	const String& stxt = line[ln].text;
+	const char *s = stxt;
+	const char *e = stxt.End();
+	const char *b = s;
 	int gl = 0;
+	int wpos = 0;
 	while(s < e) {
 		if(*s == '\t')
 			gl = (gl + tabsize) / tabsize * tabsize;
 		else
-			gl += 1 + IsCJKIdeograph(*s);
+		if((byte)*s < 128)
+			gl++;
+		else {
+			WString txt = FromUtf8(s, int(e - s));
+			const wchar *b = txt;
+			const wchar *e = txt.End();
+			const wchar *s = b;
+			while(s < e) {
+				if(*s == '\t')
+					gl = (gl + tabsize) / tabsize * tabsize;
+				else
+					gl += 1 + IsCJKIdeograph(*s);
+				if(cl < gl) break;
+				s++;
+			}
+			wpos = int(s - b);
+			break;
+		}
 		if(cl < gl) break;
 		s++;
 	}
-	return GetPos(ln, int(s - b));
+	
+	return GetPos(ln, int(s - b) + wpos);
 }
 
 Point LineEdit::GetColumnLine(int pos) const {
@@ -376,19 +794,30 @@ int LineEdit::PlaceCaretNoG(int newcursor, bool sel) {
 		if(anchor < 0) {
 			anchor = cursor;
 		}
-		RefreshLines(p.y, GetLine(cursor));
+		if(rectsel || rectsel != dorectsel)
+			Refresh();
+		else
+			RefreshLines(p.y, GetLine(cursor));
+		rectsel = dorectsel;
 	}
-	else
+	else {
 		if(anchor >= 0) {
-			RefreshLines(GetLine(cursor), GetLine(anchor));
+			if(rectsel || dorectsel)
+				Refresh();
+			else
+				RefreshLines(GetLine(cursor), GetLine(anchor));
 			anchor = -1;
 		}
+		rectsel = false;
+	}
+	RefreshLine(GetColumnLine(cursor).y);
+	RefreshLine(p.y);
 	cursor = newcursor;
 	ScrollIntoCursor();
 	PlaceCaret0(p);
 	SelectionChanged();
 	WhenSel();
-	if(IsSelection())
+	if(IsAnySelection())
 		SetSelectionSource(ClipFmtsText());
 	return p.x;
 }
@@ -428,27 +857,31 @@ void LineEdit::LeftDown(Point p, dword flags) {
 		selclick = true;
 		return;
 	}
-	PlaceCaret(mpos, flags & K_SHIFT);
-	SetWantFocus();
+	dorectsel = flags & K_ALT;
+	PlaceCaret(mpos, (flags & K_SHIFT) || dorectsel);
+	dorectsel = false;
+	SetFocus();
 	SetCapture();
 }
 
 void LineEdit::LeftUp(Point p, dword flags)
 {
-	if(!HasCapture() && selclick) {
+	if(!HasCapture() && selclick && !IsDragAndDropSource()) {
 		mpos = GetMousePos(p);
 		PlaceCaret(mpos, flags & K_SHIFT);
-		SetWantFocus();
+		SetFocus();
 	}
 	selclick = false;
+	ReleaseCapture();
 }
 
 void LineEdit::RightDown(Point p, dword flags)
 {
 	mpos = GetMousePos(p);
-	SetWantFocus();
+	SetFocus();
 	int l, h;
-	if(!GetSelection(l, h) || mpos < l || mpos >= h)
+	GetSelection(l, h);
+	if(!IsAnySelection() || !(mpos >= l && mpos < h))
 		PlaceCaret(mpos, false);
 	MenuBar::Execute(WhenBar);
 }
@@ -471,15 +904,20 @@ void LineEdit::LeftTriple(Point, dword)
 void LineEdit::MouseMove(Point p, dword flags) {
 	if((flags & K_MOUSELEFT) && HasFocus() && HasCapture()) {
 		int c = GetMousePos(p);
+		dorectsel = flags & K_ALT;
 		PlaceCaret(c, mpos != c || HasCapture());
+		dorectsel = false;
 	}
 }
 
 void LineEdit::LeftRepeat(Point p, dword flags) {
 	if(HasCapture()) {
 		int c = GetMousePos(p);
-		if(mpos != c)
+		if(mpos != c) {
+			dorectsel = flags & K_ALT;
 			PlaceCaret(c, true);
+			dorectsel = false;
+		}
 	}
 }
 
@@ -693,7 +1131,11 @@ bool LineEdit::Key(dword key, int count) {
 		break;
 	}
 	bool sel = key & K_SHIFT;
-	switch(key & ~K_SHIFT) {
+	dorectsel = key & K_ALT;
+	dword k = key & ~K_SHIFT;
+	if((key & (K_SHIFT|K_ALT)) == (K_SHIFT|K_ALT))
+		k &= ~K_ALT;
+	switch(k) {
 	case K_CTRL_LEFT:
 		{
 			PlaceCaret(GetPrevWord(cursor), sel);
@@ -744,6 +1186,7 @@ bool LineEdit::Key(dword key, int count) {
 		SelectAll();
 		break;
 	default:
+		dorectsel = false;
 		if(IsReadOnly())
 			return MenuBar::Scan(WhenBar, key);
 		switch(key) {
@@ -754,7 +1197,7 @@ bool LineEdit::Key(dword key, int count) {
 		case K_SHIFT|K_BACKSPACE:
 			Backspace();
 			break;
-	   	case K_SHIFT_TAB:
+		case K_SHIFT_TAB:
 			AlignChar();
 			break;
 		case K_CTRL_Y:
@@ -770,6 +1213,7 @@ bool LineEdit::Key(dword key, int count) {
 		}
 		return true;
 	}
+	dorectsel = false;
 	Sync();
 	return true;
 }
@@ -782,9 +1226,11 @@ void LineEdit::DragAndDrop(Point p, PasteClip& d)
 		NextUndo();
 		int a = sb.y;
 		int sell, selh;
+		WString text = GetWString(d);
 		if(GetSelection(sell, selh)) {
 			if(c >= sell && c < selh) {
-				RemoveSelection();
+				if(!IsReadOnly())
+					RemoveSelection();
 				if(IsDragAndDropSource())
 					d.SetAction(DND_COPY);
 				c = sell;
@@ -793,11 +1239,12 @@ void LineEdit::DragAndDrop(Point p, PasteClip& d)
 			if(d.GetAction() == DND_MOVE && IsDragAndDropSource()) {
 				if(c > sell)
 					c -= selh - sell;
-				RemoveSelection();
+				if(!IsReadOnly())
+					RemoveSelection();
 				d.SetAction(DND_COPY);
 			}
 		}
-		int count = Insert(c, GetWString(d));
+		int count = Insert(c, text);
 		sb.y = a;
 		SetFocus();
 		SetSelection(c, c + count);
@@ -857,13 +1304,13 @@ void LineEdit::LeftDrag(Point p, dword flags)
 		ImageDraw iw(sz);
 		iw.DrawRect(sz, Black());
 		iw.Alpha().DrawRect(sz, Black());
-		DrawTLText(iw.Alpha(), 0, 0, 9999, sample, Courier(10), White());
+		DrawTLText(iw.Alpha(), 0, 0, 9999, sample, CourierZ(10), White());
 		NextUndo();
-		if(DoDragAndDrop(ClipFmtsText(), iw) == DND_MOVE) {
+		if(DoDragAndDrop(ClipFmtsText(), iw) == DND_MOVE && !IsReadOnly()) {
 			RemoveSelection();
 			Action();
 		}
 	}
 }
 
-END_UPP_NAMESPACE
+}

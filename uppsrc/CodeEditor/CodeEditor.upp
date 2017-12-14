@@ -1,22 +1,45 @@
 description "The source files edit, derived from CtrlLib's LineEdit\377";
 
-optimize_speed;
-
 uses
-	CtrlLib;
+	CtrlLib,
+	plugin/pcre;
 
 file
-	CodeEditor.h,
+	CodeEditor.h options(BUILDER_OPTION) PCH,
+	Syntax readonly separator,
+	Syntax.h,
 	hl_color.i,
-	EditorBar.cpp,
+	Register.cpp,
+	HighlightOut.cpp,
 	Syntax.cpp,
-	Highlight.cpp,
+	Style.cpp,
+	CSyntax readonly separator,
+	CSyntax.h,
+	CSyntax.cpp,
+	CInit.cpp,
+	CHighlight.cpp,
+	CLogic.cpp,
+	RegisterSyntax.cpp,
+	DiffSyntax readonly separator,
+	DiffSyntax.h,
+	DiffSyntax.cpp,
+	TagSyntax readonly separator,
+	TagSyntax.h,
+	TagSyntax.cpp,
+	PythonSyntax readonly separator,
+	PythonSyntax.cpp,
+	PythonSyntax.h,
+	LogSyntax readonly separator,
+	LogSyntax.h,
+	LogSyntax.cpp,
+	Editor readonly separator,
+	EditorBar.cpp,
 	FindReplace.cpp,
 	Lang.cpp,
 	CodeEditor.cpp,
 	CodeEditor.lay,
 	CodeEditor.iml,
+	CodeEditor.t,
 	Info readonly separator,
-	Copying,
-	src.tpp;
+	Copying;
 

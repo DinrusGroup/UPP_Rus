@@ -1,7 +1,7 @@
 #include "gif.h"
 
 
-NAMESPACE_UPP
+namespace Upp {
 
 struct GifGlobalInfo // information about gif file
 {
@@ -584,7 +584,7 @@ void GIFRaster::Data::GetPagesData() {
 		page.width = width;
 		page.height = height;
 		page.disposal = disposal;
-	}	
+	}
 }
 
 GIFRaster::GIFRaster()
@@ -975,4 +975,9 @@ void GIFEncoder::WriteLineRaw(const byte *s)
 	data->WriteLineRaw(s);
 }
 
-END_UPP_NAMESPACE
+INITIALIZER(GifRaster)
+{
+	StreamRaster::Register<GIFRaster>();
+}
+
+}

@@ -12,6 +12,7 @@
 
 #include <X11/Xft/Xft.h>
 #include <X11/extensions/Xrender.h>
+#include <X11/extensions/Xinerama.h>
 
 #undef Picture
 #undef Time
@@ -24,7 +25,7 @@
 #define XFalse 0
 #define XTrue  1
 
-NAMESPACE_UPP
+namespace Upp {
 
 extern XDisplay   *Xdisplay;
 extern Visual     *Xvisual;
@@ -89,7 +90,7 @@ public:
 	virtual Rect GetPaintRect() const;
 
 	virtual	void DrawRectOp(int x, int y, int cx, int cy, Color color);
-	virtual void DrawImageOp(int x, int y, int cx, int cy, const Image& img, const Rect& src, Color color);
+	virtual void SysDrawImageOp(int x, int y, const Image& img, const Rect& src, Color color);
 	virtual void DrawLineOp(int x1, int y1, int x2, int y2, int width, Color color);
 
 	virtual void DrawPolyPolylineOp(const Point *vertices, int vertex_count,
@@ -125,8 +126,6 @@ private:
 	friend void StaticExitDraw_();
 	friend Font StdFont();
 
-	FontInfo  lastFont;
-
 	Point        actual_offset;
 	Point        actual_offset_bak;
 	struct Cloff : Moveable<Cloff> {
@@ -156,6 +155,8 @@ private:
 
 public:
 	static void Flush()                                 { XSync(Xdisplay, false); }
+	static Image X11Cursor(int c);
+	static void *CursorX11(const Image& img);
 
 	Point    GetOffset() const                          { return actual_offset; }
 
@@ -224,7 +225,7 @@ public:
 	~ImageDraw();
 };
 
-END_UPP_NAMESPACE
+}
 
 #include "X11/keysym.h"
 
@@ -243,7 +244,7 @@ END_UPP_NAMESPACE
 #define GUIPLATFORM_PASTECLIP_DECLS \
 	int          type;
 
-NAMESPACE_UPP
+namespace Upp {
 
 String XAtomName(Atom atom);
 Atom   XAtom(const char *name);
@@ -258,4 +259,4 @@ Index<Atom>& _NET_Supported();
 
 #define GUIPLATFORM_INCLUDE_AFTER "X11GuiA.h"
 
-END_UPP_NAMESPACE
+}

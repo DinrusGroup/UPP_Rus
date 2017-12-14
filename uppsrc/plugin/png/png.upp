@@ -1,5 +1,7 @@
 description "PNG image file format U++ encapsulation\3770,128,128";
 
+options(BUILDER_OPTION) NOWARNINGS;
+
 uses
 	Core,
 	Draw;
@@ -58,6 +60,7 @@ options(MSC8ARM) "-D_WIN32_WCE -DARM -D_ARM_ -DUNDER_CE -DUNICODE -D_UNICODE";
 
 file
 	png.h,
+	lib\png.h,
 	pnglib.c,
 	pngupp.cpp,
 	pngreg.icpp,

@@ -1,12 +1,12 @@
 #include "RichText.h"
 
-NAMESPACE_UPP
+namespace Upp {
 
-void  RichText::CatPick(pick_ RichText& p)
+void  RichText::CatPick(RichText&& p)
 {
 	MergeStyles(p);
 	int c = part.GetCount();
-	part.AppendPick(p.part);
+	part.AppendPick(pick(p.part));
 	for(int i = c; i < part.GetCount(); i++)
 		if(IsPara(i))
 			part[i].Get<Para>().Invalidate();
@@ -26,6 +26,7 @@ RichPos::RichPos()
 
 RichPos RichText::GetRichPos(int pos, int maxlevel) const
 {
+	Mutex::Lock __(mutex);
 	RichPos rp;
 	rp.level = 0;
 	RichTxt::GetRichPos(pos, rp, 0, maxlevel, style);
@@ -36,6 +37,7 @@ RichPos RichText::GetRichPos(int pos, int maxlevel) const
 
 int  RichText::AdjustCursor(int anchor, int cursor) const
 {
+	Mutex::Lock __(mutex);
 	int d = anchor;
 	const RichTxt& txt = GetConstText(anchor);
 	d -= anchor;
@@ -138,6 +140,8 @@ void RichText::Insert(int pos, const RichText& p)
 
 RichText RichText::Copy(int pos, int count) const
 {
+	Mutex::Lock __(mutex);
+
 	RichText r;
 	r.SetStyles(style);
 
@@ -166,7 +170,7 @@ RichText RichText::Copy(int pos, int count) const
 				r.Cat(txt.Get(pi, style));
 			else {
 				RichTable tab(txt.GetTable(pi), 1);
-				r.CatPick(tab);
+				r.CatPick(pick(tab));
 			}
 			pi++;
 		}
@@ -181,6 +185,8 @@ RichText RichText::Copy(int pos, int count) const
 
 RichText::FormatInfo RichText::GetFormatInfo(int pos, int count) const
 {
+	Mutex::Lock __(mutex);
+
 	const RichTxt& txt = GetConstText(pos);
 
 	count = min(txt.GetLength() - pos, count);
@@ -297,6 +303,7 @@ void RichText::ReStyle(int pos, const Uuid& id)
 
 RichText::Formating RichText::SaveFormat(int pos, int count) const
 {
+	Mutex::Lock __(mutex);
 	const RichTxt& txt = GetConstText(pos);
 	count += pos;
 	Formating r;
@@ -330,10 +337,27 @@ RichText::RichText(const RichText& x, int)
    : RichTxt(x, 1), style(x.style, 1)
 {
 	nolinks = x.nolinks;
+	footer_hack = x.footer_hack;
 }
 
-RichText::RichText(pick_ RichTxt& x, pick_ RichStyles& st)
-   : RichTxt(x), style(st)
+RichText::RichText(RichText&& x)
+   : RichTxt(pick(x)), style(pick(x.style))
+{
+	nolinks = x.nolinks;
+	footer_hack = x.footer_hack;
+}
+
+RichText& RichText::operator=(RichText&& x)
+{
+	(RichTxt&)(*this) = pick(x);
+	style = pick(x.style);
+	nolinks = x.nolinks;
+	footer_hack = x.footer_hack;
+	return *this;
+}
+
+RichText::RichText(RichTxt&& x, RichStyles&& st)
+   : RichTxt(pick(x)), style(pick(st))
 {
 	nolinks = false;
 }
@@ -347,4 +371,4 @@ void RichTextLayoutTracer::EndTableRow(PageY y) {}
 void RichTextLayoutTracer::TableCell(const Rect& page, PageY y, int i, int j, const RichTable& table, PageY npy) {}
 void RichTextLayoutTracer::EndTableCell(PageY y) {}
 
-END_UPP_NAMESPACE
+}

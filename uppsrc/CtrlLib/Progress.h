@@ -56,6 +56,7 @@ protected:
 	int      pos;
 	String   text;
 	int      granularity;
+	int      show_delay;
 	dword    set_time;
 	dword    show_time;
 	Ctrl    *owner;
@@ -89,10 +90,11 @@ public:
 	void     Reset();
 
 	void     Granularity(int ms)           { granularity = ms; }
+	void     Delay(int ms)                 { show_delay = ms; }
 
 	void     AlignText(int align)          { info.SetAlign(align); }
 
-	operator Gate2<int, int>()             { return callback(this, &Progress::SetCanceled); }
+	operator Gate<int, int>()             { return callback(this, &Progress::SetCanceled); }
 
 	Progress();
 	Progress(Ctrl *_owner);

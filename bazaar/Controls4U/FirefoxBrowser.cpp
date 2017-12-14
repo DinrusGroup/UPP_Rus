@@ -1,10 +1,9 @@
 #ifdef _WIN32
 
 #include <CtrlLib/CtrlLib.h>
+#include "ActiveX.h" 
 
 using namespace Upp;
-
-#include "ActiveX.h" 
 
 bool FirefoxBrowser::Browse(const String &strurl) {
 	IIWebBrowser webBrowser(this);
@@ -170,5 +169,18 @@ bool FirefoxBrowser::Stop() {
 	
 	return false;
 }
+
+bool FirefoxBrowser::SetSilent(bool val) {
+	IIWebBrowser webBrowser(this);
+	if (!webBrowser) 
+		return false;	
+	
+	VARIANT_BOOL vb = val ? VARIANT_TRUE : VARIANT_FALSE;
+	if (webBrowser->put_Silent(vb) == S_OK) 
+		return true;
+	
+	return false;
+}
+
 
 #endif

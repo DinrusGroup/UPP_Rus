@@ -48,7 +48,7 @@ bool SysExec(String const &command, String const &args, const VectorMap<String, 
 	dup2(ErrFile, 2);
 
 	// builds the arguments and the environment
-	char **argv = BuildArgs(GetFileName(command), args);
+	char **argv = BuildArgs(command, args);
 	char **envv = BuildEnv(Environ);
 	
 	// executes the command
@@ -104,7 +104,7 @@ bool SysExec(String const &command, String const &args, const VectorMap<String, 
 	{
 		char *buf = (char *)malloc(OutSize + 1);
 		lseek(OutFile, 0L, SEEK_SET);
-		int dummy = read(OutFile, buf, OutSize);
+		/*int dummy = */ (void)read(OutFile, buf, OutSize);
 		buf[OutSize] = 0;
 		OutStr.Cat(buf);
 		free(buf);
@@ -116,7 +116,7 @@ bool SysExec(String const &command, String const &args, const VectorMap<String, 
 	{
 		char *buf = (char *)malloc(ErrSize + 1);
 		lseek(ErrFile, 0L, SEEK_SET);
-		int dummy = read(ErrFile, buf, ErrSize);
+		/* int dummy = */(void)read(ErrFile, buf, ErrSize);
 		buf[ErrSize] = 0;
 		ErrStr.Cat(buf);
 		free(buf);

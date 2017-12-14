@@ -26,7 +26,7 @@ void TopicEditor::Label(String& label)
 	if(ref.item.IsMultiSelect())
 		ref.item.ClearSelection();
 	ref.item.MultiSelect(false);
-	ref.Title("Справка");
+	ref.Title("Reference");
 	ref.Set(label);
 	ref.classlist.Hide();
 	if(ref.Execute() != IDOK)
@@ -83,7 +83,7 @@ void TopicEditor::FindBrokenRef()
 			break;
 		c = topic.GetCursor() + 1;
 		if(c >= topic.GetCount()) {
-			PromptOK("Больше неверных сносок нет.");
+			PromptOK("No more invalid references.");
 			break;
 		}
 		topic.SetCursor(c);
@@ -94,17 +94,17 @@ void TopicEditor::FindBrokenRef()
 
 void TopicEditor::Tools(Bar& bar)
 {
-	bar.Add("Ввести элемент кода..", IdeCommonImg::InsertItem(), THISBACK(InsertItem))
+	bar.Add("Insert code item..", IdeCommonImg::InsertItem(), THISBACK(InsertItem))
 	   .Key(K_CTRL_INSERT);
 	String l = editor.GetFormatInfo().label;
 	bool b = l.GetCount() > 2 && l != "noref";
-	bar.Add(b, "Смотреть справочный код", IdeCommonImg::Source(), THISBACK(JumpToDefinition))
+	bar.Add(b, "See referenced code", IdeCommonImg::Source(), THISBACK(JumpToDefinition))
 	   .Key(K_ALT_J).Key(K_ALT_I);
-	bar.Add("Найти сломанные сылки..", IdeCommonImg::FindBrokenRef(), THISBACK(FindBrokenRef))
+	bar.Add("Find broken references..", IdeCommonImg::FindBrokenRef(), THISBACK(FindBrokenRef))
 	   .Key(K_CTRL_F3);
 #ifdef REPAIR
 	bar.Separator();
-	bar.Add("Ремонт!", CtrlImg::Toggle(), THISBACK(Repair)).Key(K_ALT_F5);
+	bar.Add("Repair!", CtrlImg::Toggle(), THISBACK(Repair)).Key(K_ALT_F5);
 	bar.Separator();
 #endif
 }
@@ -129,11 +129,11 @@ void TopicEditor::MainTool(Bar& bar)
 	bar.Gap();
 	editor.EditTools(bar);
 	bar.Gap();
-	bar.Add("Печать", CtrlImg::print(), THISBACK(Print))
+	bar.Add("Print", CtrlImg::print(), THISBACK(Print))
 	   .Key(K_CTRL_P);
 	bar.GapRight();
 	bar.Break();
-	editor.LabelTool(bar, 500, K_CTRL_M, "Справка по Коду");
+	editor.LabelTool(bar, 500, K_CTRL_M, "Code reference");
 	bar.Gap();
 	Tools(bar);
 	bar.Gap();
@@ -297,7 +297,7 @@ void TopicEditor::InsertItem()
 	if(IsNull(topicpath))
 		return;
 	Save();
-	ref.Title("Вставить");
+	ref.Title("Insert");
 	if(ref.item.IsCursor())
 		ref.item.SetFocus();
 	ref.item.MultiSelect();
@@ -357,14 +357,18 @@ void TopicEditor::GoTo(const String& _topic, const String& link, const String& c
 {
 	if(topic.FindSetCursor(_topic) && !IsNull(link)) {
 		editor.Select(editor.GetLength(), 0);
-		editor.GotoLabel(link);
+		if(!editor.GotoLabel(link)) {
+			String l = link;
+			LegacyRef(l);
+			editor.GotoLabel(l);
+		}
 		if(!IsNull(create)) {
 			if(!before)
-				for(bool firstpass = true; firstpass; firstpass = false)
+				for(int pass = 0; pass < 2; pass++)
 					for(;;) {
 						int c = editor.GetCursor();
 						RichText::FormatInfo f = editor.GetFormatInfo();
-						if(f.styleid == BeginUuid() || (IsNull(f.label) || f.label == "noref") && !firstpass)
+						if(f.styleid == BeginUuid() || (IsNull(f.label) || f.label == "noref") && pass)
 							break;
 						editor.NextPara();
 						if(editor.GetCursor() == c)
@@ -378,12 +382,12 @@ void TopicEditor::GoTo(const String& _topic, const String& link, const String& c
 void   TopicEditor::FixTopic()
 {
 	String nest;
-	if(!EditText(nest, "Закрепить тематику", "Гнездо"))
+	if(!EditText(nest, "Fix topic", "Nest"))
 		return;
 	CppBase& base = CodeBase();
 	int q = base.Find(nest);
 	if(q < 0) {
-		Exclamation("Гнездо не найдено");
+		Exclamation("Nest not found");
 		return;
 	}
 	Array<CppItem>& n = base[q];
@@ -435,7 +439,7 @@ void   TopicEditor::FixTopic()
 					RichText h = ParseQTF(styles + ("[s7; &]" + CreateQtf(link[q], n[q].name, m, GetLang(), true)));
 					if(h.GetPartCount())
 						h.RemovePart(h.GetPartCount() - 1);
-					result.CatPick(h);
+					result.CatPick(pick(h));
 				}
 				else
 				if(!started || p.GetLength())
@@ -447,7 +451,7 @@ void   TopicEditor::FixTopic()
 		else {
 			RichTable b;
 			b <<= txt.GetTable(i);
-			result.CatPick(b);
+			result.CatPick(pick(b));
 		}
 	RichPara empty;
 	result.Cat(empty);

@@ -3,7 +3,7 @@
 
 #ifdef GUI_WIN
 
-NAMESPACE_UPP
+namespace Upp {
 
 #define LLOG(x)  // LOG(x)
 
@@ -47,31 +47,37 @@ int  GetClipboardFormatCode(const char *format_id)
 	return format_map[f];
 }
 
+bool DebugClipboard()
+{
+	static bool b = GetIniKey("DebugClipboard") == "1";
+	return b;
+}
+
 void ClipboardLog(const char *txt)
 {
-#ifdef flagCHECKCLIPBOARD
+	if(!DebugClipboard()) 
+		return;
 	FileAppend f(GetExeDirFile("clip.log"));
-	f << txt << "\n";
-#endif
+	f << GetSysTime() << ": " << txt << "\n";
 }
 
 void ClipboardError(const char *txt)
 {
-#ifdef flagCHECKCLIPBOARD
+	if(!DebugClipboard()) 
+		return;
 	String s = txt;
 	s << "\n" << GetLastErrorMessage();
 	MessageBox(::GetActiveWindow(), s, "Clipboard error", MB_ICONSTOP | MB_OK | MB_APPLMODAL);
 	ClipboardLog(String().Cat() << s << " ERROR");
-#endif
 }
 
 String FromWin32CF(int cf);
 
 void ClipboardError(const char *txt, int format)
 {
-#ifdef flagCHECKCLIPBOARD
+	if(!DebugClipboard()) 
+		return;
 	ClipboardError(String().Cat() << txt << ' ' << FromWin32CF(format));
-#endif
 }
 
 bool ClipboardOpen()
@@ -80,10 +86,13 @@ bool ClipboardOpen()
 	// right after we close it thus blocking us to send more formats
 	// So the solution is to wait and retry... (mirek, 2011-01-09)
 	for(int i = 0; i < 200; i++) {
-		if(OpenClipboard(utilityHWND))
+		if(OpenClipboard(utilityHWND)) {
+			ClipboardLog("----- ClipboardOpen OK");
 			return true;
+		}
 		Sleep(10);
 	}
+	ClipboardError("ClipboardOpen has failed!");
 	return false;
 }
 
@@ -91,9 +100,6 @@ void ClearClipboard()
 {
 	GuiLock __;
 	sClipMap().Clear();
-#ifdef flagCHECKCLIPBOARD
-	DeleteFile(GetExeDirFile("clip.log"));
-#endif
 	ClipboardLog("* ClearClipboard");
 	if(ClipboardOpen()) {
 		if(!EmptyClipboard())
@@ -101,11 +107,6 @@ void ClearClipboard()
 		if(!CloseClipboard())
 			ClipboardError("CloseClipboard ERROR");
 	}
-#ifdef flagCHECKCLIPBOARD
-	else {
-		ClipboardError("OpenClipboard ERROR");
-	}
-#endif
 }
 
 void SetClipboardRaw(int format, const byte *data, int length)
@@ -117,11 +118,11 @@ void SetClipboardRaw(int format, const byte *data, int length)
 		handle = GlobalAlloc(GMEM_MOVEABLE | GMEM_DDESHARE, length + 2);
 		byte *ptr;
 		if(!handle) {
-			ClipboardLog("GlobalAlloc ERROR");
+			ClipboardError("GlobalAlloc ERROR");
 			return;
 		}
 		if(!(ptr = (byte *)GlobalLock(handle))) {
-			ClipboardLog("GlobalLock ERROR");
+			ClipboardError("GlobalLock ERROR");
 			GlobalFree(handle);
 			return;
 		}
@@ -130,7 +131,7 @@ void SetClipboardRaw(int format, const byte *data, int length)
 		ptr[length + 1] = 0;
 		GlobalUnlock(handle);
 	}
-	if(!SetClipboardData(format, handle)) {
+	if(SetClipboardData(format, handle) != handle) {
 		ClipboardError("SetCliboardData", format);
 		LLOG("SetClipboardData error: " << GetLastErrorMessage());
 		GlobalFree(handle);
@@ -146,8 +147,6 @@ void AppendClipboard(int format, const byte *data, int length)
 		if(!CloseClipboard())
 			ClipboardError("CloseClipboard", format);
 	}
-	else
-		ClipboardError("OpenClipboard", format);
 }
 
 void AppendClipboard(const char *format, const byte *data, int length)
@@ -204,10 +203,11 @@ void Ctrl::DestroyClipboard()
 String ReadClipboard(const char *format)
 {
 	GuiLock __;
-	if(!OpenClipboard(NULL))
+	if(!ClipboardOpen())
 		return Null;
 	HGLOBAL hmem = GetClipboardData(GetClipboardFormatCode(format));
 	if(hmem == 0) {
+		ClipboardError("GetClipboardData failed");
 		CloseClipboard();
 		return Null;
 	}
@@ -215,6 +215,7 @@ String ReadClipboard(const char *format)
 	ASSERT(src);
 	int length = (int)GlobalSize(hmem);
 	if(length < 0) {
+		ClipboardError("ReadCliboard length < 0");
 		CloseClipboard();
 		return Null;
 	}
@@ -226,18 +227,11 @@ String ReadClipboard(const char *format)
 
 void AppendClipboardText(const String& s)
 {
-#ifdef PLATFORM_WINCE
 	AppendClipboardUnicodeText(s.ToWString());
-#else
-	AppendClipboard("text", ToSystemCharset(s));
-#endif
 }
 
 void AppendClipboardUnicodeText(const WString& s)
 {
-#ifndef PLATFORM_WINCE
-	AppendClipboardText(s.ToString());
-#endif
 	AppendClipboard("wtext", (byte *)~s, 2 * s.GetLength());
 }
 
@@ -370,7 +364,7 @@ Image GetImage(PasteClip& clip)
 	if(clip.Accept("dib")) {
 		String data = ~clip;
 		if((unsigned)data.GetCount() < sizeof(BITMAPINFO)) return Null;
-		BITMAPINFO *lpBI = 	(BITMAPINFO *)~data;
+		BITMAPINFO *lpBI = (BITMAPINFO *)~data;
 		BITMAPINFOHEADER& hdr = lpBI->bmiHeader;
 		byte *bits = (byte *)lpBI + hdr.biSize;
 		if(hdr.biBitCount <= 8)
@@ -442,6 +436,12 @@ void AppendClipboardImage(const Image& img)
 	AppendClipboard("dib", img, sDib);
 }
 
+void Append(VectorMap<String, ClipData>& data, const Image& img)
+{
+	data.Add(ClipFmt<Image>(), ClipData(img, sImage));
+	data.Add("dib", ClipData(img, sDib));
+}
+
 bool AcceptFiles(PasteClip& clip)
 {
 	if(clip.Accept("files")) {
@@ -458,16 +458,15 @@ bool IsAvailableFiles(PasteClip& clip)
 
 struct sDROPFILES {
     DWORD offset;
-    POINT dummy;
-    BOOL  dummy2;
+    POINT pt;
+    BOOL  nc;
     BOOL  unicode;
 };
 
-Vector<String> GetFiles(PasteClip& clip)
+Vector<String> GetClipFiles(const String& data)
 {
 	GuiLock __;
 	Vector<String> f;
-	String data = clip;
 	if((unsigned)data.GetCount() < sizeof(sDROPFILES) + 2)
 		return f;
 	const sDROPFILES *df = (const sDROPFILES *)~data;
@@ -493,6 +492,29 @@ Vector<String> GetFiles(PasteClip& clip)
 	return f;
 }
 
+Vector<String> GetFiles(PasteClip& clip)
+{
+	GuiLock __;
+	Vector<String> f;
+	return GetClipFiles(clip.Get("files"));
+}
+
+void AppendFiles(VectorMap<String, ClipData>& clip, const Vector<String>& files)
+{
+	WString wfiles;
+	for(int i = 0; i < files.GetCount(); i++)
+		wfiles << files[i].ToWString() << (wchar)0;
+	sDROPFILES h;
+	h.unicode = true;
+	h.offset = sizeof(h);
+    GetCursorPos(&h.pt);
+    h.nc = TRUE;
+    String data;
+	data.Cat((byte *)&h, sizeof(h));
+	data.Cat((byte *)~wfiles, 2 * (wfiles.GetCount() + 1));
+	clip.GetAdd("files") = ClipData(data);
+}
+
 bool   Has(UDropTarget *dt, const char *fmt);
 String Get(UDropTarget *dt, const char *fmt);
 
@@ -515,6 +537,6 @@ void PasteClip::GuiPlatformConstruct()
 	dt = NULL;
 }
 
-END_UPP_NAMESPACE
+}
 
 #endif

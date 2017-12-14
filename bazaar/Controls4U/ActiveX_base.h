@@ -1,6 +1,9 @@
 #ifndef _hdIE_ActiveX_Support_h_
 #define _hdIE_ActiveX_Support_h_
 
+using namespace Upp;
+//NAMESPACE_UPP
+
 bool BSTRSet(const String str, BSTR &bstr);
 String BSTRGet(BSTR &bstr);
 	
@@ -109,13 +112,14 @@ private:
 	LRESULT WindowProc(UINT message, WPARAM wParam, LPARAM lParam);
 	void DoResize();
 	
-	AXClientSite pClientSite;
-	
 	CLSID clsid;
 	String name;
-	IOleObject *oleObj;	
 	bool status;
+	IOleObject *oleObj;	
+	
+	AXClientSite pClientSite;
 };
 
+//END_UPP_NAMESPACE
 
 #endif

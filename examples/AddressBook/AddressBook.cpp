@@ -24,8 +24,6 @@ class AddressBook : public WithAddressBookLayout<TopWindow> {
 	void SaveAs();
 	void Print();
 	void Quit();
-	void FileMenu(Bar& bar);
-	void MainMenu(Bar& bar);
 
 	typedef AddressBook CLASSNAME;
 
@@ -44,34 +42,27 @@ AddressBook::AddressBook()
 	tab.Add(search, "Search");
 	ActiveFocus(search.name);
 	search.oname = true;
-	search.oname <<= search.osurname <<= search.oaddress
-	             <<= search.oemail <<= THISBACK(SetupSearch);
+	search.oname ^= search.osurname ^= search.oaddress ^= search.oemail ^= THISFN(SetupSearch);
 	array.AddColumn("Name");
 	array.AddColumn("Surname");
 	array.AddColumn("Address");
 	array.AddColumn("Email");
-	modify.add <<= THISBACK(Add);
-	modify.change <<= THISBACK(Change);
-	search.search <<= THISBACK(Search);
+	modify.add ^= THISFN(Add);
+	modify.change ^= THISFN(Change);
+	search.search ^= THISFN(Search);
 	SetupSearch();
 	fs.AllFilesType();
-	menu.Set(THISBACK(MainMenu));
-}
-
-void AddressBook::FileMenu(Bar& bar)
-{
-	bar.Add("Open..", CtrlImg::open(), THISBACK(Open));
-	bar.Add("Save", CtrlImg::save(), THISBACK(Save));
-	bar.Add("Save as..", CtrlImg::save_as(), THISBACK(SaveAs));
-	bar.Separator();
-	bar.Add("Print", CtrlImg::print(), THISBACK(Print));
-	bar.Separator();
-	bar.Add("Quit", THISBACK(Quit));
-}
-
-void AddressBook::MainMenu(Bar& bar)
-{
-	bar.Add("File", THISBACK(FileMenu));
+	menu.Set([=](Bar& bar) {
+		bar.Sub("File", [=](Bar& bar) {
+			bar.Add("Open..", CtrlImg::open(), THISFN(Open));
+			bar.Add("Save", CtrlImg::save(), THISFN(Save));
+			bar.Add("Save as..", CtrlImg::save_as(), THISFN(SaveAs));
+			bar.Separator();
+			bar.Add("Print", CtrlImg::print(), THISFN(Print));
+			bar.Separator();
+			bar.Add("Quit", THISFN(Quit));
+		});
+	});
 }
 
 void AddressBook::SetupSearch()

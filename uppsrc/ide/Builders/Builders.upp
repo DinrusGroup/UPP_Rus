@@ -1,24 +1,43 @@
-description "RusIDE -построители - процедуры для компиляции программ\377B";
+description "TheIDE - builders - routines to compile programs\377B";
 
 noblitz;
 
 uses
-	coff\binobj,
-	ide\Core;
+	ide\Core,
+	ide/Android,
+	ide/Java,
+	ide/Android;
 
 file
-	Builders.h charset "UTF-8",
+	Builders.h options(BUILDER_OPTION) PCH,
 	CppBuilder.cpp,
-	DmcBuilder.icpp,
 	MakeFile.cpp,
-	GccBuilder.icpp,
-	MscBuilder.icpp,
-	OwcBuilder.icpp,
-	JavaBuilder.icpp,
-	ScriptBuilder.icpp,
-	"Инфо" readonly separator,
+	coff.h,
+	Builders readonly separator,
+	GccBuilder.cpp,
+	MscBuilder.cpp,
+	JavaBuilder.cpp,
+	ScriptBuilder.cpp,
+	Android readonly separator,
+	Android.h,
+	AndroidProject.cpp,
+	AndroidApplicationMakeFile.cpp,
+	AndroidMakeFile.cpp,
+	AndroidModuleMakeFile.cpp,
+	"Android Builder" readonly separator,
+	AndroidBuilder.h,
+	AndroidBuilder.cpp,
+	AndroidBuilderCommands.cpp,
+	AndroidBuilderUtils.cpp,
+	AndroidModuleMakeFileBuilder.cpp,
+	Components readonly separator,
+	BuilderComponents.h,
+	Blitz.cpp,
 	Build.h,
 	Build.cpp,
-	Copying,
-	src.tpp;
+	Helpers readonly separator,
+	BuilderUtils.h,
+	BuilderUtils.cpp,
+	Info readonly separator,
+	Copying;
 

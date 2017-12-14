@@ -1,6 +1,6 @@
 #include "BlueBar.h"
 
-NAMESPACE_UPP
+namespace Upp {
 
 #define IMAGECLASS BlueImg
 #define IMAGEFILE <art/BlueBar/BlueSkin.iml>
@@ -34,7 +34,7 @@ void InstallBlueMenuBar()
 	s.look = BlueImg::LK();
 	s.topitem[1] = s.item = BlueImg::BH();
 	s.itemtext = s.topitemtext[0] = s.topitemtext[1] = s.topitemtext[2] = SColorText();
-	s.leftgap = 24;
+	s.leftgap = Zx(24);
 	s.lsepm = s.leftgap + s.textgap;
 	s.popupiconbar = BlueImg::LR();
 	ImageBuffer ib(7, 7);
@@ -53,4 +53,4 @@ void InstallBlueBar()
 	InstallBlueToolBar();
 }
 
-END_UPP_NAMESPACE
+}

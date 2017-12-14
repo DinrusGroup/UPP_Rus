@@ -3,7 +3,7 @@ description "Tiny C Compiler wrapper\377B255,170,0";
 uses
 	Core;
 
-uses(POSIX) plugin/tcc;
+uses(CLANG | GCC) plugin/tcc;
 
 options(POSIX) -DLIBTCC;
 

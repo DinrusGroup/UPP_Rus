@@ -51,8 +51,8 @@ monospace glyphs `-  the width of character is constant).&]
 [s5;:LineEdit`:`:GetGPos`(int`,int`)const: [@(0.0.255) int]_[* GetGPos]([@(0.0.255) int]_[*@3 l
 n], [@(0.0.255) int]_[*@3 cl])_[@(0.0.255) const]&]
 [s2;%% Returns `"graphical`" position of [%-*@3 ln] line and [%-*@3 cl] 
-column. This takes into account any tabulator characters int 
-the line.&]
+column. This takes into account any tabulator characters in the 
+line.&]
 [s3; &]
 [s4; &]
 [s5;:LineEdit`:`:GetMousePos`(Point`)const: [@(0.0.255) int]_[* GetMousePos]([_^Point^ Poin
@@ -85,12 +85,52 @@ oint]_[*@3 pos])_[@(0.0.255) const]&]
 Does not account for tabulators.&]
 [s3; &]
 [s4; &]
+[s5;:LineEdit`:`:SetRectSelection`(int`,int`): [@(0.0.255) void]_[* SetRectSelection]([@(0.0.255) i
+nt]_[*@3 l], [@(0.0.255) int]_[*@3 h])&]
+[s2;%% Sets rectangular selection.&]
+[s3;%% &]
+[s4; &]
+[s5;:LineEdit`:`:SetRectSelection`(const Rect`&`): [@(0.0.255) void]_[* SetRectSelection](
+[@(0.0.255) const]_[_^Rect^ Rect][@(0.0.255) `&]_[*@3 rect])&]
+[s2;%% Same as SetRectSelection(GetGPos(rect.top, rect.left), GetGPos(rect.bottom, 
+rect.right));&]
+[s3;%% &]
+[s4; &]
+[s5;:LineEdit`:`:GetRectSelection`(`)const: [_^Rect^ Rect]_[* GetRectSelection]()_[@(0.0.255) c
+onst]&]
+[s2;%% Returns rectangular selection (as `"graphical`").&]
+[s3; &]
+[s4; &]
+[s5;:LineEdit`:`:GetRectSelection`(const Rect`&`,int`,int`&`,int`&`): [@(0.0.255) bool]_
+[* GetRectSelection]([@(0.0.255) const]_[_^Rect^ Rect][@(0.0.255) `&]_[*@3 rect], 
+[@(0.0.255) int]_[*@3 line], [@(0.0.255) int`&]_[*@3 l], [@(0.0.255) int]_`&[*@3 h])&]
+[s2;%% Returns lower and upper limits [%-*@3 l] [%-*@3 h] of characters 
+of [%-*@3 line] that are in rectangular selection [%-*@3 rect]. Returns 
+false when line is not in selection.&]
+[s3;%% &]
+[s4; &]
 [s5;:LineEdit`:`:ScrollUp`(`): [@(0.0.255) void]_[* ScrollUp]()&]
 [s2;%% Scrolls the text single line up.&]
 [s3; &]
 [s4; &]
 [s5;:LineEdit`:`:ScrollDown`(`): [@(0.0.255) void]_[* ScrollDown]()&]
 [s2;%% Scrolls the text single line down.&]
+[s3; &]
+[s4; &]
+[s5;:LineEdit`:`:ScrollPageUp`(`): [@(0.0.255) void]_[* ScrollPageUp]()&]
+[s2;%% Scrolls the text one page up.&]
+[s3; &]
+[s4; &]
+[s5;:LineEdit`:`:ScrollPageDown`(`): [@(0.0.255) void]_[* ScrollPageDown]()&]
+[s2;%% Scrolls the text one page down.&]
+[s3; &]
+[s4; &]
+[s5;:LineEdit`:`:ScrollBegin`(`): [@(0.0.255) void]_[* ScrollBegin]()&]
+[s2;%% Scrolls the text to the begin.&]
+[s3; &]
+[s4; &]
+[s5;:LineEdit`:`:ScrollEnd`(`): [@(0.0.255) void]_[* ScrollEnd]()&]
+[s2;%% Scrolls the text to the end.&]
 [s3; &]
 [s4; &]
 [s5;:LineEdit`:`:GetLineScreenRect`(int`)const: [_^Rect^ Rect]_[* GetLineScreenRect]([@(0.0.255) i
@@ -100,6 +140,12 @@ nt]_[*@3 line])_[@(0.0.255) const]&]
 [s2;%% Scrolls the text to place the line with cursor is first in 
 the view.&]
 [s3; &]
+[s4; &]
+[s5;:LineEdit`:`:TopCursor`(int`): [@(0.0.255) void]_[* TopCursor]([@(0.0.255) int]_[*@3 line
+s]_`=_[@3 0])&]
+[s2;%% Scrolls the text to place the line with cursor placed [%-*@3 lines] 
+from the top.&]
+[s3;%% &]
 [s4; &]
 [s5;:LineEdit`:`:CenterCursor`(`): [@(0.0.255) void]_[* CenterCursor]()&]
 [s2;%% Scrolls the text to place the line with cursor at the center 
@@ -162,6 +208,20 @@ the text).&]
 [s4; &]
 [s5;:LineEdit`:`:CutLine`(`): [@(0.0.255) void]_[* CutLine]()&]
 [s2;%% Stores a line to clipboard and calls DeleteLine.&]
+[s3; &]
+[s4; &]
+[s5;:LineEdit`:`:PasteColumn`(const WString`&`): [@(0.0.255) void]_[* PasteColumn]([@(0.0.255) c
+onst]_[_^WString^ WString][@(0.0.255) `&]_[*@3 text])&]
+[s2;%% Pastes lines of [%-*@3 text] into actual graphical column of 
+text.&]
+[s3;%% &]
+[s4; &]
+[s5;:LineEdit`:`:PasteColumn`(`): [@(0.0.255) void]_[* PasteColumn]()&]
+[s2;%% PasteColumn with clipboard text.&]
+[s3; &]
+[s4; &]
+[s5;:LineEdit`:`:Sort`(`): [@(0.0.255) void]_[* Sort]()&]
+[s2;%% Sorts lines based on rectangular selection.&]
 [s3; &]
 [s4; &]
 [s5;:LineEdit`:`:GetScrollPos`(`)const: [_^Point^ Point]_[* GetScrollPos]()_[@(0.0.255) con
@@ -248,6 +308,11 @@ rColumn]([@(0.0.255) int]_[*@3 col], [_^Color^ Color]_[*@3 c]_`=_SColorFace())&]
 [s2;%% Displays a border column of width [%-*@3 col] and color [%-*@3 c].&]
 [s3; &]
 [s4; &]
+[s5;:Upp`:`:LineEdit`:`:GetBorderColumn`(`)const: [@(0.0.255) int]_[* GetBorderColumn]()_
+[@(0.0.255) const]&]
+[s2;%% Return border column position.&]
+[s3; &]
+[s4; &]
 [s5;:LineEdit`:`:SetFont`(Font`): [_^LineEdit^ LineEdit][@(0.0.255) `&]_[* SetFont]([_^Font^ F
 ont]_[*@3 f])&]
 [s2;%% Sets the font. HighlightLine can replace this font, however, 
@@ -284,12 +349,35 @@ Default is off.&]
 [s5;:LineEdit`:`:ShowSpaces`(bool`): [_^LineEdit^ LineEdit][@(0.0.255) `&]_[* ShowSpaces]([@(0.0.255) b
 ool]_[*@3 ss]_`=_[@(0.0.255) true])&]
 [s2;%% In this mode widget displays spaces with faint dots. Default 
-is off..&]
+is off.&]
 [s3;%% &]
 [s4; &]
-[s5;:LineEdit`:`:IsShowSpacess`(`)const: [@(0.0.255) bool]_[* IsShowSpacess]()_[@(0.0.255) c
-onst]&]
+[s5;:LineEdit`:`:IsShowSpaces`(`)const: [@(0.0.255) bool]_[* IsShowSpaces]()_[@(0.0.255) co
+nst]&]
 [s2;%% Returns status of ShowSpaces.&]
+[s3; &]
+[s4; &]
+[s5;:Upp`:`:LineEdit`:`:ShowLineEndings`(bool`): [_^Upp`:`:LineEdit^ LineEdit][@(0.0.255) `&
+]_[* ShowLineEndings]([@(0.0.255) bool]_[*@3 sl]_`=_[@(0.0.255) true])&]
+[s2;%% In this mode widget displays line endings with faint dots. 
+Default is off.&]
+[s3;%% &]
+[s4; &]
+[s5;:Upp`:`:LineEdit`:`:IsShowLineEndings`(`)const: [@(0.0.255) bool]_[* IsShowLineEnding
+s]()_[@(0.0.255) const]&]
+[s2;%% Returns status of ShowLineEndings.&]
+[s3; &]
+[s4; &]
+[s5;:Upp`:`:LineEdit`:`:WarnWhiteSpace`(bool`): [_^Upp`:`:LineEdit^ LineEdit][@(0.0.255) `&
+]_[* WarnWhiteSpace]([@(0.0.255) bool]_[*@3 b]_`=_[@(0.0.255) true])&]
+[s2;%% In this mode widget shows whitespaces that seem to be misplaced, 
+like tabs after spaces or if line ends with spaces. Default is 
+off.&]
+[s3;%% &]
+[s4; &]
+[s5;:Upp`:`:LineEdit`:`:IsWantWhiteSpace`(`)const: [@(0.0.255) bool]_[* IsWantWhiteSpace](
+)_[@(0.0.255) const]&]
+[s2;%% Returns status of WarnWhiteSpace.&]
 [s3; &]
 [s4; &]
 [s5;:LineEdit`:`:WithCutLine`(bool`): [_^LineEdit^ LineEdit][@(0.0.255) `&]_[* WithCutLine](
@@ -341,4 +429,4 @@ ool]_[* operator`=`=]([@(0.0.255) const]_[_^LineEdit`:`:Highlight^ Highlight][@(
 ]_[*@3 h])_[@(0.0.255) const]&]
 [s2;%% Equality comparison.&]
 [s3; &]
-[s0; ]
+[s0; ]]

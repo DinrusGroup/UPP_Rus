@@ -1,6 +1,6 @@
 #include "CtrlLib.h"
 
-NAMESPACE_UPP
+namespace Upp {
 
 int GetTextSize(const FontInfo& fi, const wchar *text, const wchar *end) {
 	int w = 0;
@@ -157,7 +157,7 @@ void FileList::StartEdit() {
 	r.bottom = r.top + fcy + 2;
 	edit.SetRect(r);
 	edit.SetFont(cf.font);
-	edit = cf.name.ToWString();
+	edit <<= cf.name.ToWString();
 	edit.Show();
 	edit.SetFocus();
 	int pos = int(GetFileExtPos(cf.name) - ~cf.name);
@@ -249,7 +249,7 @@ void FileList::Insert(int ii,
 	m.descfont = descfont;
 	m.data = data;
 	m.underline = uln;
-	ColumnList::Insert(ii, v, !m.isdir);
+	ColumnList::Insert(ii, v, !m.isdir || selectdir);
 	KillEdit();
 }
 
@@ -275,7 +275,7 @@ void FileList::Set(int ii,
 	m.descfont = descfont;
 	m.data = data;
 	m.underline = uln;
-	ColumnList::Set(ii, v, !m.isdir);
+	ColumnList::Set(ii, v, !m.isdir || selectdir);
 	KillEdit();
 }
 
@@ -319,7 +319,7 @@ void FileList::Add(const String& name, const Image& icon, Font font, Color ink,
 	m.descfont = descfont;
 	m.data = data;
 	m.underline = uln;
-	ColumnList::Add(v, !m.isdir);
+	ColumnList::Add(v, !m.isdir || selectdir);
 }
 
 const FileList::File& FileList::Get(int i) const
@@ -369,17 +369,18 @@ void FileList::Sort(const Order& order)
 }
 
 FileList::FileList() {
-	iconwidth = 16;
-	ItemHeight(max(Draw::GetStdFontCy(), 16));
+	iconwidth = DPI(16);
+	ItemHeight(max(Draw::GetStdFontCy(), DPI(17)));
 	Ctrl::Add(edit);
 	edit.Hide();
 	edit.SetFrame(BlackFrame());
 	renaming = false;
 	justname = false;
 	accelkey = false;
+	selectdir = false;
 	SetDisplay(*this);
 }
 
 FileList::~FileList() {}
 
-END_UPP_NAMESPACE
+}

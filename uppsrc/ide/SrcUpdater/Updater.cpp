@@ -76,7 +76,7 @@ String FindGlobalSrc(){
 	static const char* dirs[]={"/usr/share/upp","/usr/local/share/upp","/usr/local/lib/upp","/usr/lib/upp"};
 	int n=4;
 #else
-	static const char* dirs[]={}; // Program Files?
+	static const char* dirs[]={"C:\\upp"}; // Program Files?
 	int n=0;
 #endif
 	for(int i=0;i<n;i++){
@@ -114,7 +114,7 @@ bool SourceUpdater::NeedsUpdate(bool verbose){
 					break;
 				}
 				case 1:{
-					//sync with the version of RusIDE
+					//sync with the version of theide
 					global=IDE_VERSION;
 					break;
 				}
@@ -127,8 +127,8 @@ bool SourceUpdater::NeedsUpdate(bool verbose){
 		default: return false;
 	}
 	LLOG("NeedsUpdate: local="<<local<<", global="<<global);
-	
-	
+
+
 	if(ScanInt(global)<=UpdaterCfg().ignored || global.IsVoid() || local.IsVoid())
 		return false;
 	text<<="[ [ [/ Newer version of U`+`+ sources is available.]&][ &]"
@@ -179,7 +179,7 @@ void SourceUpdater::CheckLocalSvnFinished(){
 	       "[ {{5000:5000FNGN@N; [ [1 Curent local version:]]:: [ [1 "+local+"]]:: [ [1 Will update to:]]:: [ [1 "+global+"]]}}][ &&]"
 	       "[1# If you choose to update now, your local sources (directory "+DeQtf(UpdaterCfg().localsrc)+") will be compared to the files in SVN repository ("+DeQtf(UpdaterCfg().svnserver)+"). If you modified the files in your local copy, you will be able to choose appropriate actions for each changed file before writing anything on your hard drive.]";
 	UpdaterCfg().available=(ScanInt(local)<ScanInt(global));
-	LLOG("Callback chain finished: local="<<local<<", global="<<global);
+	LLOG("Event<>  chain finished: local="<<local<<", global="<<global);
 	UpdaterCfg().last=GetUtcTime();
 	StoreAsXMLFile(UpdaterCfg(),"SourceUpdater",ConfigFile("updates.xml"));
 	if(UpdaterCfg().available)

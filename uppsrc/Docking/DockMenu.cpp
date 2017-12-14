@@ -1,6 +1,6 @@
 #include "Docking.h"
 
-NAMESPACE_UPP
+namespace Upp {
 
 #define DOCKBACK(x)               callback(dock, &DockWindow::x)
 #define DOCKBACK1(x, arg)         callback1(dock, &DockWindow::x, arg)
@@ -43,13 +43,13 @@ void DockMenu::GroupListMenu(Bar& bar)
 	for (int i = 0; i < groups.GetCount(); i++)
 		bar.Add(groups[i], THISBACK1(GroupWindowsMenu, groups[i]));
 	if (dcs.GetCount())
-		bar.Add(t_("Все"), THISBACK1(GroupWindowsMenu, String(Null)));
+		bar.Add(t_("All"), THISBACK1(GroupWindowsMenu, String(Null)));
 }
 
 void DockMenu::WindowListMenu(Bar& bar, String group)
 {
 	const Vector<DockableCtrl *>& dcs = dock->GetDockableCtrls();
-	if (group == t_("Все")) group = Null;
+	if (group == t_("All")) group = Null;
 	
 	for (int i = 0; i < dcs.GetCount(); i++) {
 		if (IsNull(group) || group == dcs[i]->GetGroup())
@@ -59,20 +59,20 @@ void DockMenu::WindowListMenu(Bar& bar, String group)
 
 void DockMenu::GroupMenu(Bar& bar, String group)
 {
-	if (group.IsEmpty()) group = t_("Все");
+	if (group.IsEmpty()) group = t_("All");
 	String text = group;
 	text.Insert(0, ' ');
 
-	bar.Add(true, t_("Док") + text, 	THISBACK1(GroupDockMenu, group));
-	bar.Add(true, t_("Плавающее") + text, 	DOCKBACK1(FloatGroup, group));
-	if (dock->IsAutoHide()) bar.Add(true, t_("Автоскрытие") + text, THISBACK1(GroupHideMenu, group));
+	bar.Add(true, t_("Dock") + text, 	THISBACK1(GroupDockMenu, group));
+	bar.Add(true, t_("Float") + text, 	DOCKBACK1(FloatGroup, group));
+	if (dock->IsAutoHide()) bar.Add(true, t_("Auto-Hide") + text, THISBACK1(GroupHideMenu, group));
 	bar.Separator();
-	bar.Add(true, t_("Сделать Док-Вкладкой") + text, THISBACK1(GroupTabDockMenu, group));
-	bar.Add(true, t_("Сделать Плавающей Вкладкой") + text, DOCKBACK1(TabFloatGroup, group));
+	bar.Add(true, t_("Tabify and Dock") + text, THISBACK1(GroupTabDockMenu, group));
+	bar.Add(true, t_("Tabify and Float") + text, DOCKBACK1(TabFloatGroup, group));
 	if(dock->HasCloseButtons())
 	{
 		bar.Separator();
-		bar.Add(true, t_("Закрыть") + text, CtrlImg::Remove(), DOCKBACK1(CloseGroup, group));		
+		bar.Add(true, t_("Close") + text, CtrlImg::Remove(), DOCKBACK1(CloseGroup, group));		
 	}
 }
 
@@ -89,16 +89,16 @@ void DockMenu::WindowMenu(Bar& bar, DockableCtrl *dc)
 	if(dock->HasCloseButtons())
 	{
 		bar.Separator();
-		bar.Add(true, t_("Закрыть"), CtrlImg::Remove(), THISBACK1(MenuClose, dc));
+		bar.Add(true, t_("Close"), CtrlImg::Remove(), THISBACK1(MenuClose, dc));
 	}
 }
 
 void DockMenu::WindowMenuNoClose(Bar& bar, DockableCtrl *dc)
 {
-	bar.Add(true, t_("Док"), 		THISBACK1(WindowDockMenu, dc)).Check(dc->IsDocked() || dc->IsTabbed());
-	bar.Add(true, t_("Плавающее"), 		THISBACK1(MenuFloat, dc)).Check(dc->IsFloating());
+	bar.Add(true, t_("Dock"), 		THISBACK1(WindowDockMenu, dc)).Check(dc->IsDocked() || dc->IsTabbed());
+	bar.Add(true, t_("Float"), 		THISBACK1(MenuFloat, dc)).Check(dc->IsFloating());
 	if (dock->IsAutoHide()) 
-		bar.Add(true, t_("Автоскрытие"), 	THISBACK1(WindowHideMenu, dc)).Check(dc->IsAutoHide());
+		bar.Add(true, t_("Auto-Hide"), 	THISBACK1(WindowHideMenu, dc)).Check(dc->IsAutoHide());
 }
 
 void DockMenu::GroupAlignMenu(Bar& bar, String group, int mode)
@@ -143,15 +143,15 @@ const char * DockMenu::AlignText(int align)
 {
 	switch (align) {
 	case DOCK_LEFT:	
-		return t_("Слева");
+		return t_("Left");
 	case DOCK_TOP:
-		return t_("Вверху");
+		return t_("Top");
 	case DOCK_RIGHT:
-		return t_("Справа");
+		return t_("Right");
 	case DOCK_BOTTOM:
-		return t_("Внизу");
+		return t_("Bottom");
 	}
 	return 0;
 }
 
-END_UPP_NAMESPACE
+}

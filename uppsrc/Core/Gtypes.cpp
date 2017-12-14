@@ -1,19 +1,6 @@
 #include "Core.h"
 
-NAMESPACE_UPP
-
-INITBLOCK {
-	Point p;
-	RichValue<Point>::Register();
-	RichValue<Point64>::Register();
-	RichValue<Pointf>::Register();
-	RichValue<Size>::Register();
-	RichValue<Size64>::Register();
-	RichValue<Sizef>::Register();
-	RichValue<Rect>::Register();
-	RichValue<Rect64>::Register();
-	RichValue<Rectf>::Register();
-}
+namespace Upp {
 
 //template <>
 //void Rect_<double>::Union(const Rect_<double>& r) {
@@ -114,6 +101,16 @@ Size  GetFitSize(Size sz, int cx, int cy)
 		return iscale(sz, cx, sz.cx);
 }
 
+Sizef GetFitSize(Sizef sz, double cx, double cy)
+{
+	if(cx <= 0 || cy <= 0 || sz.cx <= 0 || sz.cy <= 0)
+		return Size(0, 0);
+	if(cx * sz.cy >= cy * sz.cx) // too high
+		return sz * cy / sz.cy;
+	else
+		return sz * cx / sz.cx;
+}
+
 double SquareDist(const Pointf& p1, const Pointf& p2)
 {
 	return (p1.x - p2.x) * (p1.x - p2.x) + (p1.y - p2.y) * (p1.y - p2.y);
@@ -164,4 +161,4 @@ double Bearing(const Pointf& p)
 	return atan2(p.y, p.x);
 }
 
-END_UPP_NAMESPACE
+}

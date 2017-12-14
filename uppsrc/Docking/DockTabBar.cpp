@@ -1,10 +1,9 @@
-#include "DockTabBar.h"
-#include "DockCont.h"
+#include "Docking.h"
 
 #define ANIM_SPEED 10
 #define ANIM_FRAMES 10
 
-NAMESPACE_UPP
+namespace Upp {
 
 // DockTabBar
 int AutoHideBar::autohide_timeout = 1000;
@@ -133,8 +132,8 @@ void AutoHideBar::TabHighlight()
 	if (c) {
 		ASSERT(ix >= 0 && ix < GetCount());
 		// Clear WhenHighlight ot prevent stack overflow. Perhaps a better solution should be found...
-		Callback cb = WhenHighlight;
-		WhenHighlight = Callback();
+		Event<> cb = WhenHighlight;
+		WhenHighlight = Null;
 		SetCursor(ix);
 		ShowAnimate(c);
 		WhenHighlight = cb;
@@ -298,4 +297,4 @@ void AutoHideBar::HidePopup::ChildMouseEvent(Ctrl *child, int event, Point p, in
 		WhenEnter();
 }
 
-END_UPP_NAMESPACE
+}

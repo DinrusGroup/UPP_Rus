@@ -1,5 +1,9 @@
+#ifdef _WIN32
+
 #ifndef _OfficeAutomation_h
 #define _OfficeAutomation_h
+
+#include <Functions4U/Functions4U.h>
 
 using namespace Upp;
 
@@ -53,5 +57,7 @@ public:
 	Doc_METHOD_LIST	
 };
 
+
+#endif
 
 #endif

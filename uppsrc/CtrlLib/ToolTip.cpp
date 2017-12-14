@@ -1,6 +1,6 @@
 #include "CtrlLib.h"
 
-NAMESPACE_UPP
+namespace Upp {
 
 #define LLOG(x)  // DLOG(x)
 
@@ -11,7 +11,7 @@ ToolTip::ToolTip()
 
 Size ToolTip::GetMinSize() const
 {
-	return AddFrameSize(GetSmartTextSize(text) + 4);
+	return AddFrameSize(GetSmartTextSize(text, StdFont(), GetWorkArea().GetWidth() / 2) + 4);
 }
 
 void ToolTip::Paint(Draw& w)
@@ -24,7 +24,7 @@ void ToolTip::Paint(Draw& w)
 void ToolTip::PopUp(Ctrl *owner, Point p, bool effect)
 {
 	LLOG("ToolTip::PopUp" << Desc(owner) << " @ " << p);
-	Rect r = owner->GetWorkArea();
+	Rect r = GetMouseWorkArea();
 	Size sz = GetMinSize();
 	p.x = max(p.x + sz.cx > r.right ? r.right - sz.cx : p.x, r.left);
 	p.y = max(p.y + sz.cy > r.bottom ? r.bottom - sz.cy : p.y, r.top);
@@ -68,15 +68,15 @@ void ShowToolTip()
 		String text = tipctrl->GetTip();
 		LLOG("-> showing tip: " << text << " tipctrl: " << UPP::Name(tipctrl));
 		Ctrl *top = tipctrl->GetTopCtrl();
-		if(!text.IsEmpty() && top && (top->IsForeground() || top->IsPopUp())) {
+		ToolTip& q = AppToolTip();
+		q.Set(text);
+		if(text.GetCount() && top && (top->IsForeground() || top->IsPopUp())) {
 			LLOG("-> foreground");
-			ToolTip& q = AppToolTip();
-			q.Set(text);
 			Size sz = q.GetMinSize();
-			Rect r = top->GetWorkArea();
+			Rect r = Ctrl::GetMouseWorkArea();
 			Point p = GetMousePos() + Size(0, 22);
 			if(p.y + sz.cy > r.bottom)
-				p = GetMousePos() - Size(0, 22);
+				p = GetMousePos() - Size(0, 6) - sz.cy;
 			q.PopUp(top, p, !showmode);
 			showmode = true;
 			KillTimeCallback((void *)EndShowMode);
@@ -84,7 +84,7 @@ void ShowToolTip()
 		}
 		LLOG("-> background / empty text, top = " << UPP::Name(top));
 	}
-	SetTimeCallback(200, callback(EndShowMode), (void *)EndShowMode);
+	SetTimeCallback(500, callback(EndShowMode), (void *)EndShowMode);
 }
 
 void SyncToolTip(Ctrl *ctrl)
@@ -184,7 +184,7 @@ void QTFPopUp::PopUp(Ctrl *parent) {
 	Rect r = Rect(0, 0, width, maxheight);
 	GetFrame().FrameLayout(r);
 	int cy = min(maxheight, GetHeight(r.Width()) + maxheight - r.Height());
-	Rect area = GetWorkArea();
+	Rect area = GetMouseWorkArea();
 	Point p = GetMousePos();
 	r.top = max(area.top, p.y + 16);
 	r.bottom = r.top + cy;
@@ -241,4 +241,4 @@ void PerformDescription()
 	}
 }
 
-END_UPP_NAMESPACE
+}

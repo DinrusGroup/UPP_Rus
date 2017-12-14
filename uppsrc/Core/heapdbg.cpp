@@ -2,9 +2,13 @@
 
 // #define LOGAF
 
-NAMESPACE_UPP
+#if (defined(TESTLEAKS) || defined(HEAPDBG)) && defined(COMPILER_GCC) && defined(UPP_HEAP)
 
-int sMemDiagInitCount = 0;
+int sMemDiagInitCount;
+
+#endif
+
+namespace Upp {
 
 #if defined(UPP_HEAP)
 
@@ -17,7 +21,7 @@ void HeapPanic(const char *text, void *pos, int size);
 
 static StaticCriticalSection sHeapLock2;
 
-struct DbgBlkHeader {
+struct alignas(16) DbgBlkHeader {
 	size_t        size;
 	DbgBlkHeader *prev;
 	DbgBlkHeader *next;
@@ -86,7 +90,11 @@ void *MemoryAlloc(size_t size)
 #endif
 	static dword serial_number = 0;
 	DbgBlkHeader *p = (DbgBlkHeader *)MemoryAlloc_(sizeof(DbgBlkHeader) + size + sizeof(dword));
+#if (defined(TESTLEAKS) || defined(HEAPDBG)) && defined(COMPILER_GCC) && defined(UPP_HEAP)
+	p->serial = sMemDiagInitCount == 0 || s_ignoreleaks ? 0 : ~ ++serial_number ^ (dword)(uintptr_t) p;
+#else
 	p->serial = s_ignoreleaks ? 0 : ~ ++serial_number ^ (dword)(uintptr_t) p;
+#endif
 	p->size = size;
 	if(s_allocbreakpoint && s_allocbreakpoint == serial_number)
 		__BREAK__;
@@ -127,10 +135,23 @@ void MemoryFree(void *ptr)
 	DbgBlkHeader *p = (DbgBlkHeader *)ptr - 1;
 	if((dword)Peek32le((byte *)(p + 1) + p->size) != p->serial) {
 		sHeapLock2.Leave();
-		DbgHeapPanic("Куча повреждена ", p);
+		DbgHeapPanic("Heap is corrupted ", p);
 	}
 	p->Unlink();
 	MemoryFree_(p);
+}
+
+size_t GetMemoryBlockSize_(void *ptr);
+
+size_t GetMemoryBlockSize(void *ptr)
+{
+	if(!ptr) return 0;
+	return ((DbgBlkHeader *)ptr - 1)->size;
+}
+
+bool TryRealloc(void *ptr, size_t newsize)
+{
+	return false;
 }
 
 void *MemoryAlloc32()             { return MemoryAlloc(32); }
@@ -146,7 +167,7 @@ void MemoryCheckDebug()
 	while(p != &dbg_live) {
 		if((dword)Peek32le((byte *)(p + 1) + p->size) != p->serial) {
 			sHeapLock2.Leave();
-			DbgHeapPanic("ПРОВЕРКА КУЧИ: Куча повреждена ", p);
+			DbgHeapPanic("HEAP CHECK: Heap is corrupted ", p);
 		}
 		p = p->next;
 	}
@@ -164,38 +185,38 @@ void MemoryDumpLeaks()
 	MemoryCheckDebug();
 	DbgBlkHeader *p = dbg_live.next;
 	bool leaks = false;
+	int n = 0;
 	while(p != &dbg_live) {
 		if(p->serial) {
-			if(!leaks) {
-				BugLog() << "\n\nHeap leaks detected:\n";
+			if(!leaks)
 				VppLog() << "\n\nHeap leaks detected:\n";
-			}
 			leaks = true;
 			char b[100];
 			DbgFormat(b, p);
-			BugLog() << '\n' << b;
 			VppLog() << '\n' << b << ": ";
 			HexDump(VppLog(), p + 1, (int)(uintptr_t)p->size, 64);
+			if(++n > 16) {
+				while(p->next != &dbg_live && n < 10000000) {
+					++n;
+					p = p->next;
+				}
+				sprintf(b, "%d", n);
+				VppLog() << "\n*** TOO MANY LEAKS (" << n << ") TO LIST THEM ALL\n";
+				break;
+			}
 		}
 		p = p->next;
 	}
 	if(!leaks)
 		return;
 #ifdef PLATFORM_WIN32
-#ifdef PLATFORM_WINCE
-	MessageBox(::GetActiveWindow(),
-	           L"Heap leaks detected !",
-	           L"Warning",
-	           MB_ICONSTOP|MB_OK|MB_APPLMODAL);
-#else
 	MessageBox(::GetActiveWindow(),
 	           "Heap leaks detected !",
 	           "Warning",
 	           MB_ICONSTOP|MB_OK|MB_APPLMODAL);
-#endif
 #else
 	if(!IsPanicMode())
-		PanicMessageBox("Warning", "Heap leaks detected!");
+		Panic("Heap leaks detected!");
 #endif
 	Heap::AuxFinalCheck();
 }
@@ -220,4 +241,23 @@ void MemoryInitDiagnostics()
 #endif
 #endif
 
-END_UPP_NAMESPACE
+
+}
+
+#if (defined(TESTLEAKS) || defined(HEAPDBG)) && defined(COMPILER_GCC) && defined(UPP_HEAP)
+
+MemDiagCls::MemDiagCls()
+{
+	if(sMemDiagInitCount++ == 0)
+		UPP::MemoryInitDiagnostics();
+}
+
+MemDiagCls::~MemDiagCls()
+{
+	if(--sMemDiagInitCount == 0)
+		UPP::MemoryDumpLeaks();
+}
+
+static const MemDiagCls sMemDiagHelper __attribute__ ((init_priority (101)));
+
+#endif

@@ -1,6 +1,6 @@
 #include "IconDes.h"
 
-NAMESPACE_UPP
+namespace Upp {
 
 void IconDes::MaskSelection()
 {
@@ -21,12 +21,16 @@ void IconDes::MaskSelection()
 	SyncShow();
 }
 
-void IconDes::ApplyDraw(const ImageDraw& iw, dword flags)
+void IconDes::ApplyDraw(IconDraw& iw, dword flags)
+{
+	ApplyImage(iw, flags);
+}
+
+void IconDes::ApplyImage(Image m, dword flags, bool alpha)
 {
 	if(!IsCurrent())
 		return;
 	Slot& c = Current();
-	Image m = iw;
 	Size isz = GetImageSize();
 	RGBA cc = CurrentColor();
 	int empty = doselection ? cc.r : 0;
@@ -38,19 +42,26 @@ void IconDes::ApplyDraw(const ImageDraw& iw, dword flags)
 		const RGBA *k = doselection ? d : c.selection[y];
 		for(int x = 0; x < isz.cx; x++) {
 			RGBA c = *s;
-			if(d->r == 255)
-				if(flags & K_ALT)
-					c.a = cc.a;
-				else
-				if(flags & K_CTRL) {
-					RGBA h = cc;
-					h.a = c.a;
-					c = h;
+			if(alpha) {
+				cc.a = d->r;
+				AlphaBlendStraight(&c, &cc, 1);
+			}
+			else {
+				if(d->r == 255) {
+					if(flags & K_ALT)
+						c.a = cc.a;
+					else
+					if(flags & K_CTRL) {
+						RGBA h = cc;
+						h.a = c.a;
+						c = h;
+					}
+					else
+						c = cc;
 				}
-				else
-					c = cc;
-			if(d->r == 128)
-				c.a = c.r = c.g = c.b = empty;
+				if(d->r == 128)
+					c.a = c.r = c.g = c.b = empty;
+			}
 			if(c != *t && (doselection || k->r)) {
 				*t = c;
 				RefreshPixel(x, y);
@@ -87,4 +98,4 @@ void IconDes::Set(Point p, RGBA rgba, dword flags)
 	}
 }
 
-END_UPP_NAMESPACE
+}

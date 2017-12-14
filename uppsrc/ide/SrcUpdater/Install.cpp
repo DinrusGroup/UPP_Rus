@@ -4,7 +4,6 @@
 #define IMAGEFILE <ide/ide.iml>
 #include <Draw/iml_header.h>
 
-bool CopyFolder(const char *dst, const char *src, Progress *pi);
 bool LoadVarFile(const char *name, VectorMap<String, String>& _var);
 
 bool HasSvn(){
@@ -13,19 +12,19 @@ bool HasSvn(){
 }
 
 InstallWizard::InstallWizard(){
-	Title("RusIDE - Мастер начальной настройки");
+	Title("TheIDE - Initial setting wizard");
 	Sizeable();
 	Icon(IdeImg::Package(), IdeImg::PackageLarge());
 
-	s0.text<<="[ [ [/ Добро пожаловать в RusIDE !]&][ &][ [1 Этот краткий мастер-диалог поможет вам сделать необходимые настройки для Интегрированной Среды Разработки. Нажав ][/1 Финиш][1  в любой момент, Вы сохраните значения на жёсткий диск (для незаполненных полей будут использованы значения по умолчанию). А ][/1 Отмена][1 не позволит мастеру сделать никаких действий.]]";
-	s1.text<<="[ [ [/ Методы обработки исходного кода]&][ &][ [1 Есть несколько способов доступа к исходным кодам U`+`+. Выберите наиболее подходящий для вас. Позднее можно будет изменить эти настройки при необходимости.]]";
+	s0.text<<="[ [ [/ Welcome to TheIDE !]&][ &][ [1 This short wizard dialogue will help you to set up everything you need to get a full working Integrated Development Environment. Clicking ][/1 Finish][1  at any time will save the values to your hard disk (using default values for unfilled fields), while ][/1 Cancel][1  leaves this wizard without doing anything.]]";
+	s1.text<<="[ [ [/ Source code handling methods]&][ &][ [1 There is several ways how to access the U`+`+ source codes. Choose the method that best suits your needs. You can always change the settings later if necessary.]]";
 	s1.src<<=THISBACK(SrcChange);
 	bool usrshare=!UpdaterCfg().globalsrc.IsEmpty();
 	if(usrshare){
 		s1.src.EnableCase(0);
 		s1.src.EnableCase(1);
-		s1.src.SetLabel(0,"Локальная копия исходников с "+UpdaterCfg().globalsrc+" [рекомендуется]");
-		s1.src.SetLabel(1,"Репозитории только для считывания на "+UpdaterCfg().globalsrc);
+		s1.src.SetLabel(0,"Local copy of sources from "+UpdaterCfg().globalsrc+" [recommended]");
+		s1.src.SetLabel(1,"Read only repositories in "+UpdaterCfg().globalsrc);
 	}
 	bool hassvn=HasSvn();
 	s1.src.EnableCase(2,hassvn);
@@ -87,7 +86,7 @@ InstallWizard::InstallWizard(){
 	s3.asmbls.WhenLeftDouble = THISBACK(OnAsmEdit);
 	s3.restore<<=THISBACK(RestoreAsm);
 	RestoreAsm();
-	s4.text<<="[ [/ Thank you ...]&&][ [1 That is all, thank you for your patience. Now just click ][/1 Finish][1  to save all the changes to your hard drive. RusIDE will now proceed to start up normaly.]&][> [/ &Happy coding with RusIDE!    ]";
+	s4.text<<="[ [/ Thank you ...]&&][ [1 That is all, thank you for your patience. Now just click ][/1 Finish][1  to save all the changes to your hard drive. TheIDE will now proceed to start up normaly.]&][> [/ &Happy coding with TheIDE!    ]";
 	WhenFinish=THISBACK(Perform);
 }
 
@@ -111,8 +110,8 @@ void InstallWizard::RestoreAsm(){
 	                           "U++ infrastructure (web, packaging)",
 	                           "Place for users own packages"};
 	VectorMap<String,String> map;
-	map.Add(s3.srcpath,"$(SRC)");
-	map.Add(s3.outpath,"$(OUT)");
+	map.Add(~s3.srcpath,"$(SRC)");
+	map.Add(~s3.outpath,"$(OUT)");
 	for(FindFile ff(ConfigFile("*.var")); ff; ff.Next())
 		if(ff.IsFile()){
 			VectorMap<String,String> var;
@@ -151,17 +150,17 @@ void InstallWizard::RestoreAsm(){
 
 void InstallWizard::AsmMenu(Bar& bar)
 {
-	bar.Add("Новая сборка..", THISBACK(OnAsmAdd))
+	bar.Add("New assembly..", THISBACK(OnAsmAdd))
 		.Key(K_INSERT);
-	bar.Add(s3.asmbls.IsCursor(), "Редактировать сборку..", THISBACK(OnAsmEdit))
+	bar.Add(s3.asmbls.IsCursor(), "Edit assembly..", THISBACK(OnAsmEdit))
 		.Key(K_CTRL_ENTER);
-	bar.Add(s3.asmbls.IsCursor(), "Удалить сборку", THISBACK(OnAsmRemove))
+	bar.Add(s3.asmbls.IsCursor(), "Remove assembly", THISBACK(OnAsmRemove))
 		.Key(K_CTRL_DELETE);
 }
 
 void InstallWizard::OnAsmAdd(){
 	WithAsmSetupLayout<TopWindow> dlg;
-	CtrlLayoutOKCancel(dlg,"Настройка сборки");
+	CtrlLayoutOKCancel(dlg,"Assembly setup");
 	if(s3.asmbls.IsCursor()){
 		dlg.base  <<=s3.asmbls.Get(0);
 		dlg.upp   <<=s3.asmbls.Get(1);
@@ -261,7 +260,7 @@ void InstallWizard::Perform(){
 	}else{
 		UpdaterCfg().period=bool(s1.startup)?0:int(Null);
 	}
-	UpdaterCfg().localsrc=s3.srcpath;
+	UpdaterCfg().localsrc=~s3.srcpath;
 	if(s2.server==0){
 		//defualt SVN server
 		UpdaterCfg().svnserver="http://upp-mirror.googlecode.com/svn/trunk/";
@@ -270,10 +269,10 @@ void InstallWizard::Perform(){
 		UpdaterCfg().svnreadonly=true;
 	}else{
 		//custom SVN server
-		UpdaterCfg().svnserver=svndlg.url;
-		UpdaterCfg().svnuser=svndlg.usr;
-		UpdaterCfg().svnpass=svndlg.pwd;
-		UpdaterCfg().svnreadonly=svndlg.readonly;
+		UpdaterCfg().svnserver=~svndlg.url;
+		UpdaterCfg().svnuser=~svndlg.usr;
+		UpdaterCfg().svnpass=~svndlg.pwd;
+		UpdaterCfg().svnreadonly=~svndlg.readonly;
 	}
 	switch(UpdaterCfg().method) {
 		case 0:{
@@ -282,7 +281,11 @@ void InstallWizard::Perform(){
 			if(!CopyFolder(UpdaterCfg().localsrc,UpdaterCfg().globalsrc,&p)){
 				Exclamation(DeQtf("Failed to copy "+UpdaterCfg().globalsrc+" to "+UpdaterCfg().localsrc));
 			}
-			DeleteFile(AppendFileName(UpdaterCfg().localsrc,"GCC.bm"));
+			FindFile ff(AppendFileName(UpdaterCfg().globalsrc, "*.bm"));
+			while (ff) {
+				DeleteFile(AppendFileName(UpdaterCfg().localsrc, ff.GetName()));
+				ff.Next();
+			}
 			break;
 		}
 		case 1:{
@@ -296,9 +299,9 @@ void InstallWizard::Perform(){
 			String cmd="svn checkout --non-interactive --force ";
 			if(!UpdaterCfg().svnuser.IsEmpty()){cmd+="--username \""+UpdaterCfg().svnuser+"\" ";}
 			if(!UpdaterCfg().svnpass.IsEmpty()){cmd+="--password \""+UpdaterCfg().svnpass+"\" ";}
-			cmd+=String(svndlg.url);
+			cmd+=String(~svndlg.url);
 			if(UpdaterCfg().sync==1){cmd+="@"+IntStr(ScanInt(IDE_VERSION));}
-			cmd+=" "+String(s3.srcpath);
+			cmd+=" "+String(~s3.srcpath);
 			LocalProcess svn(cmd);
 			int count=0;
 			while(svn.IsRunning()){
@@ -314,7 +317,7 @@ void InstallWizard::Perform(){
 				p.SetText(Format("%i files downloaded",count));
 			}
 			String err;
-			SaveFile(AppendFileName(s3.srcpath,"uppsrc/ide/version.h"),"#define IDE_VERSION    \""+GetSvnVersion(UpdaterCfg().localsrc,false,err)+"\"\n");
+			SaveFile(AppendFileName(~s3.srcpath,"uppsrc/ide/version.h"),"#define IDE_VERSION    \""+GetSvnVersion(UpdaterCfg().localsrc,false,err)+"\"\n");
 			break;
 		}
 		case 3:
@@ -323,8 +326,8 @@ void InstallWizard::Perform(){
 	}
 	for(int i=0;i<s3.asmbls.GetCount();i++){
 		VectorMap<String,String> map;
-		map.Add("$(SRC)",s3.srcpath);
-		map.Add("$(OUT)",s3.outpath);
+		map.Add("$(SRC)",~s3.srcpath);
+		map.Add("$(OUT)",~s3.outpath);
 		String cfg="UPP = " + AsCString(ReplaceVars(s3.asmbls.Get(i,1),map)) + "\n";
 		cfg+="OUTPUT = " + AsCString(ReplaceVars(s3.asmbls.Get(i,2),map));
 		SaveFile(ConfigFile(AsString(s3.asmbls.Get(i,0))+".var"),cfg);

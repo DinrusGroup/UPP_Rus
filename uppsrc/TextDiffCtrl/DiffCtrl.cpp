@@ -4,15 +4,29 @@ namespace Upp {
 
 #define IMAGECLASS DiffImg
 #define IMAGEFILE <TextDiffCtrl/Diff.iml>
-#include <Draw/iml.h>
+#include <Draw/iml_source.h>
+
 TextDiffCtrl::TextDiffCtrl()
 {
+	left.SetLeft();
 	left.Gutter(30);
 	right.NoGutter();
 	Horz(left, right);
 	left.WhenScroll = right.ScrollWhen(left);
 	right.WhenScroll = left.ScrollWhen(right);
 	right.HideSb();
+	left.WhenLeftDouble = THISBACK(GetLeftLine);
+	right.WhenLeftDouble = THISBACK(GetRightLine);
+}
+
+void TextDiffCtrl::GetLeftLine(int number, int line)
+{
+	WhenLeftLine(number);
+}
+
+void TextDiffCtrl::GetRightLine(int number, int line)
+{
+	WhenRightLine(number);
 }
 
 static bool SmallDiff(const char *s1, const char *s2)
@@ -54,27 +68,28 @@ void TextDiffCtrl::Set(Stream& l, Stream& r)
 		bool diff = !sec.same;
 		if(firstdiff < 0 && diff)
 			firstdiff = outln;
-		Color c1 = (diff ? LtBlue() : SBlack()), c2 = (diff ? LtBlue() : SBlack());
 		int maxcount = max(sec.count1, sec.count2);
 		left.AddCount(maxcount);
 		int l;
 		for(l = 0; l < sec.count1; l++) {
 			int level = (diff ? l < sec.count2 && SmallDiff(ll[sec.start1 + l], rl[sec.start2 + l]) ? 1 : 2 : 0);
-			left.Set(outln + l, ll[sec.start1 + l], c1, sec.start1 + l + 1, level);
+			left.Set(outln + l, ll[sec.start1 + l], diff, sec.start1 + l + 1, level, diff && l < sec.count2 ? rl[sec.start2 + l] : Null, sec.start1 + l + 1);
 		}
 		for(; l < maxcount; l++)
-			left.Set(outln + l, Null, c1, Null, 2);
+			left.Set(outln + l, Null, diff, Null, 2, Null, Null);
 		right.AddCount(maxcount);
 		for(l = 0; l < sec.count2; l++) {
 			int level = (diff ? l < sec.count1 && SmallDiff(rl[sec.start2 + l], ll[sec.start1 + l]) ? 1 : 2 : 0);
-			right.Set(outln + l, rl[sec.start2 + l], c2, sec.start2 + l + 1, level);
+			right.Set(outln + l, rl[sec.start2 + l], diff, sec.start2 + l + 1, level,  diff && l < sec.count1 ? ll[sec.start1 + l] : Null, sec.start2 + l + 1);
 		}
 		for(; l < maxcount; l++)
-			right.Set(outln + l, Null, c2, Null, 2);
+			right.Set(outln + l, Null, diff, Null, 2, Null, Null);
 		outln += maxcount;
 	}
 	if(firstdiff >= 0)
 		left.SetSb(max(firstdiff - 2, 0));
+	left.ClearSelection();
+	right.ClearSelection();
 }
 
 void TextDiffCtrl::Set(const String& l, const String& r)
@@ -110,10 +125,17 @@ void DiffDlg::Execute(const String& f)
 
 void DiffDlg::Write()
 {
-	if(PromptYesNo("Хотите ли переписать&[* " + DeQtf(editfile) + "] ?")) {
+	if(PromptYesNo("Do you want to overwrite&[* " + DeQtf(editfile) + "] ?")) {
 		SaveFile(editfile, extfile);
 		Break(IDOK);
 	}
+}
+
+Event<const String&, Vector<LineEdit::Highlight>&, const WString&> DiffDlg::WhenHighlight;
+
+static void sDoHighlight(Vector<LineEdit::Highlight>& hl, const WString& ln, const String *path)
+{
+	DiffDlg::WhenHighlight(*path, hl, ln);
 }
 
 DiffDlg::DiffDlg()
@@ -126,8 +148,10 @@ DiffDlg::DiffDlg()
 	p.Add(l.VSizePos().HSizePos(0, 6 * cy));
 	p.Add(write.VSizePos().RightPos(0, 6 * cy));
 	write <<= THISBACK(Write);
-	write.SetLabel("Переписать <-");
+	write.SetLabel("Overwrite <-");
 	l.SetReadOnly();
+	diff.left.WhenHighlight = callback1(sDoHighlight, &editfile);
+	diff.right.WhenHighlight = callback1(sDoHighlight, &editfile);
 }
 
 void FileDiff::Open()
@@ -160,107 +184,10 @@ FileDiff::FileDiff(FileSel& fs_)
 FileSel& DiffFs() {
 	static FileSel fs;
 	ONCELOCK {
-		fs.Type("Патч-файл (*.diff, *.patch)", "*.diff *.patch");
+		fs.Type("Patch file (*.diff, *.patch)", "*.diff *.patch");
 		fs.AllFilesType();
 	}
 	return fs;
-}
-
-void PatchDiff::Copy(FileIn& in, FileIn& oin, int& l, int ln, int n)
-{
-	if(ln < l)
-		throw CParser::Error("");
-	while(l < ln) {
-		if(oin.IsEof())
-			throw CParser::Error("");
-		extfile << oin.GetLine() << "\r\n";
-		l++;
-	}
-	l += n;
-	while(n--)
-		oin.GetLine();
-}
-
-void PatchDiff::LoadDiff(const char *fn)
-{
-	try {
-		FileIn in(fn);
-		FileIn oin(editfile);
-		extfile.Clear();
-		int l = 1;
-		String s = in.GetLine();
-		if(IsDigit(*s)) {
-			in.Seek(0);
-			while(!in.IsEof()) {
-				s = in.GetLine();
-				if(IsDigit(*s)) {
-					CParser p(s);
-					int ln = p.ReadNumber();
-					int n = 0;
-					if(p.Char('a'))
-						ln++;
-					else {
-						n = p.Char(',') ? p.ReadNumber() - ln + 1 : 1;
-						if(!p.Char('c'))
-							p.PassChar('d');
-					}
-					Copy(in, oin, l, ln, n);
-				}
-				else
-				if(*s == '>') {
-					if(s[1] != ' ')
-						throw CParser::Error("");
-					extfile << s.Mid(2) << "\r\n";
-				}
-				else
-				if(*s != '<' && *s != '-')
-					throw CParser::Error("");
-			}
-		}
-		else {
-			for(;;) {
-				if(in.IsEof())
-					throw CParser::Error("");
-				if(in.GetLine().Mid(0, 4) == "+++ ")
-					break;
-			}
-			while(!in.IsEof()) {
-				String s = in.GetLine();
-				if(*s == '@') {
-					CParser p(s);
-					p.PassChar2('@', '@');
-					p.PassChar('-');
-					int ln = p.ReadNumber();
-					int n = 1;
-					if(p.Char(','))
-						n = p.ReadNumber();
-					Copy(in, oin, l, ln, n);
-				}
-				else
-				if(*s == '+' || *s == ' ')
-					extfile << s.Mid(1) << "\r\n";
-				else
-				if(*s != '-')
-					throw CParser::Error("");
-			}
-		}
-		while(!oin.IsEof())
-			extfile << oin.GetLine() << "\r\n";
-	}
-	catch(CParser::Error&) {
-		Exclamation("Неверный формат файла!");
-		extfile = LoadFile(fn);
-	}
-}
-
-void PatchDiff::Open()
-{
-	if(!DiffFs().ExecuteOpen())
-		return;
-	String f = ~DiffFs();
-	r <<= f;
-	LoadDiff(f);
-	diff.Set(LoadFile(editfile), extfile);
 }
 
 };

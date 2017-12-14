@@ -4,7 +4,8 @@ class InsertColorDlg : public WithInsertColorLayout<TopWindow> {
 	typedef InsertColorDlg CLASSNAME;
 
 	String r[5];
-
+	bool canceled;
+	
 	void Sync();
 	void Select(int i);
 
@@ -12,20 +13,24 @@ public:
 	String result;
 
 	InsertColorDlg();
+	bool IsCanceled();
 };
 
 void InsertColorDlg::Select(int i)
 {
 	result = r[i];
+	canceled = false;
 	Break(IDOK);
 }
 
 void InsertColorDlg::Sync()
 {
+	RGBA c0 = rgbactrl.GetColor();
 	RGBA c = rgbactrl.Get();
-	r[0] = Format("RGBA(%d, %d, %d, %d)", c.a, c.r, c.g, c.b);
+	r[0] = Format("%d, %d, %d, %d", c.a, c.r, c.g, c.b);
 	rgba.SetLabel(r[0]);
-	r[1] = Format("Color(%d, %d, %d)", c.r, c.g, c.b);
+	r[1] = c.a == 255 ? Format("Color(%d, %d, %d)", c.r, c.g, c.b)
+	                  : Format("%d * Color(%d, %d, %d)", c.a, c0.r, c0.g, c0.b);
 	color.SetLabel(r[1]);
 	r[2] = Format("%02x%02x%02x%02x", c.a, c.r, c.g, c.b);
 	ahex.SetLabel(r[2]);
@@ -35,9 +40,9 @@ void InsertColorDlg::Sync()
 	qtf.SetLabel(r[4]);
 }
 
-InsertColorDlg::InsertColorDlg()
+InsertColorDlg::InsertColorDlg() : canceled(true)
 {
-	CtrlLayoutCancel(*this, "Цвет вставки");
+	CtrlLayoutCancel(*this, "Insert color");
 	rgbactrl <<= THISBACK(Sync);
 	rgba <<= THISBACK1(Select, 0);
 	color <<= THISBACK1(Select, 1);
@@ -47,15 +52,25 @@ InsertColorDlg::InsertColorDlg()
 	Sync();
 }
 
+bool InsertColorDlg::IsCanceled()
+{
+	return canceled;
+}
+
 void Ide::InsertColor()
 {
+	if(editor.IsReadOnly())
+		return;
 	InsertColorDlg dlg;
 	dlg.Execute();
-	editor.Paste(dlg.result.ToWString());
+	if (!dlg.IsCanceled())
+		editor.Paste(dlg.result.ToWString());
 }
 
 void Ide::InsertLay(const String& fn)
 {
+	if(editor.IsReadOnly())
+		return;
 	String s;
 	s << "#define LAYOUTFILE <" << fn << ">\n"
 	  << "#include <CtrlCore/lay.h>\n";
@@ -64,7 +79,9 @@ void Ide::InsertLay(const String& fn)
 
 void Ide::InsertIml(const String& fn, String classname)
 {
-	if(!EditText(classname, "Вставить .iml включение", "Img class"))
+	if(editor.IsReadOnly())
+		return;
+	if(!EditText(classname, "Insert .iml include", "Img class"))
 		return;
 	String h;
 	h << "#define IMAGECLASS " << classname << "\n"
@@ -73,19 +90,43 @@ void Ide::InsertIml(const String& fn, String classname)
 	editor.Paste((h + "_header.h>\n").ToWString());
 	ClearClipboard();
 	AppendClipboardText((h + "_source.h>\n"));
-	PromptOK("Фрагмент .cpp был сохранён в буфер обмена");
+	PromptOK("The .cpp part was saved to clipboard");
 }
 
 void Ide::InsertText(const String& text)
 {
+	if(editor.IsReadOnly())
+		return;
 	editor.Paste(text.ToWString());
+}
+
+void Ide::InsertCString()
+{
+	if(editor.IsReadOnly())
+		return;
+	String txt = ReadClipboardText();
+	if(txt.GetCount())
+		editor.Paste(AsCString(txt).ToWString());
+}
+
+void Ide::InsertFilePath(bool c)
+{
+	if(editor.IsReadOnly())
+		return;
+	String path = SelectFileOpen("All files\t*.*");
+	path.Replace("\\", "/");
+	if(path.GetCount()) {
+		if(c)
+			path = AsCString(path);
+		editor.Paste(path.ToWString());
+	}
 }
 
 void Ide::InsertMenu(Bar& bar)
 {
 	if(bar.IsScanKeys())
 		return;
-	bar.Add("Вставить цвет..", THISBACK(InsertColor));
+	bar.Add("Insert color..", THISBACK(InsertColor));
 	int pi = GetPackageIndex();
 	const Workspace& wspc = IdeWorkspace();
 	if(pi >= 0 && pi < wspc.GetCount()) {
@@ -123,11 +164,37 @@ void Ide::InsertMenu(Bar& bar)
 			bar.Add(s, THISBACK1(InsertText, s));
 		}
 	}
+	bar.Add("Insert clipboard as C string", THISBACK(InsertCString));
+	bar.Add("Insert file path..", THISBACK1(InsertFilePath, false));
+	bar.Add("Insert file path as C string..", THISBACK1(InsertFilePath, true));
+}
+
+void Ide::InsertInclude(Bar& bar)
+{
+	const Workspace& w = GetIdeWorkspace();
+	String all;
+	for(int i = 0; i < w.GetCount(); i++) {
+		const Package& p = w.GetPackage(i);
+		if(p.GetCount() && findarg(ToLower(GetFileExt(p[0])), ".h", ".hpp") >= 0) {
+			String h; h << "#include <" << w[i] << "/" << p[0] << '>';
+			bar.Add(h, THISBACK1(InsertText, h + '\n'));
+			all << h << '\n';
+		}
+	}
+	bar.Add("All #includes", THISBACK1(InsertText, all));
+}
+
+void Ide::ToggleWordwrap()
+{
+	wordwrap = !wordwrap;
+	SetupEditor();
 }
 
 void Ide::EditorMenu(Bar& bar)
 {
-	bar.Add("Вставка", THISBACK(InsertMenu));
+	InsertAdvanced(bar);
+	bar.MenuSeparator();
+	OnlineSearchMenu(bar);
 	bar.MenuSeparator();
 	editor.StdBar(bar);
 }

@@ -30,7 +30,10 @@ public:
 	void   SetAttr(const char *id, const String& val) { node.SetAttr(id, val); }
 
 	template <class T> XmlIO operator()(const char *tag, T& var);
-	template <class T> XmlIO operator()(const char *tag, const char *itemtag, T& var);
+	template <class T> XmlIO List(const char *tag, const char *itemtag, T& var);
+
+	template <class T, class D> XmlIO operator()(const char *tag, T& var, const D& def);
+	template <class T, class D> XmlIO List(const char *tag, const char *itemtag, T& var, const D& def);
 
 	template <class T> XmlIO Attr(const char *id, T& var) {
 		if(IsLoading())
@@ -40,7 +43,7 @@ public:
 		return *this;
 	}
 
-	template <class T> XmlIO Attr(const char *id, T& var, T def) {
+	template <class T, class D> XmlIO Attr(const char *id, T& var, const D& def) {
 		if(IsLoading())
 		    if(IsNull(node.Attr(id)))
 				var = def;
@@ -66,26 +69,50 @@ public:
 };
 
 template <class T>
-void Xmlize(XmlIO xml, T& var)
+void Xmlize(XmlIO& xml, T& var)
 {
 	var.Xmlize(xml);
 }
 
 template <class T>
-void Xmlize(XmlIO xml, const char* itemtag, T& var)
+void Xmlize(XmlIO& xml, const char* itemtag, T& var)
 {
-	var.Xmlize(xml);
+	var.Xmlize(xml, itemtag);
 }
 
 template <class T> XmlIO XmlIO::operator()(const char *tag, T& var) {
 	XmlIO n(*this, tag);
+	if(IsLoading() && n.Node().GetCount() == 0 && n.Node().GetAttrCount() == 0)
+		return *this;
 	Xmlize(n, var);
 	return *this;
 }
 
-template <class T> XmlIO XmlIO::operator()(const char *tag, const char *itemtag, T& var) {
+template <class T> XmlIO XmlIO::List(const char *tag, const char *itemtag, T& var) {
 	XmlIO n(*this, tag);
+	if(IsLoading() && n.Node().GetCount() == 0 && n.Node().GetAttrCount() == 0)
+		return *this;
 	Xmlize(n, itemtag, var);
+	return *this;
+}
+
+template <class T, class D> XmlIO XmlIO::operator()(const char *tag, T& var, const D& def)
+{
+	XmlIO n(*this, tag);
+	if(IsLoading() && n.Node().GetCount() == 0 && n.Node().GetAttrCount() == 0)
+		var = def;
+	else
+		Xmlize(n, var);
+	return *this;
+}
+
+template <class T, class D> XmlIO XmlIO::List(const char *tag, const char *itemtag, T& var, const D& def)
+{
+	XmlIO n(*this, tag);
+	if(IsLoading() && n.Node().GetCount() == 0 && n.Node().GetAttrCount() == 0)
+		var = def;
+	else
+		Xmlize(n, itemtag, var);
 	return *this;
 }
 
@@ -113,96 +140,56 @@ template <> String XmlAttrStore(const Date& var);
 template <> void XmlAttrLoad(Time& var, const String& text);
 template <> String XmlAttrStore(const Time& var);
 
-template<> void Xmlize(XmlIO xml, String& var);
-template<> void Xmlize(XmlIO xml, WString& var);
-template<> void Xmlize(XmlIO xml, int& var);
-template<> void Xmlize(XmlIO xml, dword& var);
-template<> void Xmlize(XmlIO xml, double& var);
-template<> void Xmlize(XmlIO xml, bool& var);
-template<> void Xmlize(XmlIO xml, Date& var);
-template<> void Xmlize(XmlIO xml, Time& var);
-template<> void Xmlize(XmlIO xml, int16& var);
-template<> void Xmlize(XmlIO xml, int64& var);
-template<> void Xmlize(XmlIO xml, byte& var);
+template<> void Xmlize(XmlIO& xml, String& var);
+template<> void Xmlize(XmlIO& xml, WString& var);
+template<> void Xmlize(XmlIO& xml, int& var);
+template<> void Xmlize(XmlIO& xml, dword& var);
+template<> void Xmlize(XmlIO& xml, double& var);
+template<> void Xmlize(XmlIO& xml, bool& var);
+template<> void Xmlize(XmlIO& xml, Date& var);
+template<> void Xmlize(XmlIO& xml, Time& var);
+template<> void Xmlize(XmlIO& xml, int16& var);
+template<> void Xmlize(XmlIO& xml, int64& var);
+template<> void Xmlize(XmlIO& xml, byte& var);
 
-template<> void Xmlize(XmlIO xml, Point& p);
-template<> void Xmlize(XmlIO xml, Point16& p);
-template<> void Xmlize(XmlIO xml, Point64& p);
-template<> void Xmlize(XmlIO xml, Pointf& p);
-
-template<> void Xmlize(XmlIO xml, Size& sz);
-template<> void Xmlize(XmlIO xml, Size16& sz);
-template<> void Xmlize(XmlIO xml, Size64& sz);
-template<> void Xmlize(XmlIO xml, Sizef& sz);
-
-template<> void Xmlize(XmlIO xml, Rect& r);
-template<> void Xmlize(XmlIO xml, Rect16& r);
-template<> void Xmlize(XmlIO xml, Rect64& r);
-template<> void Xmlize(XmlIO xml, Rectf& r);
-
-template<> void Xmlize(XmlIO xml, Color& c);
-
-template<> void Xmlize(XmlIO xml, Value& v);
-
-template<> void Xmlize(XmlIO xml, ValueArray& v);
-template<> void Xmlize(XmlIO xml, ValueMap& v);
-
-void XmlizeLangAttr(XmlIO xml, int& lang, const char *id = "lang");
-void XmlizeLang(XmlIO xml, const char *tag, int& lang, const char *id = "id");
+void XmlizeLangAttr(XmlIO& xml, int& lang, const char *id = "lang");
+void XmlizeLang(XmlIO& xml, const char *tag, int& lang, const char *id = "id");
 
 template<class T>
-void XmlizeContainer(XmlIO xml, const char *tag, T& data)
+void XmlizeContainer(XmlIO& xml, const char *tag, T& data)
 {
 	if(xml.IsStoring())
-		for(int i = 0; i < data.GetCount(); i++)
-			Xmlize(xml.Add(tag), data[i]);
+		for(int i = 0; i < data.GetCount(); i++) {
+			XmlIO io = xml.Add(tag);
+			Xmlize(io, data[i]);
+		}
 	else {
 		data.Clear();
 		for(int i = 0; i < xml->GetCount(); i++)
-			if(xml->Node(i).IsTag(tag))
-				Xmlize(xml.At(i), data.Add());
+			if(xml->Node(i).IsTag(tag)) {
+				XmlIO io = xml.At(i);
+				Xmlize(io, data.Add());
+			}
 	}
 }
 
 template<class T>
-void Xmlize(XmlIO xml, Vector<T>& data)
-{
-	XmlizeContainer(xml, "item", data);
-}
-
-template<class T>
-void Xmlize(XmlIO xml, const char* itemtag, Vector<T>& data)
-{
-	XmlizeContainer(xml, itemtag, data);
-}
-
-template<class T>
-void Xmlize(XmlIO xml, Array<T>& data)
-{
-	XmlizeContainer(xml, "item", data);
-}
-
-template<class T>
-void Xmlize(XmlIO xml, const char* itemtag, Array<T>& data)
-{
-	XmlizeContainer(xml, itemtag, data);
-}
-
-template<class T>
-void XmlizeStore(XmlIO xml, const T& data)
+void XmlizeStore(XmlIO& xml, const T& data)
 {
 	ASSERT(xml.IsStoring());
 	Xmlize(xml, const_cast<T&>(data));
 }
 
 template<class K, class V, class T>
-void XmlizeMap(XmlIO xml, const char *keytag, const char *valuetag, T& data)
+void XmlizeMap(XmlIO& xml, const char *keytag, const char *valuetag, T& data)
 {
 	if(xml.IsStoring()) {
 		for(int i = 0; i < data.GetCount(); i++)
 			if(!data.IsUnlinked(i)) {
-				XmlizeStore(xml.Add(keytag), data.GetKey(i));
-				XmlizeStore(xml.Add(valuetag), data[i]);
+				XmlIO k = xml.Add(keytag);
+				XmlizeStore(k, data.GetKey(i));
+				XmlIO v = xml.Add(valuetag);
+				XmlizeStore(v, data[i]);
 			}
 	}
 	else {
@@ -210,75 +197,59 @@ void XmlizeMap(XmlIO xml, const char *keytag, const char *valuetag, T& data)
 		int i = 0;
 		while(i < xml->GetCount() - 1 && xml->Node(i).IsTag(keytag) && xml->Node(i + 1).IsTag(valuetag)) {
 			K key;
-			Xmlize(xml.At(i++), key);
-			Xmlize(xml.At(i++), data.Add(key));
+			XmlIO k = xml.At(i++);
+			Xmlize(k, key);
+			XmlIO v = xml.At(i++);
+			Xmlize(v, data.Add(key));
 		}
 	}
 }
 
-template<class K, class V, class H>
-void Xmlize(XmlIO xml, VectorMap<K, V, H>& data)
+template<class K, class V, class T>
+void XmlizeSortedMap(XmlIO& xml, const char *keytag, const char *valuetag, T& data)
 {
-	XmlizeMap<K, V>(xml, "key", "value", data);
-}
-
-template<class K, class V, class H>
-void Xmlize(XmlIO xml, ArrayMap<K, V, H>& data)
-{
-	XmlizeMap<K, V>(xml, "key", "value", data);
+	if(xml.IsStoring()) {
+		for(int i = 0; i < data.GetCount(); i++) {
+			XmlIO k = xml.Add(keytag);
+			XmlizeStore(k, data.GetKey(i));
+			XmlIO v = xml.Add(valuetag);
+			XmlizeStore(v, data[i]);
+		}
+	}
+	else {
+		data.Clear();
+		int i = 0;
+		while(i < xml->GetCount() - 1 && xml->Node(i).IsTag(keytag) && xml->Node(i + 1).IsTag(valuetag)) {
+			K key;
+			XmlIO k = xml.At(i++);
+			Xmlize(k, key);
+			XmlIO v = xml.At(i++);
+			Xmlize(v, data.Add(key));
+		}
+	}
 }
 
 template<class K, class T>
-void XmlizeIndex(XmlIO xml, const char *keytag, T& data)
+void XmlizeIndex(XmlIO& xml, const char *keytag, T& data)
 {
 	if(xml.IsStoring()) {
 		for(int i = 0; i < data.GetCount(); i++)
 			if(!data.IsUnlinked(i)) {
-				//XmlizeStore(xml.Add(keytag), data.GetKey(i)); //FIXME xmlize with hashfn awareness
-				XmlizeStore(xml.Add(keytag), data[i]);
+				XmlIO io = xml.Add(keytag);
+				XmlizeStore(io, data[i]);
 			}
 	}
 	else {
 		data.Clear();
 		int i = 0;
-		//while(i < xml->GetCount() - 1 && xml->Node(i).IsTag(keytag) && xml->Node(i + 1).IsTag(valuetag)) {
 		while(i < xml->GetCount() && xml->Node(i).IsTag(keytag)) {
-			//K key;
-			//Xmlize(xml.At(i++), key); //FIXME dexmlize with hashfn awareness
 			K k;
-			Xmlize(xml.At(i++), k);
+			XmlIO io = xml.At(i++);
+			Xmlize(io, k);
 			data.Add(k);
 		}
 	}
 }
-
-template<class K, class H>
-void Xmlize(XmlIO xml, Index<K, H>& data)
-{
-	XmlizeIndex<K>(xml, "key", data);
-}
-
-template<class K, class H>
-void Xmlize(XmlIO xml, ArrayIndex<K, H>& data)
-{
-	XmlizeIndex<K>(xml, "key", data);
-}
-
-void RegisterValueXmlize(dword type, void (*xmlize)(XmlIO xml, Value& v), const char *name);
-
-template <class T>
-void ValueXmlize(XmlIO xml, Value& v)
-{
-	T x;
-	if(xml.IsStoring())
-		x = v;
-	Xmlize(xml, x);
-	if(xml.IsLoading())
-		v = x;
-}
-
-#define REGISTER_VALUE_XMLIZE(T) \
-	INITBLOCK { RegisterValueXmlize(GetValueTypeNo<T>(), &ValueXmlize<T>, #T); }
 
 template <class T>
 struct ParamHelper__ {
@@ -290,25 +261,34 @@ struct ParamHelper__ {
 	ParamHelper__(T& data) : data(data) {}
 };
 
-String StoreAsXML(Callback1<XmlIO> xmlize, const char *name);
-bool   LoadFromXML(Callback1<XmlIO> xmlize, const String& xml);
+String DoStoreAsXML(Event<XmlIO> xmlize, const char *name);
+bool   DoLoadFromXML(Event<XmlIO> xmlize, const String& xml);
+bool   DoTryLoadFromXML(Event<XmlIO> xmlize, const String& xml);
 
 template <class T>
-String StoreAsXML(T& data, const char *name)
+String StoreAsXML(const T& data, const char *name = NULL)
 {
-	ParamHelper__<T> p(data);
-	return StoreAsXML(callback(&p, &ParamHelper__<T>::Invoke), name);
+	ParamHelper__<T> p(const_cast<T &>(data));
+	return DoStoreAsXML([&](XmlIO io) { Xmlize(io, const_cast<T &>(data)); }, name);
 }
 
 template <class T>
 bool LoadFromXML(T& data, const String& xml)
 {
 	ParamHelper__<T> p(data);
-	return LoadFromXML(callback(&p, &ParamHelper__<T>::Invoke), xml);
+	return DoLoadFromXML(callback(&p, &ParamHelper__<T>::Invoke), xml);
 }
 
-bool StoreAsXMLFile(Callback1<XmlIO> xmlize, const char *name = NULL, const char *file = NULL);
-bool LoadFromXMLFile(Callback1<XmlIO> xmlize, const char *file = NULL);
+template <class T>
+bool TryLoadFromXML(T& data, const String& xml)
+{
+	ParamHelper__<T> p(data);
+	return DoTryLoadFromXML(callback(&p, &ParamHelper__<T>::Invoke), xml);
+}
+
+bool StoreAsXMLFile(Event<XmlIO> xmlize, const char *name = NULL, const char *file = NULL);
+bool LoadFromXMLFile(Event<XmlIO> xmlize, const char *file = NULL);
+bool TryLoadFromXMLFile(Event<XmlIO> xmlize, const char *file = NULL);
 
 template <class T>
 bool StoreAsXMLFile(T& data, const char *name = NULL, const char *file = NULL)
@@ -322,4 +302,45 @@ bool LoadFromXMLFile(T& data, const char *file = NULL)
 {
 	ParamHelper__<T> p(data);
 	return LoadFromXMLFile(callback(&p, &ParamHelper__<T>::Invoke), file);
+}
+
+template <class T>
+bool TryLoadFromXMLFile(T& data, const char *file = NULL)
+{
+	ParamHelper__<T> p(data);
+	return TryLoadFromXMLFile(callback(&p, &ParamHelper__<T>::Invoke), file);
+}
+
+template <class T>
+void XmlizeBySerialize(XmlIO& xio, T& x)
+{
+	String h;
+	if(xio.IsStoring())
+		h = HexString(StoreAsString(x));
+	xio.Attr("data", h);
+	if(xio.IsLoading())
+		try {
+			LoadFromString(x, ScanHexString(h));
+		}
+		catch(LoadingError) {
+			throw XmlError("xmlize by serialize error");
+		}
+}
+
+void  StoreJsonValue(XmlIO& xio, const Value& v);
+Value LoadJsonValue(const XmlNode& n);
+
+template <class T>
+void XmlizeByJsonize(XmlIO& xio, T& x)
+{
+	if(xio.IsStoring())
+		StoreJsonValue(xio, StoreAsJsonValue(x));
+	else {
+		try {
+			LoadFromJsonValue(x, LoadJsonValue(xio.Node()));
+		}
+		catch(JsonizeError e) {
+			throw XmlError("xmlize by jsonize error: " + e);
+		}
+	}
 }

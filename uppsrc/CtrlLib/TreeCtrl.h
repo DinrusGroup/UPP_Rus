@@ -101,6 +101,8 @@ private:
 	bool         mousemove;
 	bool         accel;
 	bool         highlight_ctrl;
+	bool         multiroot;
+	Image        imgEmpty;
 
 	bool         selclick;
 	int          dropitem, dropinsert;
@@ -110,6 +112,7 @@ private:
 	Point        itemclickpos;
 
 	ScrollBars   sb;
+	StaticRect   sb_box;
 	Scroller     scroller;
 
 	DisplayPopup info;
@@ -155,29 +158,31 @@ private:
 	void   SyncInfo();
 	void   SyncAfterSync(Ptr<Ctrl> restorefocus);
 
+	using Ctrl::Close;
+
 protected:
 	virtual void SetOption(int id);
-	void         SyncTree();
+	void SyncTree(bool immediate = false);
 	virtual void Select();
 	
 	friend class PopUpTree;
 
 public:
-	Callback1<int>  WhenOpen;
-	Callback1<int>  WhenClose;
-	Callback        WhenLeftClick;
-	Callback        WhenLeftDouble;
-	Callback1<Bar&> WhenBar;
-	Callback        WhenSel;
+	Event<int>  WhenOpen;
+	Event<int>  WhenClose;
+	Event<>     WhenLeftClick;
+	Event<>     WhenLeftDouble;
+	Event<Bar&> WhenBar;
+	Event<>     WhenSel;
 
-	Callback                        WhenDrag;
-	Callback2<int, PasteClip&>      WhenDropItem;
-	Callback3<int, int, PasteClip&> WhenDropInsert;
-	Callback1<PasteClip&>           WhenDrop;
+	Event<>                     WhenDrag;
+	Event<int, PasteClip&>      WhenDropItem;
+	Event<int, int, PasteClip&> WhenDropInsert;
+	Event<PasteClip&>           WhenDrop;
 
 	// deprecated - use WhenSel
-	Callback        WhenCursor;
-	Callback        WhenSelection;
+	Event<>         WhenCursor;
+	Event<>         WhenSelection;
 
 	void   SetRoot(const Node& n);
 	void   SetRoot(const Image& img, Value v);
@@ -187,11 +192,15 @@ public:
 	int    Insert(int parentid, int i);
 	int    Insert(int parentid, int i, const Image& img, Value value, bool withopen = false);
 	int    Insert(int parentid, int i, const Image& img, Value key, Value value, bool withopen = false);
+	int    Insert(int parentid, int i, const Image& img, Value key, const String& value, bool withopen = false);
+	int    Insert(int parentid, int i, const Image& img, Value key, const char *value, bool withopen = false);
 	int    Insert(int parentid, int i, const Image& img, Ctrl& c, int cx = 0, int cy = 0, bool wo = false);
 	int    Add(int parentid, const Node& n);
 	int    Add(int parentid);
 	int    Add(int parentid, const Image& img, Value value, bool withopen = false);
 	int    Add(int parentid, const Image& img, Value key, Value value, bool withopen = false);
+	int    Add(int parentid, const Image& img, Value key, const String& value, bool withopen = false);
+	int    Add(int parentid, const Image& img, Value key, const char *value, bool withopen = false);
 	int    Add(int parentid, const Image& img, Ctrl& ctrl, int cx = 0, int cy = 0, bool withopen = false);
 	void   Remove(int id);
 	void   RemoveChildren(int id);
@@ -226,6 +235,8 @@ public:
 	bool   IsOpen(int id) const;
 	void   Open(int id, bool open = true);
 	void   Close(int id)                                       { Open(id, false); }
+	Vector<int> GetOpenIds() const;
+	void   OpenIds(const Vector<int>& ids);
 
 	void   OpenDeep(int id, bool open = true);
 	void   CloseDeep(int id)                                   { OpenDeep(id, false); }
@@ -298,8 +309,6 @@ public:
 
 	Size         GetTreeSize() const         { return treesize; }
 
-	void   Dump();
-
 	TreeCtrl& NoCursor(bool b = true)        { nocursor = b; if(b) KillCursor(); return *this; }
 	TreeCtrl& NoRoot(bool b = true)          { noroot = b; Dirty(); Refresh(); return *this; }
 	TreeCtrl& LevelCx(int cx)                { levelcx = cx; Dirty(); return *this; }
@@ -311,7 +320,9 @@ public:
 	TreeCtrl& Accel(bool a = true)           { accel = a; return *this; }
 	TreeCtrl& SetDisplay(const Display& d);
 	TreeCtrl& HighlightCtrl(bool a = true)   { highlight_ctrl = a; Refresh(); return *this; }
-
+	TreeCtrl& RenderMultiRoot(bool a = true) { multiroot = a; Refresh(); return *this; }
+	TreeCtrl& EmptyNodeIcon(const Image& a)  { imgEmpty = a; Refresh(); return *this; }
+	
 	TreeCtrl& SetScrollBarStyle(const ScrollBar::Style& s) { sb.SetStyle(s); return *this; }
 
 	typedef TreeCtrl CLASSNAME;
@@ -327,11 +338,12 @@ class OptionTree : public TreeCtrl {
 	Array<Option>    aux;
 	bool             manualmode;
 
-	void SetOption(int i);
-	void SetChildren(int id, bool b);
+protected:
+	virtual void SetOption(int id);
+	virtual void SetChildren(int id, bool b);
 
 public:
-	Callback WhenOption;
+	Event<>  WhenOption;
 
 	void SetRoot(const Image& img, Option& option, const char *text = NULL);
 	void SetRoot(Option& option, const char *text = NULL);
@@ -375,7 +387,6 @@ private:
 	int          showwidth;
 	bool         up;
 	bool         open;
-	int          droplines;
 
 	void         DoClose();
 	void         OpenClose(int i);
@@ -389,8 +400,8 @@ public:
 	void         PopUp(Ctrl *owner, int width);
 	void         PopUp(Ctrl *owner);
 
-	Callback     WhenCancel;
-	Callback     WhenSelect;
+	Event<>      WhenCancel;
+	Event<>      WhenSelect;
 
 	PopUpTree&   MaxHeight(int maxheight_)          { maxheight = maxheight_; return *this; }
 	int          GetMaxHeight() const               { return maxheight; }
@@ -421,7 +432,7 @@ private:
 	typedef DropTree CLASSNAME;
 
 public:
-	Callback      WhenDrop;
+	Event<>       WhenDrop;
 
 	void Clear();
 

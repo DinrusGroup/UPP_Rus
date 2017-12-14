@@ -1,47 +1,45 @@
 #include "Draw.h"
 
-#define LLOG(x)
+#define LLOG(x) // DLOG(x)
 
-NAMESPACE_UPP
+namespace Upp {
 
-CommonFontInfo   GetFontInfoSys(Font font);
-GlyphInfo        GetGlyphInfoSys(Font font, int chr);
-void             GetStdFontSys(String& name, int& height);
-Vector<FaceInfo> GetAllFacesSys();
+static StaticMutex sFontLock;
 
 bool Replace(Font fnt, int chr, Font& rfnt);
 
 void Std(Font& font)
 {
-	if(IsNull(font))
-		font = StdFont();
-	if(font.GetFace() == 0)
-		font.Face(GetStdFont().GetFace());
-	if(font.GetHeight() == 0)
-		font.Height(GetStdFont().GetHeight());
+	font.RealizeStd();
 }
 
 Size Font::StdFontSize;
 Font Font::AStdFont;
 
 INITBLOCK {
-	RichValue<Font>::Register();
+	Value::Register<Font>("Font");
 }
 
-const Vector<FaceInfo>& Font::List()
+static bool sListValid;
+
+void InvalidateFontList()
 {
-	static Vector<FaceInfo> *q;
+	sListValid = false;
+}
+
+Vector<FaceInfo>& Font::FaceList()
+{
+	static Vector<FaceInfo> list;
 	ONCELOCK {
-		static Vector<FaceInfo> x;
-		x = GetAllFacesSys();
-		q = &x;
+		list = GetAllFacesSys();
 	}
-	return *q;
+	return list;
 }
 
 void sInitFonts()
 {
-	Font::List();
+	Mutex::Lock __(sFontLock);
+	Font::FaceList();
 	GetStdFont();
 }
 
@@ -51,14 +49,16 @@ INITBLOCK {
 
 int Font::GetFaceCount()
 {
-	return List().GetCount();
+	Mutex::Lock __(sFontLock);
+	return FaceList().GetCount();
 }
 
 String Font::GetFaceName(int index)
 {
+	Mutex::Lock __(sFontLock);
 	if(index == 0)
 		return "STDFONT";
-	const Vector<FaceInfo>& l = List();
+	const Vector<FaceInfo>& l = FaceList();
 	if(index >= 0 && index < l.GetCount())
 		return l[index].name;
 	return Null;
@@ -66,10 +66,26 @@ String Font::GetFaceName(int index)
 
 dword Font::GetFaceInfo(int index)
 {
-	const Vector<FaceInfo>& l = List();
+	Mutex::Lock __(sFontLock);
+	const Vector<FaceInfo>& l = FaceList();
 	if(index >= 0 && index < l.GetCount())
 		return l[index].info;
 	return 0;
+}
+
+void Font::SetFace(int index, const String& name, dword info)
+{
+	Mutex::Lock __(sFontLock);
+	FaceInfo& f = FaceList().At(index);
+	f.name = name;
+	f.info = info;
+}
+
+void Font::SetFace(int index, const String& name)
+{
+	int q = FindFaceNameIndex(name);
+	q = q >= 0 ? GetFaceInfo(q) : 0;
+	SetFace(index, name, q);
 }
 
 int FontFilter(int c)
@@ -87,56 +103,73 @@ int  Font::FindFaceNameIndex(const String& name) {
 	for(int i = 1; i < GetFaceCount(); i++)
 		if(Filter(GetFaceName(i), FontFilter) == n)
 			return i;
+	if(n == "serif")
+		return SERIF;
+	if(n == "sansserif")
+		return SANSSERIF;
+	if(n == "monospace")
+		return MONOSPACE;
+	if(n == "stdfont")
+		return STDFONT;
 	return 0;
 }
 
 void Font::SyncStdFont()
 {
-	DrawLock __;
+	Mutex::Lock __(sFontLock);
 	StdFontSize = Size(AStdFont.GetAveWidth(), AStdFont().Bold().GetCy());
+	SyncUHDMode();
 }
 
 void (*whenSetStdFont)();
 
-void Font::SetStdFont(Font font)
+void Font::SetStdFont0(Font font)
 {
-	DrawLock __;
+	LLOG("SetStdFont " << font);
+	Mutex::Lock __(sFontLock);
 	static int x = 0;
 	if(x) return;
 	x++;
 	InitStdFont();
 	AStdFont = font;
+	LLOG("AStdFont1: " << AStdFont);
 	SyncStdFont();
+	LLOG("AStdFont2: " << AStdFont);
 	if(whenSetStdFont)
 		(*whenSetStdFont)();
+	LLOG("AStdFont3: " << AStdFont);
 	x--;
+	static int w = 0;
+	if(w) return;
+	w++;
+	if(whenSetStdFont)
+		(*whenSetStdFont)();
+	LLOG("AStdFont4: " << AStdFont);
+	w--;
+}
+
+bool Font::std_font_override;
+
+void Font::SetDefaultFont(Font font)
+{
+	LLOG("SetDefaultFont " << font);
+	if(!std_font_override)
+		SetStdFont0(font);
+}
+
+void Font::SetStdFont(Font font)
+{
+	std_font_override = true;
+	SetStdFont0(font);
 }
 
 void Font::InitStdFont()
 {
-	ONCELOCK {
-		DrawLock __;
-		List();
+	ONCELOCK { // TODO: This is now sort of obsolete function....
+	//	Mutex::Lock __(sFontLock);
+	//	FaceList();
 		AStdFont = Arial(12);
-		String name;
-		int    height = 0;
-		GetStdFontSys(name, height);
-#ifdef PLATFORM_WIN32
-#ifdef flagWINGL
-		AStdFont = Font(FindFaceNameIndex("Tahoma"), 12);
-#else
-		int q = FindFaceNameIndex(name);
-		if(q <= 0)
-			q = FindFaceNameIndex("Tahoma");
-		if(q <= 0)
-			q = FindFaceNameIndex("Microsoft Sans Serif");
-		if(q <= 0)
-			q = FindFaceNameIndex("MS Sans Serif");
-		if(q > 0)
-			AStdFont = Font(q, max(height, 1));
-#endif
-		SyncStdFont();
-#endif
+	//	SyncStdFont();
 	}
 }
 
@@ -155,6 +188,16 @@ Size Font::GetStdFontSize()
 Font StdFont()
 {
 	return Font(0, -32000);
+}
+
+void Font::RealizeStd()
+{
+	if(IsNullInstance())
+		*this = GetStdFont();
+	if(v.face == STDFONT)
+		Face(GetStdFont().GetFace());
+	if(v.height == -32000)
+		Height(GetStdFont().GetHeight());
 }
 
 int Font::GetHeight() const
@@ -184,7 +227,7 @@ void Font::Serialize(Stream& s) {
 	int version = 1;
 	s / version;
 	if(version >= 1) {
-    	enum {
+		enum {
 			OLD_STDFONT, OLD_SCREEN_SERIF, OLD_SCREEN_SANS, OLD_SCREEN_FIXED,
 			OLD_ROMAN,
 			OLD_ARIAL,
@@ -205,11 +248,15 @@ void Font::Serialize(Stream& s) {
 			name = GetFaceName();
 			s % name;
 		}
-		if(s.IsLoading())
+		if(s.IsLoading()) {
 			if(f >= 0)
 				Face(f);
-			else
+			else {
 				FaceName(name);
+				if(IsNull(name))
+					SetNull();
+			}
+		}
 	}
 	else {
 		String name = GetFaceName();
@@ -221,6 +268,103 @@ void Font::Serialize(Stream& s) {
 		}
 	}
 	s % v.flags % v.height % v.width;
+}
+
+String Font::GetTextFlags() const
+{
+	String txt;
+	if(IsBold())
+		txt << "bold ";
+	if(IsItalic())
+		txt << "italic ";
+	if(IsUnderline())
+		txt << "underline ";
+	if(IsStrikeout())
+		txt << "strikeout ";
+	if(IsNonAntiAliased())
+		txt << "noaa ";
+	if(IsTrueTypeOnly())
+		txt << "ttonly ";
+	if(txt.GetCount())
+		txt.Trim(txt.GetCount() - 1);
+	return txt;
+}
+
+void Font::ParseTextFlags(const char *s)
+{
+	CParser p(s);
+	v.flags = 0;
+	while(!p.IsEof()) {
+		if(p.Id("bold"))
+			Bold();
+		else
+		if(p.Id("italic"))
+			Italic();
+		else
+		if(p.Id("underline"))
+			Underline();
+		else
+		if(p.Id("strikeout"))
+			Strikeout();
+		else
+		if(p.Id("noaa"))
+			NonAntiAliased();
+		else
+		if(p.Id("ttonly"))
+			TrueTypeOnly();
+		else
+			p.SkipTerm();
+	}
+}
+
+String Font::GetFaceNameStd() const
+{
+	switch(GetFace()) {
+	case STDFONT:   return "STDFONT";
+	case SERIF:     return "serif";
+	case SANSSERIF: return "sansserif";
+	case MONOSPACE: return "monospace";
+	}
+	return GetFaceName();
+}
+
+void Font::Jsonize(JsonIO& jio)
+{
+	String n, tf;
+	if(jio.IsStoring()) {
+		n = GetFaceNameStd();
+		tf = GetTextFlags();
+		if(IsNullInstance())
+			n.Clear();
+	}
+	jio("face", n)("height", v.height)("width", v.width)("flags", tf);
+	if(IsNull(n))
+		SetNull();
+	else {
+		FaceName(n);
+		ParseTextFlags(tf);
+	}
+}
+
+void Font::Xmlize(XmlIO& xio)
+{
+	String n, tf;
+	if(xio.IsStoring()) {
+		n = GetFaceNameStd();
+		tf = GetTextFlags();
+		if(IsNullInstance())
+			n.Clear();
+	}
+	xio.Attr("face", n)
+	   .Attr("height", v.height)
+	   .Attr("width", v.width)
+	   .Attr("flags", tf);
+	if(IsNull(n))
+		SetNull();
+	else {
+		FaceName(n);
+		ParseTextFlags(tf);
+	}
 }
 
 template<>
@@ -248,7 +392,8 @@ CharEntry fc_cache_global[4093];
 
 bool IsNormal(Font font, int chr)
 {
-	DrawLock __;
+	Mutex::Lock __(sFontLock);
+	font.RealizeStd();
 	CharEntry& e = fc_cache_global[CombineHash(font.GetHashValue(), chr) % 4093];
 	if(e.font == font.AsInt64() || e.chr == chr)
 		return e.info.IsNormal();
@@ -257,7 +402,7 @@ bool IsNormal(Font font, int chr)
 
 CharEntry GetGlyphEntry(Font font, int chr, unsigned hash)
 {
-	DrawLock __;
+	Mutex::Lock __(sFontLock);
 	CharEntry& e = fc_cache_global[hash % 4093];
 	if(e.font != font.AsInt64() || e.chr != chr) {
 		e.font = font.AsInt64();
@@ -286,7 +431,7 @@ thread__ CharEntry fc_cache[512];
 
 GlyphInfo GetGlyphInfo(Font font, int chr)
 {
-	Std(font);
+	font.RealizeStd();
 	unsigned hash = CombineHash(font.GetHashValue(), chr);
 	CharEntry& e = fc_cache[hash & 511];
 	if(e.font != font.AsInt64() || e.chr != chr)
@@ -332,10 +477,19 @@ void GlyphMetrics(GlyphInfo& f, Font font, int chr)
 
 GlyphInfo GetGlyphMetrics(Font font, int chr)
 {
+	font.RealizeStd();
 	GlyphInfo f = GetGlyphInfo(font, chr);
-	if(f.IsMissing())
-		f = GetGlyphInfo(font, '?');
-	GlyphMetrics(f, font, chr);
+	if(f.IsMissing()) {
+		Font fnt = Arial(font.GetHeight());
+		wchar chr = 0x25a1;
+		f = GetGlyphInfo(fnt, chr);
+		if(!f.IsNormal()) {
+			chr = ' ';
+			f = GetGlyphInfo(fnt, chr);
+		}
+	}
+	else
+		GlyphMetrics(f, font, chr);
 	return f;
 }
 
@@ -348,11 +502,11 @@ thread__ FontEntry fi_cache[64];
 
 const CommonFontInfo& GetFontInfo(Font font)
 {
-	Std(font);
+	font.RealizeStd();
 	unsigned hash = font.GetHashValue() & 63;
 	FontEntry& e = fi_cache[hash];
 	if(e.font != font.AsInt64()) {
-		DrawLock __;
+		Mutex::Lock __(sFontLock);
 		e.font = font.AsInt64();
 		e.info = GetFontInfoSys(font);
 	}
@@ -396,6 +550,18 @@ const CommonFontInfo& Font::Fi() const
 	return lastFontInfo;
 }
 
+String Font::GetData() const
+{
+	Mutex::Lock __(sFontLock);
+	return GetFontDataSys(*this);
+}
+
+void Font::Render(FontGlyphConsumer& sw, double x, double y, int ch) const
+{
+	Mutex::Lock __(sFontLock);
+	RenderCharacterSys(sw, x, y, ch, *this);
+}
+
 FontInfo Font::Info() const
 {
 	FontInfo h;
@@ -403,4 +569,4 @@ FontInfo Font::Info() const
 	return h;
 }
 
-END_UPP_NAMESPACE
+}

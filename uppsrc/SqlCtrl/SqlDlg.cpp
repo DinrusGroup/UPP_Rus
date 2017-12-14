@@ -1,13 +1,13 @@
 #include "SqlCtrl.h"
 #include "SqlDlg.h"
 
-NAMESPACE_UPP
+namespace Upp {
 
 int SqlError(
 #ifdef PLATFORM_WIN32
-	HWND parent,
+	         HWND parent,
 #endif
-	const char *text, const char *error, const char *statement, bool retry) {
+             const char *text, const char *error, const char *statement, bool retry) {
 	WithSqlErrorLayout<TopWindow> r;
 	CtrlLayoutCancel(r, t_("Database error"));
 	r.text = text;
@@ -114,4 +114,4 @@ bool   ErrorRollback(const char *emsg)  { return ErrorRollback(SQL, emsg); }
 bool   OkCommit(const char *emsg)       { return OkCommit(SQL, emsg); }
 #endif
 
-END_UPP_NAMESPACE
+}

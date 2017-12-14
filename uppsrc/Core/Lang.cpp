@@ -6,10 +6,12 @@
 #endif
 #ifdef PLATFORM_POSIX
 #include <locale.h>
-#include <langinfo.h>
+	#ifndef PLATFORM_ANDROID
+	#include <langinfo.h>
+	#endif
 #endif
 
-NAMESPACE_UPP
+namespace Upp {
 
 #define LLOG(x)  LOG(x)
 
@@ -134,7 +136,7 @@ class LangConvertClass : public Convert {
 	virtual Value  Scan(const Value& text) const {
 		if(IsNull(text)) return 0;
 		int q = LNGFromText((String)text);
-		if(!q) return ErrorValue(t_("Неправильное определение языка."));
+		if(!q) return ErrorValue(t_("Invalid language specification."));
 		return (int) q;
 	}
 
@@ -148,18 +150,20 @@ Convert& LNGConvert()
 	return Single<LangConvertClass>();
 }
 
-static int sCurrentLanguage = -1;
-
-int  GetCurrentLanguage() {
-	return sCurrentLanguage;
+void SetLanguage(int lang) {
+	if(lang != LNG_CURRENT)
+		SetDefaultCharset(GetLNGCharset(lang));
+	SetCurrentLanguage(lang);
 }
 
-void SetLanguage(int lang) {
-	if(lang != LNG_CURRENT) {
-		sCurrentLanguage = lang;
-		SetDefaultCharset(GetLNGCharset(lang));
-	}
-	SetCurrentLanguage(lang);
+void SetLanguage(const char *s)
+{
+	SetLanguage(LNGFromText(s));
+}
+
+String GetCurrentLanguageString()
+{
+	return LNGAsText(GetCurrentLanguage());
 }
 
 String GetLangName(int language)
@@ -171,4 +175,4 @@ String GetNativeLangName(int language) {
 	return GetLanguageInfo(language).native_name.ToString();
 }
 
-END_UPP_NAMESPACE
+}

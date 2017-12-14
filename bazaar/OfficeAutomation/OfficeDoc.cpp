@@ -1,12 +1,10 @@
+#ifdef _WIN32
+
 #include <Core/Core.h>
 
 using namespace Upp;
 
 #include <Functions4U/Functions4U.h>
-
-#ifndef PLATFORM_WIN32
-#error Sorry: This platform is not supported!. Look for OfficeAutomation in Bazaar Upp Forum to search for info and new news
-#endif
 
 #include "OfficeAutomation.h"
 #include "OfficeAutomationBase.h"
@@ -60,6 +58,9 @@ bool OfficeDoc::WriteText(String value) {return (static_cast<DocPlugin *>(GetDat
 bool DocPlugin::Select() {return false;}
 bool OfficeDoc::Select() {return (static_cast<DocPlugin *>(GetData()))->Select();}
 
+bool DocPlugin::EnableCommandVars(bool) {return false;}
+bool OfficeDoc::EnableCommandVars(bool enable) {return (static_cast<DocPlugin *>(GetData()))->EnableCommandVars(enable);}
+
 bool DocPlugin::Replace(String search, String replace) {return false;}
 bool OfficeDoc::Replace(String search, String replace) {return (static_cast<DocPlugin *>(GetData()))->Replace(search, replace);}
 
@@ -74,3 +75,5 @@ bool OfficeDoc::Quit() {return (static_cast<DocPlugin *>(GetData()))->Quit();}
 
 bool DocPlugin::SetSaved(bool saved) {return false;}
 bool OfficeDoc::SetSaved(bool saved) {return (static_cast<DocPlugin *>(GetData()))->SetSaved(saved);}
+
+#endif

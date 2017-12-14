@@ -1,6 +1,6 @@
 #include "Sql.h"
 
-NAMESPACE_UPP
+namespace Upp {
 
 #define LLOG(x) // DLOG(x)
 
@@ -24,9 +24,14 @@ void FieldOperator::Field(Ref f) {}
 
 void FieldOperator::Field(const char *name, Ref f) { Field(f); }
 
+void FieldOperator::Field(const char *name, Ref f, bool *b) { Field(name, f); }
+
+void FieldOperator::Width(int width) {}
+
+
 FieldOperator& FieldOperator::operator()(const char *name, bool& b) {
 	String x = BoolToSql(b);
-	Field(name, x);
+	Field(name, x, &b);
 	b = SqlToBool(x);
 	return *this;
 }
@@ -107,16 +112,20 @@ bool Sql::Execute() {
 	session.SetStatement(cn->statement);
 	session.SetStatus(SqlSession::BEFORE_EXECUTING);
 	cn->starttime = GetTickCount();
-	if(session.usrlog)
-		UsrLogT(9, cn->statement);
 	Stream *s = session.GetTrace();
 	if(s) {
 #ifndef NOAPPSQL
 		if(this == &AppCursor())
 			*s << "SQL* ";
+		else
+		if(this == &AppCursorR())
+			*s << "SQLR* ";
 #endif
+		String st = cn->statement;
+		if(session.IsTraceCompression())
+			st = CompressLog(st);
 		int i = 0;
-		for(const char *q = cn->statement; *q; q++)
+		for(const char *q = st; *q; q++)
 			if(*q == '?' && i < param.GetCount()) {
 				Value v = param[i++];
 				if(IsString(v))
@@ -143,6 +152,8 @@ bool Sql::Execute() {
 		cn->info[i].name = ToUpper(cn->info[i].name);
 
 	session.SetStatus(SqlSession::AFTER_EXECUTING);
+	if(!b && session.throwonerror)
+		throw SqlExc(GetSession());
 	return b;
 }
 
@@ -160,6 +171,8 @@ void Sql::ExecuteX(const String& s) {
 	SetStatement(s);
 	ExecuteX();
 }
+
+//$-
 
 #define E__SetParam(I)    SetParam(I - 1, p##I)
 
@@ -193,6 +206,8 @@ void Sql::ExecuteX(const String& s, __List##I(E__Value)) { \
 }
 __Expand(E__ExecuteFX)
 
+//$+
+
 bool Sql::Fetch() {
 	SqlSession& session = GetSession();
 	session.SetStatus(SqlSession::START_FETCHING);
@@ -210,21 +225,18 @@ bool Sql::Fetch() {
 		session.SetStatus(SqlSession::END_FETCHING_MANY);
 	}
 	Stream *s = session.GetTrace();
-	if((int)total > session.traceslow) {
-		BugLog() << total << " ms: " << cn->statement << '\n';
-		if(s)
-			*s << total << " ms: " << cn->statement << '\n';
-	}
-	else
-	if((int)fetch > session.traceslow) {
-		BugLog() << fetch << " ms further fetch: " << cn->statement << '\n';
-		if(s)
-			*s << fetch << " ms further fetch: " << cn->statement << '\n';
+	if(s) {
+		if((int)total > session.traceslow)
+			*s << "SLOW SQL: " << total << " ms: " << cn->statement << UPP::EOL;
+		else
+		if((int)fetch > session.traceslow)
+			*s << "SLOW SQL: " << fetch << " ms further fetch: " << cn->statement << UPP::EOL;
 	}
 	cn->starttime = INT_MAX;
 	return b;
 }
 
+//$-
 #define E__GetColumn(I) cn->GetColumn(I - 1, p##I)
 
 #define E__FetchF(I) \
@@ -234,18 +246,62 @@ bool Sql::Fetch(__List##I(E__Ref)) { \
 	return true; \
 }
 __Expand(E__FetchF)
+//$+
 
-bool Sql::Fetch(Vector<Value>& row) {
-	if(!Fetch()) return false;
+Vector<Value> Sql::GetRow() const {
+	Vector<Value> row;
 	int n = GetColumns();
 	row.SetCount(n);
 	for(int i = 0; i < n; i++)
-		GetColumn(i, row[i]);
+		row[i] = (*this)[i];
+	return row;
+}
+
+bool Sql::Fetch(Vector<Value>& row) {
+	if(!Fetch()) return false;
+	row = GetRow();
+	return true;
+}
+
+ValueMap Sql::GetRowMap() const
+{
+	ValueMap m;
+	int n = GetColumns();
+	for(int i = 0; i < n; i++)
+		m.Add(GetColumnInfo(i).name, (*this)[i]);
+	return m;
+}
+
+Value Sql::operator%(const SqlStatement& q)
+{
+	return Select0(Compile(q));
+}
+
+ValueMap Sql::operator^(const SqlStatement& q)
+{
+	Execute(q);
+	ValueMap m;
+	Fetch(m);
+	return m;
+}
+
+ValueArray Sql::operator/(const SqlStatement& q)
+{
+	ValueArray va;
+	Execute(q);
+	ValueMap m;
+	while(Fetch(m))
+		va.Add(m);
+	return va;
+}
+
+bool Sql::Fetch(ValueMap& row) {
+	if(!Fetch()) return false;
+	row = GetRowMap();
 	return true;
 }
 
 struct sReadFields : public FieldOperator {
-	int  pi;
 	Sql *sql;
 
 	void Field(const char *name, Ref f) {
@@ -257,7 +313,6 @@ void Sql::Get(Fields fo)
 {
 	sReadFields ff;
 	ff.sql = this;
-	ff.pi = 0;
 	fo(ff);
 }
 
@@ -267,8 +322,13 @@ bool Sql::Fetch(Fields fo) {
 	return true;
 }
 
-int  Sql::GetColumns() const {
+int Sql::GetColumnCount() const
+{
 	return cn->info.GetCount();
+}
+
+int  Sql::GetColumns() const {
+	return GetColumnCount();
 }
 
 void Sql::GetColumn(int i, Ref r) const {
@@ -278,11 +338,14 @@ void Sql::GetColumn(int i, Ref r) const {
 void Sql::GetColumn(SqlId colid, Ref r) const
 {
 	String s = ~colid;
-	for(int i = 0; i < cn->info.GetCount(); i++)
-		if(cn->info[i].name == s) {
-			GetColumn(i, r);
-			return;
-		}
+	for(int j = 0; j < 2; j++) {
+		for(int i = 0; i < cn->info.GetCount(); i++)
+			if(cn->info[i].name == s) {
+				GetColumn(i, r);
+				return;
+			}
+		s = ToUpper(s);
+	}
 	r.SetNull();
 }
 
@@ -294,19 +357,14 @@ Value Sql::operator[](int i) const {
 
 Value Sql::operator[](SqlId id) const {
 	String s = ~id;
-	for(int i = 0; i < cn->info.GetCount(); i++)
-		if(cn->info[i].name == s)
-			return operator[](i);
-	NEVER();
+	for(int j = 0; j < 2; j++) {
+		for(int i = 0; i < cn->info.GetCount(); i++)
+			if(cn->info[i].name == s)
+				return operator[](i);
+		s = ToUpper(s);
+	}
+	NEVER_(String().Cat() << "SQL [" << ~id << "] not found");
 	return Value();
-}
-
-Vector<Value> Sql::GetRow() const {
-	Vector<Value> row;
-	int cn = GetColumns();
-	for(int i = 0; i < cn; i++)
-		row.Add((*this)[i]);
-	return row;
 }
 
 Value Sql::Select0(const String& s) {
@@ -324,6 +382,7 @@ Value Sql::Select(const String& s) {
 	return Select0("select " + s);
 }
 
+//$-
 #define E__SelectF(I) \
 Value Sql::Select(const String& s, __List##I(E__Value)) { \
 	__List##I(E__SetParam); \
@@ -356,7 +415,6 @@ bool Sql::Insert(SqlId table, SqlId c0, const Value& v0, __List##I(E__IdVal)) { 
 }
 __Expand(E__InsertIdF)
 
-
 static inline void sComma(int I, String& s) {
 	if(I > 1) s.Cat(", ");
 }
@@ -383,6 +441,7 @@ bool Sql::Update(SqlId table, SqlId key, const Value& keyval, __List##I(E__IdVal
 	               " set " + list + " where " + key.ToString() + " = ?"); \
 }
 __Expand(E__UpdateIdF)
+//$+
 
 bool Sql::Delete(const char *table, const char *key, const Value& keyval) {
 	return Execute("delete from " + String(table) + " where " + key + " = ?", keyval);
@@ -548,8 +607,8 @@ bool Sql::Update(Fields nf, SqlId table) {
 	return Update(nf, (const char *)~table);
 }
 
-void Sql::Assign(SqlSource& s) {
-	if(cn) delete cn;
+void Sql::SetSession(SqlSource& s) {
+	Detach();
 	cn = s.CreateConnection();
 }
 
@@ -577,9 +636,10 @@ void   Sql::RollbackTo(const String& savepoint)   { GetSession().RollbackTo(save
 
 bool   Sql::IsOpen()                              { return cn && GetSession().IsOpen(); }
 
-#ifndef NOAPPSQL
-GLOBAL_VAR(AppSql, AppCursor)
-#endif
+void SqlConnection::Attach(Sql& sql, SqlConnection *con)
+{
+	sql.Attach(con); // Duck tape to fix Oci8
+}
 
 #ifndef NOAPPSQL
 Sql::Sql() {
@@ -625,119 +685,41 @@ void Sql::Detach()
 {
 	if(cn) delete cn;
 	cn = NULL;
+	param.Clear();
+}
+
+void Sql::Attach(SqlConnection *connection)
+{
+	Detach();
+	cn = connection;
 }
 
 Sql::~Sql() {
 	Detach();
 }
 
-SqlSession::SqlSession()
-{
-	trace = NULL;
-	traceslow = INT_MAX / 4;
-	logerrors = false;
-	usrlog = false;
-	tracetime = false;
-	dialect = 255;
-	errorcode_number = Null;
-	errorclass = Sql::ERROR_UNSPECIFIED;
-	error_handler = NULL;
-}
-
-SqlSession::~SqlSession()
-{
-/*
 #ifndef NOAPPSQL
-	if(SQL.IsOpen() && &SQL.GetSession() == this) {
-		LLOG("Detaching SQL");
-//		SQL.Detach();
-	}
+
+SqlR::SqlR()
+:	Sql(SQLR.GetSession()) {}
+
+SqlR::SqlR(const char *stmt)
+:	Sql(stmt, SQLR.GetSession()) {}
+
+SqlR::SqlR(const SqlStatement& s)
+:	Sql(s, SQLR.GetSession()) {}
+
 #endif
-*/
-}
-
-void           SqlSession::Begin()                                       { NEVER(); }
-void           SqlSession::Commit()                                      { NEVER(); }
-void           SqlSession::Rollback()                                    { NEVER(); }
-String         SqlSession::Savepoint()                                   { NEVER(); return Null; }
-void           SqlSession::RollbackTo(const String&)                     { NEVER(); }
-bool           SqlSession::IsOpen() const                                { return false; }
-int            SqlSession::GetTransactionLevel() const                   { return 0; }
-RunScript      SqlSession::GetRunScript() const                          { return NULL; }
-SqlConnection *SqlSession::CreateConnection()                            { return NULL; }
-Vector<String> SqlSession::EnumUsers()                                   { return Vector<String>(); }
-Vector<String> SqlSession::EnumDatabases()                               { return Vector<String>(); }
-Vector<String> SqlSession::EnumTables(String database)                   { return Vector<String>(); }
-Vector<String> SqlSession::EnumViews(String database)                    { return Vector<String>(); }
-Vector<String> SqlSession::EnumSequences(String database)                { return Vector<String>(); }
-Vector<String> SqlSession::EnumPrimaryKey(String database, String table) { return Vector<String>(); }
-Vector<String> SqlSession::EnumReservedWords()                           { return Vector<String>(); }
-String         SqlSession::EnumRowID(String database, String table)      { return Null; }
-
-Vector<SqlColumnInfo> SqlSession::EnumColumns(String database, String table)
-{
-	Sql cursor(*this);
-	Vector<SqlColumnInfo> info;
-	SqlBool none;
-	none.SetFalse();
-	String full_name = database;
-	if(!IsNull(database))
-		full_name << '.';
-	full_name << table;
-	if(cursor.Execute(Select(SqlAll()).From(SqlSet(SqlCol(full_name))).Where(none))) {
-		info.SetCount(cursor.GetColumns());
-		for(int i = 0; i < info.GetCount(); i++)
-			info[i] = cursor.GetColumnInfo(i);
-	}
-	return info;
-}
-
-void   SqlSession::SetError(String error, String stmt, int code, const char *scode, Sql::ERRORCLASS clss) {
-	if(error_handler && (*error_handler)(error, stmt, code, scode, clss))
-		return;
-	if(GetTransactionLevel() && errorstatement.GetCount())
-		return;
-	lasterror = error;
-	errorstatement = stmt;
-	errorcode_number = code;
-	errorcode_string = scode;
-	errorclass = clss;
-	String err;
-	err << "ERROR " << error << "(" << code << "): " << stmt << '\n';
-	if(logerrors)
-		BugLog() << err;
-	if(GetTrace())
-		*GetTrace() << err;
-}
-
-void SqlSession::InstallErrorHandler(bool (*handler)(String error, String stmt, int code, const char *scode, Sql::ERRORCLASS clss))
-{
-	error_handler = handler;
-}
-
-void   SqlSession::ClearError()
-{
-	lasterror.Clear();
-	errorstatement.Clear();
-	errorcode_number = Null;
-	errorcode_string = Null;
-	errorclass = Sql::ERROR_UNSPECIFIED;
-}
-
-bool StdStatementExecutor::Execute(const String& stmt)
-{
-	cursor.Execute(stmt);
-	return true;
-}
 
 #ifndef NOAPPSQL
-struct SQLStatementExecutorClass : StatementExecutor {
-	virtual bool Execute(const String& stmt) { SQL.Execute(stmt); return true; }
-};
-
-StatementExecutor& SQLStatementExecutor() {
-	return Single<SQLStatementExecutorClass>();
+void operator*=(ValueMap& map, SqlSelect select)
+{
+	map.Clear();
+	Sql sql;
+	sql * select;
+	while(sql.Fetch())
+		map.Add(sql[0], sql[1]);
 }
 #endif
 
-END_UPP_NAMESPACE
+}

@@ -39,6 +39,8 @@ public:
 		SPACING   = 0x00008000,
 		RULER     = 0x00004000,
 		RULERINK  = 0x00002000,
+		RULERSTYLE= 0x00001000,
+		NEWHDRFTR = 0x00000800,
 	};
 
 	struct FormatInfo : RichPara::Format {
@@ -67,7 +69,6 @@ protected:
 		int                   length;
 		String                content;
 		Array<RichObject>     object;
-		mutable LazyUpdate    dirty;
 		int64                 updateserial;
 		mutable int           ccx;
 		mutable int           cy;
@@ -83,6 +84,9 @@ protected:
 		mutable Bits          spellerrors;
 		mutable bool          checked;
 		mutable bool          haspos;
+		mutable bool          newhdrftr;
+		mutable String        header_qtf, footer_qtf;
+		mutable One<RichText> header, footer;
 		One<RichPara::NumberFormat> number;
 
 		void Invalidate();
@@ -91,16 +95,16 @@ protected:
 		Para() { length = 0; Invalidate(); numbering = -1; checked = false; haspos = false; }
 	};
 
-	struct Part : MoveableAndDeepCopyOption< Part, Any> {
+	struct Part : MoveableAndDeepCopyOption<Part>, Any {
 		Part(const Part& src, int);
 		Part();
 	};
 
 	Vector<Part>           part;
+	String                 header_qtf, footer_qtf;
+	mutable One<RichText>  header, footer;
 	mutable int            length;
 	mutable int            tabcount;
-	mutable Rect           rect;
-	mutable Vector<PageY>  py;
 
 	enum {
 		NONE, SPARA, PARA, FROM, ALL
@@ -132,8 +136,10 @@ protected:
 	void        Sync0(const Para& pp, int parti, const RichContext& rc) const;
 	void        Sync(int parti, const RichContext& rc) const;
 	bool        BreaksPage(PageY py, const Para& pp, int i, const Rect& page) const;
-	PageY       GetNextPageY(int parti, const RichContext& rc) const;
-	PageY       GetPartPageY(int parti, RichContext rc) const;
+	void        Advance(int parti, RichContext& rc, RichContext& begin) const;
+	RichContext GetAdvanced(int parti, const RichContext& rc, RichContext& begin) const;
+	RichContext GetPartContext(int parti, const RichContext& rc0) const;
+	PageY       GetPartPageY(int parti, const RichContext& rc) const     { return GetPartContext(parti, rc).py; }
 
 	struct ParaOp {
 		virtual bool operator()(RichTxt::Para& p) = 0;
@@ -172,7 +178,7 @@ protected:
 	PageY                 GetTop(RichContext rc) const;
 	PageY                 GetHeight(RichContext rc) const;
 	int                   GetWidth(const RichStyles& st) const;
-	void                  Paint(PageDraw& w, RichContext rc, const PaintInfo& pi) const;
+	void                  Paint(PageDraw& w, RichContext& rc, const PaintInfo& pi) const;
 	RichCaret             GetCaret(int pos, RichContext rc) const;
 	int                   GetPos(int x, PageY y, RichContext rc) const;
 	int                   GetVertMove(int pos, int gx, RichContext rc, int dir) const;
@@ -216,8 +222,8 @@ public:
 
 	void                  ClearSpelling();
 
-	void                  SetPick(int parti, pick_ RichTable& table);
-	void                  CatPick(pick_ RichTable& table)             { SetPick(GetPartCount(), table); }
+	void                  SetPick(int parti, RichTable&& table);
+	void                  CatPick(RichTable&& table)                  { SetPick(GetPartCount(), pick(table)); }
 	void                  Set(int parai, const RichPara& p, const RichStyles& s);
 	void                  Insert(int parai, const RichPara& p, const RichStyles& s);
 	void                  Cat(const RichPara& p, const RichStyles& s) { Set(GetPartCount(), p, s); }
@@ -228,6 +234,13 @@ public:
 
 	Vector<int>           GetAllLanguages() const;
 	WString               GetPlainText(bool withcr = true) const;
+
+	void                  SetHeaderQtf(const char *qtf);
+	void                  SetFooterQtf(const char *qtf);
+	String                GetHeaderQtf() const                        { return header_qtf; }
+	String                GetFooterQtf() const                        { return footer_qtf; }
+	void                  ClearHeader()                               { SetHeaderQtf(NULL); }
+	void                  ClearFooter()                               { SetFooterQtf(NULL); }
 
 	struct UpdateIterator {
 		enum { CONTINUE = 0, STOP = 1, UPDATE = 2 };
@@ -244,6 +257,8 @@ public:
 
 	RichTxt(const RichTxt& src, int);
 	RichTxt();
+
+	rval_default(RichTxt);
 
 #ifdef _DEBUG
 	void                  Dump();

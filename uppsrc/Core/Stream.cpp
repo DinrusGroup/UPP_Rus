@@ -2,9 +2,10 @@
 
 #ifdef PLATFORM_POSIX
 #include <sys/mman.h>
+#include <termios.h>
 #endif
 
-NAMESPACE_UPP
+namespace Upp {
 
 #define LLOG(x) // RLOG(x)
 #define LDUMP(x) // RDUMP(x)
@@ -41,6 +42,26 @@ void Stream::Seek(int64) {
 	NEVER();
 }
 
+int Stream::Skip(int size)
+{
+	int r = 0;
+	while(size) {
+		int n = min(int(rdlim - ptr), size);
+		if(n == 0) {
+			if(Get() < 0)
+				break;
+			r++;
+			size--;
+		}
+		else {
+			size -= n;
+			r += n;
+			ptr += n;
+		}
+	}
+	return r;
+}
+
 int64 Stream::GetSize() const {
 	return 0;
 }
@@ -63,18 +84,18 @@ Stream::Stream() {
 
 Stream::~Stream() {}
 
-bool Stream::_IsEof() const
-{
-	return GetPos() >= GetSize();
-}
-
 void Stream::LoadError() {
 	SetError(ERROR_LOADING_FAILED);
 	if(style & STRM_THROW)
 		throw LoadingError();
 }
 
-bool Stream::GetAll(void *data, dword size) {
+String Stream::GetErrorText() const
+{
+   return IsError() ? Upp::GetErrorMessage(errorcode) : String();
+}
+
+bool Stream::GetAll(void *data, int size) {
 	if(Get(data, size) != size) {
 		LoadError();
 		return false;
@@ -82,14 +103,97 @@ bool Stream::GetAll(void *data, dword size) {
 	return true;
 }
 
-String Stream::Get(dword size)
+void Stream::Put64(const void *data, int64 size)
+{
+#ifdef CPU_64
+	byte *ptr = (byte *)data;
+	while(size > INT_MAX) {
+		Put(ptr, INT_MAX);
+		ptr += INT_MAX;
+		size -= INT_MAX;
+	}
+	Put(ptr, (int)size);
+#else
+	ASSERT(size <= INT_MAX);
+	Put(data, (int)size);
+#endif
+}
+
+int64 Stream::Get64(void *data, int64 size)
+{
+#ifdef CPU_64
+	byte *ptr = (byte *)data;
+	int64 n = 0;
+	while(size > INT_MAX) {
+		int q = Get(ptr, INT_MAX);
+		n += q;
+		if(q != INT_MAX)
+			return n;
+		ptr += INT_MAX;
+		size -= INT_MAX;
+	}
+	int q = Get(ptr, (int)size);
+	return n + q;
+#else
+	ASSERT(size <= INT_MAX);
+	return Get(data, (int)size);
+#endif
+}
+
+bool Stream::GetAll64(void *data, int64 size)
+{
+	if(Get64(data, size) != size) {
+		LoadError();
+		return false;
+	}
+	return true;
+}
+
+size_t Stream::Get(Huge& h, size_t size)
+{
+	while(h.GetSize() < size) {
+		int sz = (int)min((size_t)h.CHUNK, size - h.GetSize());
+		int len = Get(h.AddChunk(), sz);
+		if(len < h.CHUNK) {
+			h.Finish(len);
+			break;
+		}
+	}
+	return h.GetSize();
+}
+
+bool Stream::GetAll(Huge& h, size_t size)
+{
+	if(Get(h, size) != size) {
+		LoadError();
+		return false;
+	}
+	return true;
+}
+
+String Stream::Get(int size)
 {
 	StringBuffer b(size);
 	int n = Get(~b, size);
 	b.SetCount(n);
-	String s = b;
-	s.Trim(n);
-	return s;
+	return b;
+}
+
+String Stream::GetAll(int size)
+{
+	String result;
+	if(size < 4 * 1024*1024)
+		result = Get(size);
+	else {
+		Huge h;
+		Get(h, size);
+		result = h.Get();
+	}
+	if(result.GetCount() != size) {
+		LoadError();
+		result = String::GetVoid();
+	}
+	return result;
 }
 
 int  Stream::_Get8()
@@ -412,13 +516,33 @@ void  Stream::Put(Stream& s, int64 size, dword click) {
 	Buffer<byte> buffer(click);
 	while(size) {
 		dword n = s.Get(buffer, (int)min<int64>(click, size));
-		Put(buffer.operator const byte *(), click);
+		if(n == 0)
+			break;
+		Put(~buffer, n);
 		size -= n;
 	}
 }
 
-void Stream::SerializeRLE(byte *data, dword size)
+String Stream::GetAllRLE(int size)
 {
+	String result;
+	while(result.GetCount() < size) {
+		int c = Get();
+		if(c < 0)
+			break;
+		if(c == 0xcb) {
+			c = Get();
+			result.Cat(c, Get());
+		}
+		else
+			result.Cat(c);
+	}
+	return result.GetCount() == size ? result : String::GetVoid();
+}
+
+void Stream::SerializeRLE(byte *data, int size)
+{
+	ASSERT(size >= 0);
 	if(IsError()) return;
 	byte *s =   (byte *)data;
 	byte *lim = s + size;
@@ -465,15 +589,19 @@ void Stream::SerializeRLE(byte *data, dword size)
 		}
 }
 
-void Stream::SerializeRaw(byte *data, dword size) {
+void Stream::SerializeRaw(byte *data, int64 size)
+{
+	ASSERT(size >= 0);
 	if(IsError()) return;
 	if(IsLoading())
-		GetAll(data, size);
+		GetAll64(data, size);
 	else
-		Put(data, size);
+		Put64(data, size);
 }
 
-void Stream::SerializeRaw(word *data, dword count) {
+void Stream::SerializeRaw(word *data, int64 count)
+{
+	ASSERT(count >= 0);
 #ifdef CPU_BE
 	EndianSwap(data, count);
 #endif
@@ -483,7 +611,9 @@ void Stream::SerializeRaw(word *data, dword count) {
 #endif
 }
 
-void Stream::SerializeRaw(dword *data, dword count) {
+void Stream::SerializeRaw(dword *data, int64 count)
+{
+	ASSERT(count >= 0);
 #ifdef CPU_BE
 	EndianSwap(data, count);
 #endif
@@ -493,7 +623,9 @@ void Stream::SerializeRaw(dword *data, dword count) {
 #endif
 }
 
-void Stream::SerializeRaw(uint64 *data, dword count) {
+void Stream::SerializeRaw(uint64 *data, int64 count)
+{
+	ASSERT(count >= 0);
 #ifdef CPU_BE
 	EndianSwap(data, count);
 #endif
@@ -529,30 +661,30 @@ void Stream::Pack(dword& w) {
 void    Stream::Pack(bool& a, bool& b, bool& c, bool& d, bool& e, bool& f, bool& g, bool& h) {
 	if(IsError()) return;
 	if(IsLoading()) {
-		int f = Get();
-		if(f < 0) LoadError();
+		int ff = Get();
+		if(ff < 0) LoadError();
 		else {
-			a = !!(f & 0x80);
-			b = !!(f & 0x40);
-			c = !!(f & 0x20);
-			d = !!(f & 0x10);
-			e = !!(f & 0x08);
-			f = !!(f & 0x04);
-			g = !!(f & 0x02);
-			h = !!(f & 0x01);
+			a = !!(ff & 0x80);
+			b = !!(ff & 0x40);
+			c = !!(ff & 0x20);
+			d = !!(ff & 0x10);
+			e = !!(ff & 0x08);
+			f = !!(ff & 0x04);
+			g = !!(ff & 0x02);
+			h = !!(ff & 0x01);
 		}
 	}
 	else {
-		int f = 0;
-		if(a) f |= 0x80;
-		if(b) f |= 0x40;
-		if(c) f |= 0x20;
-		if(d) f |= 0x10;
-		if(e) f |= 0x08;
-		if(f) f |= 0x04;
-		if(g) f |= 0x02;
-		if(h) f |= 0x01;
-		Put(f);
+		int ff = 0;
+		if(a) ff |= 0x80;
+		if(b) ff |= 0x40;
+		if(c) ff |= 0x20;
+		if(d) ff |= 0x10;
+		if(e) ff |= 0x08;
+		if(f) ff |= 0x04;
+		if(g) ff |= 0x02;
+		if(h) ff |= 0x01;
+		Put(ff);
 	}
 }
 
@@ -580,97 +712,6 @@ void  Stream::Pack(bool& a, bool& b) {
 	bool h = false; Pack(a, b, h, h, h, h, h, h);
 }
 
-Stream& Stream::operator%(bool& d)
-{
-	SerializeRaw((byte *)&d, 1);
-	return *this;
-}
-
-Stream& Stream::operator%(char& d)
-{
-	SerializeRaw((byte *)&d, 1);
-	return *this;
-}
-
-Stream& Stream::operator%(signed char& d)
-{
-	SerializeRaw((byte *)&d, 1);
-	return *this;
-}
-
-Stream& Stream::operator%(unsigned char& d)
-{
-	SerializeRaw((byte *)&d, 1);
-	return *this;
-}
-
-Stream& Stream::operator%(short& d)
-{
-	SerializeRaw((word *)&d, 1);
-	return *this;
-}
-
-Stream& Stream::operator%(unsigned short& d)
-{
-	SerializeRaw((word *)&d, 1);
-	return *this;
-}
-
-Stream& Stream::operator%(int& d)
-{
-	SerializeRaw((dword *)&d, 1);
-	return *this;
-}
-
-Stream& Stream::operator%(unsigned int& d)
-{
-	SerializeRaw((dword *)&d, 1);
-	return *this;
-}
-
-Stream& Stream::operator%(long& d)
-{
-	uint32 x = (uint32)d;
-	SerializeRaw(&x, 1);
-	if(IsLoading())
-		d = (long)x;
-	return *this;
-}
-
-Stream& Stream::operator%(unsigned long& d)
-{
-	uint32 x = (uint32)d;
-	SerializeRaw(&x, 1);
-	if(IsLoading())
-		d = (unsigned long)x;
-	return *this;
-}
-
-Stream& Stream::operator%(float& d)
-{
-	SerializeRaw((dword *)&d, 1);
-	return *this;
-}
-
-Stream& Stream::operator%(double& d)
-{
-	SerializeRaw((uint64 *)&d, 1);
-	return *this;
-}
-
-Stream& Stream::operator%(int64& d)
-{
-	SerializeRaw((uint64 *)&d, 1);
-	return *this;
-}
-
-Stream& Stream::operator%(uint64& d)
-{
-	SerializeRaw((uint64 *)&d, 1);
-	return *this;
-}
-
-
 Stream& Stream::operator%(String& s) {
 	if(IsError()) return *this;
 	if(IsLoading()) {
@@ -689,13 +730,9 @@ Stream& Stream::operator%(String& s) {
 				Get(); // reserved for future use... or removal
 			}
 		}
-		if(IsError() || len + GetPos() > GetSize())
+		s = GetAll(len);
+		if(s.IsVoid())
 			LoadError();
-		else {
-			StringBuffer sb(len);
-			SerializeRaw((byte*)~sb, len);
-			s = sb;
-		}
 	}
 	else {
 		dword len = s.GetLength();
@@ -715,9 +752,9 @@ Stream& Stream::operator/(String& s) {
 	dword len = s.GetLength();
 	Pack(len);
 	if(IsLoading()) {
-		StringBuffer b(len);
-		SerializeRLE((byte *)~b, len);
-		s = b;
+		s = GetAllRLE(len);
+		if(s.IsVoid())
+			LoadError();
 	}
 	else
 		SerializeRLE((byte *)~s, len);
@@ -729,12 +766,20 @@ Stream& Stream::operator%(WString& s) {
 	if(IsLoading()) {
 		dword len;
 		Pack(len);
-		if(IsError() || len + GetPos() > GetSize())
-			LoadError();
-		else {
+		if(len < 256 * 1024) {
 			WStringBuffer sb(len);
 			SerializeRaw((byte*)~sb, len * sizeof(wchar));
 			s = sb;
+		}
+		else {
+			String h = GetAll(len * sizeof(wchar));
+			if(h.IsVoid())
+				LoadError();
+			else {
+				WStringBuffer sb(len);
+				memcpy(~sb, ~h, len * sizeof(wchar));
+				s = sb;
+			}
 		}
 	}
 	else {
@@ -757,6 +802,11 @@ Stream& Stream::operator/(WString& s) {
 	s = FromUtf8(h);
 	return *this;
 }
+
+Stream& Stream::operator/(int& i)            { dword w = 0; if(IsStoring()) w = i + 1; Pack(w); i = w - 1; return *this; }
+Stream& Stream::operator/(unsigned int& i)   { dword w = 0; if(IsStoring()) w = i + 1; Pack(w); i = w - 1; return *this; }
+Stream& Stream::operator/(long& i)           { dword w = 0; if(IsStoring()) w = i + 1; Pack(w); i = w - 1; return *this; }
+Stream& Stream::operator/(unsigned long& i)  { dword w = 0; if(IsStoring()) w = i + 1; Pack(w); i = w - 1; return *this; }
 
 void Stream::Magic(dword magic) {
 	dword a = magic;
@@ -833,12 +883,13 @@ void  StringStream::_Put(const void *d, dword sz)
 {
 	SetWriteMode();
 	if(ptr + sz >= wrlim) {
-		intptr_t p = ptr - buffer;
-	#ifdef _DEBUG
-		wdata.SetLength(max(1, max(2 * (int)GetSize(), (int)GetSize() + (int)sz)));
-	#else
-		wdata.SetLength(max(128, max(2 * (int)GetSize(), (int)GetSize() + (int)sz)));
-	#endif
+		size_t p = ptr - buffer;
+		if(p + sz >= INT_MAX)
+			Panic("2GB StringStream limit exceeded");
+		if(p + sz > (size_t)limit)
+			throw LimitExc();
+		int len = (int32)max((int64)128, min((int64)limit, max(2 * GetSize(), GetSize() + sz)));
+		wdata.SetLength(len);
 		SetWriteBuffer();
 		ptr = buffer + p;
 	}
@@ -935,15 +986,15 @@ bool  MemStream::IsOpen() const {
 	return true;
 }
 
-void MemStream::Create(void *data, int size)
+void MemStream::Create(void *data, int64 size)
 {
 	style = STRM_WRITE|STRM_READ|STRM_SEEK|STRM_LOADING;
 	ptr = buffer = (byte *) data;
-	wrlim = rdlim = buffer + size;
+	wrlim = rdlim = buffer + (size_t)size;
 	pos = 0;
 }
 
-MemStream::MemStream(void *data, int size) {
+MemStream::MemStream(void *data, int64 size) {
 	Create(data, size);
 }
 
@@ -955,14 +1006,14 @@ MemStream::~MemStream() {}
 
 // ----------------------- Memory read streamer -------------------------
 
-void MemReadStream::Create(const void *data, int size)
+void MemReadStream::Create(const void *data, int64 size)
 {
 	MemStream::Create((void *)data, size);
 	style = STRM_READ|STRM_SEEK|STRM_LOADING;
 	wrlim = buffer;
 }
 
-MemReadStream::MemReadStream(const void *data, int size)
+MemReadStream::MemReadStream(const void *data, int64 size)
 {
 	Create(data, size);
 }
@@ -971,45 +1022,32 @@ MemReadStream::MemReadStream() {}
 
 // --------------------------- Size stream -----------------------
 
-void SizeStream::Seek(int64 apos) {
-	if(ptr - buffer + pos > size)
-		size = ptr - buffer + pos;
-	pos = apos;
-	if(pos > GetSize())
-		pos = GetSize();
-	ptr = buffer;
+int64 SizeStream::GetSize() const
+{
+	return int64(ptr - buffer + pos);
 }
 
-int64 SizeStream::GetSize() const {
-	return max(int64(ptr - buffer + pos), size);
-}
-
-void SizeStream::SetSize(int64 asize) {
-	size = asize;
-	if(ptr - buffer + pos > size) {
-		ptr = buffer;
-		pos = size;
-	}
-}
-
-void SizeStream::_Put(const void *, dword sz) {
-	wrlim = buffer + 128;
+void SizeStream::_Put(const void *, dword sz)
+{
+	wrlim = buffer + sizeof(h);
 	pos += ptr - buffer + sz;
 	ptr = buffer;
 }
 
-void SizeStream::_Put(int w) {
+void SizeStream::_Put(int w)
+{
 	_Put(NULL, 1);
 }
 
-bool SizeStream::IsOpen() const {
+bool SizeStream::IsOpen() const
+{
 	return true;
 }
 
-SizeStream::SizeStream() {
-	size = 0;
-	style = STRM_WRITE|STRM_SEEK;
-	buffer = h;
+SizeStream::SizeStream()
+{
+	style = STRM_WRITE;
+	buffer = ptr = h;
 }
 
 // ------------------------------ Compare stream ----------------------------
@@ -1036,6 +1074,7 @@ void CompareStream::Open(Stream& astream) {
 	wrlim = buffer + 128;
 	ptr = buffer;
 	equal = true;
+	ClearError();
 }
 
 bool CompareStream::IsOpen() const {
@@ -1074,7 +1113,7 @@ void CompareStream::Seek(int64 apos) {
 	ptr = buffer;
 }
 
-void CompareStream::Compare(int64 pos, const void *data, dword size) {
+void CompareStream::Compare(int64 pos, const void *data, int size) {
 	ASSERT(stream);
 	if(!size) return;
 	Buffer<byte> b(size);
@@ -1089,14 +1128,14 @@ void CompareStream::Flush() {
 }
 
 void CompareStream::_Put(const void *data, dword size) {
-	wrlim = buffer + 128;
+	wrlim = buffer + sizeof(h);
 	ASSERT(ptr <= wrlim);
 	Flush();
 	pos += ptr - buffer;
 	ptr = buffer;
 	byte *b = (byte *) data;
 	while(size && equal) {
-		int sz = min<int>(size, 128);
+		int sz = min<int>(size, sizeof(h));
 		Compare(pos, b, sz);
 		pos += sz;
 		b += sz;
@@ -1111,8 +1150,15 @@ void CompareStream::_Put(int w) {
 
 OutStream::OutStream()
 {
+	const int bsz = 64 * 1024;
+	h = new byte[bsz];
 	buffer = ptr = h;
-	wrlim = h + sizeof(h);
+	wrlim = h + bsz;
+}
+
+OutStream::~OutStream()
+{
+	delete[] h;
 }
 
 void OutStream::_Put(int w)
@@ -1167,15 +1213,32 @@ Stream& NilStream()
 	return Single<NilStreamClass>();
 }
 
+#ifdef PLATFORM_WIN32
+bool IsCoutUTF8;
+#endif
+
+void CoutUTF8()
+{
+#ifdef PLATFORM_WIN32
+	IsCoutUTF8 = true;
+	SetConsoleOutputCP(65001);
+#endif
+}
+
 #ifndef PLATFORM_WINCE
 class CoutStream : public Stream {
+	String buffer;
+
 	void Put0(int w) {
 #ifdef PLATFORM_WIN32
-		static HANDLE h = GetStdHandle(STD_OUTPUT_HANDLE);
-		char s[1];
-		s[0] = w;
-		dword dummy;
-		WriteFile(h, s, 1, &dummy, NULL);
+		buffer.Cat(w);
+		if(CheckUtf8(buffer)) { // TODO: Use W api
+			String ws = ToSystemCharset(buffer, GetConsoleOutputCP());
+			static HANDLE h = GetStdHandle(STD_OUTPUT_HANDLE);
+			dword dummy;
+			WriteFile(h, ~ws, ws.GetCount(), &dummy, NULL);
+			buffer.Clear();
+		}
 #else
 		putchar(w);
 #endif
@@ -1214,6 +1277,11 @@ class CerrStream : public Stream {
 		putc(w, stderr);
 	#endif
 	}
+#ifdef PLATFORM_POSIX
+	virtual   void  _Put(const void *data, dword size) {
+		fwrite(data, 1, size, stderr);
+	}
+#endif
 	virtual   bool  IsOpen() const { return true; }
 };
 
@@ -1223,237 +1291,6 @@ Stream& Cerr()
 }
 #endif
 
-static int sMappingGranularity_()
-{
-#ifdef PLATFORM_WIN32
-	static int mg = 0;
-	if(!mg) {
-		SYSTEM_INFO info;
-		GetSystemInfo(&info);
-		mg = info.dwAllocationGranularity;
-	}
-#else
-	static int mg = 4096;
-#endif
-	return mg;
-}
-
-FileMapping::FileMapping(const char *file_, bool delete_share_)
-{
-#ifdef PLATFORM_WIN32
-	hfile = INVALID_HANDLE_VALUE;
-	hmap = NULL;
-#endif
-#ifdef PLATFORM_POSIX
-	hfile = -1;
-	Zero(hfstat);
-#endif
-	base = rawbase = NULL;
-	size = rawsize = 0;
-	offset = rawoffset = 0;
-	filesize = -1;
-	write = false;
-	if(file_)
-		Open(file_, delete_share_);
-
-}
-
-bool FileMapping::Open(const char *file, bool delete_share)
-{
-	Close();
-	write = false;
-#ifdef PLATFORM_WIN32
-	if(IsWinNT())
-		hfile = UnicodeWin32().CreateFileW(ToSystemCharsetW(file), GENERIC_READ,
-			FILE_SHARE_READ | FILE_SHARE_WRITE | (delete_share && IsWinNT() ? FILE_SHARE_DELETE : 0),
-			NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, 0);
-	else
-		hfile = CreateFile(ToSystemCharset(file), GENERIC_READ,
-			FILE_SHARE_READ | FILE_SHARE_WRITE | (delete_share && IsWinNT() ? FILE_SHARE_DELETE : 0),
-			NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, 0);
-	if(hfile == INVALID_HANDLE_VALUE)
-		return false;
-	filesize = ::GetFileSize(hfile, NULL);
-	hmap = CreateFileMapping(hfile, NULL, PAGE_READONLY, 0, 0, NULL);
-	if(!hmap) {
-		Close();
-		return false;
-	}
-#endif
-#ifdef PLATFORM_POSIX
-	hfile = open(ToSystemCharset(file), O_RDONLY);
-	if(hfile == -1)
-		return false;
-	if(fstat(hfile, &hfstat) == -1) {
-		Close();
-		return false;
-	}
-	filesize = hfstat.st_size;
-#endif
-	return true;
-}
-
-bool FileMapping::Create(const char *file, int64 filesize_, bool delete_share)
-{
-	Close();
-	write = true;
-#ifdef PLATFORM_WIN32
-	if(IsWinNT())
-		hfile = UnicodeWin32().CreateFileW(ToSystemCharsetW(file), GENERIC_READ | GENERIC_WRITE,
-			FILE_SHARE_READ | FILE_SHARE_WRITE | (delete_share ? FILE_SHARE_DELETE : 0),
-			NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, 0);
-	else
-		hfile = CreateFile(ToSystemCharset(file), GENERIC_READ | GENERIC_WRITE,
-			FILE_SHARE_READ | FILE_SHARE_WRITE | (delete_share ? FILE_SHARE_DELETE : 0),
-			NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, 0);
-	if(hfile == INVALID_HANDLE_VALUE)
-		return false;
-	long lo = (dword)filesize_, hi = (dword)(filesize_ >> 32);
-	hmap = CreateFileMapping(hfile, NULL, PAGE_READWRITE, hi, lo, NULL);
-	if(!hmap) {
-		Close();
-		return false;
-	}
-#endif
-#ifdef PLATFORM_POSIX
-	hfile = open(ToSystemCharset(file), O_RDWR | O_CREAT, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
-	if(hfile == -1)
-		return false;
-#endif
-	filesize = filesize_;
-	return true;
-}
-
-bool FileMapping::Map(int64 mapoffset, dword maplen)
-{
-	ASSERT(IsOpen());
-	if(maplen == 0)
-		return Unmap();
-	mapoffset = minmax<int64>(mapoffset, 0, filesize);
-	int gran = sMappingGranularity_();
-	int64 rawoff = mapoffset & -gran;
-	maplen = (dword)min<int64>(maplen, filesize - mapoffset);
-	dword rawsz = (dword)min<int64>((maplen + (dword)(mapoffset - rawoff) + gran - 1) & -gran, filesize - rawoff);
-	if(rawbase && (mapoffset < rawoffset || mapoffset + maplen > rawoffset + rawsize))
-		Unmap();
-	if(!rawbase) {
-		rawoffset = rawoff;
-		rawsize = rawsz;
-#ifdef PLATFORM_WIN32
-		rawbase = (byte *)MapViewOfFile(hmap, write ? FILE_MAP_WRITE : FILE_MAP_READ,
-			(dword)(rawoffset >> 32), (dword)(rawoffset >> 0), rawsize);
-#else
-		rawbase = (byte *)mmap(0, rawsize,
-			PROT_READ | (write ? PROT_WRITE : 0),
-#ifdef PLATFORM_FREEBSD
-			MAP_NOSYNC,
-#else
-			MAP_SHARED,
-#endif
-			hfile, (dword)rawoffset);
-#endif
-#ifdef PLATFORM_POSIX
-		if(rawbase == (byte *)~0)
-#else
-		if(!rawbase)
-#endif
-			return false;
-	}
-	offset = mapoffset;
-	size = maplen;
-	base = rawbase + (int)(offset - rawoffset);
-	return true;
-}
-
-bool FileMapping::Unmap()
-{
-	bool ok = true;
-	if(rawbase) {
-#ifdef PLATFORM_WIN32
-		ok = !!UnmapViewOfFile(rawbase);
-#endif
-#ifdef PLATFORM_POSIX
-		ok = (munmap((void *)rawbase, rawsize) == 0);
-#endif
-	}
-	base = rawbase = NULL;
-	size = 0;
-	return ok;
-}
-
-bool FileMapping::Expand(int64 new_filesize)
-{
-	ASSERT(IsOpen());
-	if(new_filesize > filesize) {
-		if(!Unmap())
-			return false;
-#ifdef PLATFORM_WIN32
-		if(!CloseHandle(hmap)) {
-			hmap = NULL;
-			return false;
-		}
-		hmap = NULL;
-#endif
-#ifdef PLATFORM_POSIX
-		if(FTRUNCATE64_(hfile, (dword)(new_filesize - filesize)) != 0) {
-			Close();
-			return false;
-		}
-#endif
-		filesize = new_filesize;
-	}
-	return true;
-}
-
-bool FileMapping::Close()
-{
-	bool ok = Unmap();
-#ifdef PLATFORM_WIN32
-	if(hmap) {
-		if(!CloseHandle(hmap)) ok = false;
-		hmap = NULL;
-	}
-	if(IsOpen()) {
-		if(!CloseHandle(hfile)) ok = false;
-		hfile = INVALID_HANDLE_VALUE;
-	}
-#endif
-#ifdef PLATFORM_POSIX
-	if(IsOpen()) {
-		if(close(hfile) != 0) ok = false;
-		Zero(hfstat);
-		hfile = -1;
-	}
-#endif
-	filesize = -1;
-	offset = 0;
-	size = 0;
-	write = false;
-	return ok;
-}
-
-Time FileMapping::GetTime() const
-{
-	ASSERT(IsOpen());
-#ifdef PLATFORM_WIN32
-	FileTime ft;
-	GetFileTime(hfile, NULL, NULL, &ft);
-	return ft;
-#endif
-#ifdef PLATFORM_POSIX
-	return Time(hfstat.st_mtime);
-#endif
-}
-
-String FileMapping::GetData(int64 offset, dword len)
-{
-	if(IsOpen() && Map(offset, len))
-		return String(base, len);
-	else {
-		NEVER();
-		return String::GetVoid();
-	}
-}
 
 String ReadStdIn()
 {
@@ -1468,24 +1305,61 @@ String ReadStdIn()
 	}
 }
 
+String ReadSecret()
+{
+	DisableEcho();
+	String s = ReadStdIn();
+	EnableEcho();
+	return s;
+}
+
+void EnableEcho(bool b)
+{
+#ifdef PLATFORM_POSIX
+	termios t;
+	tcgetattr(STDIN_FILENO, &t);
+	if(b) t.c_lflag |=  ECHO;
+	else  t.c_lflag &= ~ECHO;
+	tcsetattr(STDIN_FILENO, TCSANOW, &t);
+#elif PLATFORM_WIN32
+    	HANDLE h = GetStdHandle(STD_INPUT_HANDLE); 
+    	DWORD mode = 0;
+    	GetConsoleMode(h, &mode);
+    	if(b) mode |=  ENABLE_ECHO_INPUT;
+    	else  mode &= ~ENABLE_ECHO_INPUT;
+    	SetConsoleMode(h, mode);
+#endif	
+}
+
+void DisableEcho()
+{
+	EnableEcho(false);
+}
+
+
 // ---------------------------------------------------------------------------
 
 String LoadStream(Stream& in) {
 	if(in.IsOpen()) {
 		in.ClearError();
-		int size = (int)in.GetLeft();
-		StringBuffer s(size);
-		if((dword)size != 0xffffffff)
-			in.Get(s, size);
-		if(!in.IsError())
-			return s;
+		int64 size = in.GetLeft();
+		if(size >= 0 && size < INT_MAX) {
+			StringBuffer s((int)size);
+			in.Get(s, (int)size);
+			if(!in.IsError())
+				return s;
+		}
 	}
 	return String::GetVoid();
 }
 
 String LoadFile(const char *filename) {
-	FileIn in(filename);
-	return LoadStream(in);
+	FindFile ff(filename);
+	if(ff && ff.IsFile()) {
+		FileIn in(filename);
+		return LoadStream(in);
+	}
+	return String::GetVoid();
 }
 
 bool SaveStream(Stream& out, const String& data) {
@@ -1513,7 +1387,24 @@ int64 CopyStream(Stream& dest, Stream& src, int64 count) {
 	return done;
 }
 
-void CheckedSerialize(const Callback1<Stream&> serialize, Stream& stream, int version)
+int64 CopyStream(Stream& dest, Stream& src, int64 count, Gate<int64, int64> progress)
+{
+	int block = (int)min<int64>(count, 32768);
+	Buffer<byte> temp(block);
+	int loaded;
+	int64 done = 0;
+	int64 total = count;
+	while(count > 0 && (loaded = src.Get(~temp, (int)min<int64>(count, block))) > 0) {
+		if(progress(done, total))
+			return -1;
+		dest.Put(~temp, loaded);
+		count -= loaded;
+		done += loaded;
+	}
+	return done;
+}
+
+void CheckedSerialize(const Event<Stream&> serialize, Stream& stream, int version)
 {
 	int pos = (int)stream.GetPos();
 	stream.Magic(0x61746164);
@@ -1525,7 +1416,7 @@ void CheckedSerialize(const Callback1<Stream&> serialize, Stream& stream, int ve
 	stream.Magic(pos);
 }
 
-bool Load(Callback1<Stream&> serialize, Stream& stream, int version) {
+bool Load(Event<Stream&> serialize, Stream& stream, int version) {
 	StringStream backup;
 	backup.SetStoring();
 	serialize(backup);
@@ -1542,10 +1433,17 @@ bool Load(Callback1<Stream&> serialize, Stream& stream, int version) {
 		ASSERT(!backup.IsError());
 		return false;
 	}
+	catch(ValueTypeError) {
+		backup.Seek(0);
+		backup.SetLoading();
+		serialize(backup);
+		ASSERT(!backup.IsError());
+		return false;
+	}
 	return true;
 }
 
-bool Store(Callback1<Stream&> serialize, Stream& stream, int version) {
+bool Store(Event<Stream&> serialize, Stream& stream, int version) {
 	stream.SetStoring();
 	CheckedSerialize(serialize, stream, version);
 	return !stream.IsError();
@@ -1555,14 +1453,17 @@ String Cfgname(const char *file) {
 	return file ? String(file) : ConfigFile();
 }
 
-bool LoadFromFile(Callback1<Stream&> serialize, const char *file, int version) {
+bool LoadFromFile(Event<Stream&> serialize, const char *file, int version) {
 	FileIn f(Cfgname(file));
 	return f ? Load(serialize, f, version) : false;
 }
 
-bool StoreToFile(Callback1<Stream&> serialize, const char *file, int version) {
+bool StoreToFile(Event<Stream&> serialize, const char *file, int version) {
 	FileOut f(Cfgname(file));
-	return f ? Store(serialize, f, version) : false;
+	if(!f || !Store(serialize, f, version))
+		return false;
+	f.Close();
+	return !f.IsError();
 }
 
 Stream& Pack16(Stream& s, int& i) {
@@ -1635,4 +1536,4 @@ int StreamHeading(Stream& stream, int ver, int minver, int maxver, const char* t
 	return ver;
 }
 
-END_UPP_NAMESPACE
+}

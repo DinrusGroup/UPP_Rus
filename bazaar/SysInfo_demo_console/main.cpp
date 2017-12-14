@@ -1,8 +1,8 @@
 #include <Core/Core.h>
+#include <SysInfo/SysInfo.h>
+
 
 using namespace Upp;
-
-#include <SysInfo/SysInfo.h>
 
 static bool end = false;
 
@@ -38,6 +38,22 @@ void Test()
 	Puts(Format("Os:               %s", GetOsFolder()));
 	Puts(Format("System:           %s", GetSystemFolder()));
 	
+	Puts("\nNetwork info");
+	String nname, domain, ip4, ip6;
+	if (GetNetworkInfo(nname, domain, ip4, ip6))
+		Puts(Format("Name '%s', Domain '%s', IP4 '%s', IP6 '%s'", nname, domain, ip4, ip6));
+	else
+		Puts("Problem reading newtwork data");
+	
+	Puts("\nNetwork adapter info");
+	Array <NetAdapter> netAdapters = GetAdapterInfo();
+	for (int i = 0; i < netAdapters.GetCount(); ++i) 
+		Puts(Format("- %s %s %s\n  %s\n  IP4: %s IP6: %s", netAdapters[i].type, 
+						netAdapters[i].mac, netAdapters[i].fullname, 
+						netAdapters[i].description, netAdapters[i].ip4, netAdapters[i].ip6));
+	
+	Puts(Format("\nFirst free available socket port from 49152 is %d", GetAvailableSocketPort(49152)));
+	
 	Puts("\nSystem info:");		
 	String manufacturer, productName, version, mbSerial;
 	Date releaseDate;
@@ -48,7 +64,7 @@ void Test()
  	
  	Puts(Format("Real CPU Speed: %.3f GHz", GetCpuSpeed()/1000.));
  	
- 	Puts("Battery info");
+ 	Puts("\nBattery info");
  	bool present;
  	//int designCapacity,lastFullCapacity;
 	//String batVendor, type, model, serial;
@@ -69,12 +85,12 @@ void Test()
  	String biosVersion, biosSerial;
  	Date biosReleaseDate;
 	GetBiosInfo(biosVersion, biosReleaseDate, biosSerial);
-	Puts(Format("Bios version '%s',\n release date '%s', serial: '%s'", biosVersion, AsString(biosReleaseDate), biosSerial));
+	Puts(Format("\nBios version '%s',\n release date '%s', serial: '%s'", biosVersion, AsString(biosReleaseDate), biosSerial));
 	String vendor, identifier, architecture; 
 	int speed;
 	for (int i = 0; i < numberOfProcessors; ++i) {
 		GetProcessorInfo(i, vendor, identifier, architecture, speed);		
-		Puts(Format("Processor #%d: Vendor '%s',\n identifier '%s',\n architecture '%s', speed %d MHz", i, vendor, identifier, architecture, speed));	
+		Puts(Format("\nProcessor #%d: Vendor '%s',\n identifier '%s',\n architecture '%s', speed %d MHz", i, vendor, identifier, architecture, speed));	
 	}
 	Puts("\nPress enter to continue...");	TestGetchar();
 	
@@ -101,10 +117,11 @@ void Test()
 		Puts(Format("Distro:  %s, version: %s", distro, distVersion, desktop, deskVersion));
 		Puts(Format("Desktop: %s, version: %s", desktop, deskVersion));
 	}
-	String compiler, date;
-	int compilerVersion;
-	GetCompilerInfo(compiler, compilerVersion, date);
-	Puts(Format("\nProgram compiled with %s version %d. Compilation date: %s", compiler, compilerVersion, date));
+	String compiler, mode;
+	Time tim;
+	int compilerVersion, bits;
+	GetCompilerInfo(compiler, compilerVersion, tim, mode, bits);
+	Puts(Format("\nProgram compiled with %s version %d. Compilation date: %s. Mode: %s. Bits: %d", compiler, compilerVersion, Format(tim), mode, bits));
 	
 	Puts("\nDefault exes info:");
 	const char *ext[] = {".html", ".doc", ".png", ".pdf", ".txt", ".xyz", ""};
@@ -114,7 +131,7 @@ void Test()
 	Puts("\nPress enter to continue...");	TestGetchar();
 	
 	Puts("\nDrives list:");
-	Array<String> drives;
+	Vector<String> drives;
 	drives = GetDriveList();
 	for (int i = 0; i < drives.GetCount(); ++i) {
 		Puts(Format("Drive path:'%s'", drives[i]));
@@ -135,8 +152,8 @@ void Test()
 			Puts (" Not mounted");
 	}
 	Puts("\nOther Info:");
-	int id = GetProcessId();
-	Puts(Format("Process Id:          %d", id));
+	int64 id = GetProcessId();
+	Puts(Sprintf("Process Id:          %ld", id));
 	Puts(Format("Process name:        '%s'", GetProcessName(id)));
 	Puts(Format("Process file name:   '%s'", GetProcessFileName(id)));
 	int priority = GetProcessPriority(id);
@@ -145,7 +162,7 @@ void Test()
 	priority = GetProcessPriority(id);
 	Puts(Format("Process priority is: %s", priority >= 0? AsString(priority): "Not accesible"));
 
-	Window_SaveCapture(0, AppendFileName(GetDesktopFolder(), "Desktop")); 
+	Snap_Desktop(AppendFileName(GetDesktopFolder(), "Desktop")); 
 	Puts ("Screenshot saved in " + AppendFileName(GetDesktopFolder(), "Desktop"));
 	
 	Puts("\nLaunch file 'test.txt':");
@@ -160,7 +177,7 @@ void Test()
 	LaunchFile(fileTest);
 	{
 		TimeStop t;
-		long windowId;
+		int64 windowId;
 		while(-1 == (windowId = GetWindowIdFromCaption("test.txt", false))) {
 			if (t.Elapsed() > 10000)
 				break;
@@ -170,18 +187,20 @@ void Test()
 			long left, top, right, bottom;
 			Window_GetRect(windowId, left, top, right, bottom);	
 			Puts(Format("Editor window is located at %d, %d, %d, %d", (int)left, (int)top, (int)right, (int)bottom));
-			Puts("Editor window id is " + FormatLong(windowId)); 
+			Puts("Editor window id is " + Format64(windowId)); 
 			            
 			long x, y;
 			Mouse_GetPos(x, y);
 			Puts(Format("Mouse pos is %d, %d", (int)x, (int)y));
 			Mouse_SetPos(200, 200, windowId);
-			
+
+#if defined(PLATFORM_WIN32) || !defined(flagNO_XTEST)	
 			Mouse_LeftClick();
     		Keyb_SendKeys("{HOME}This text is added by Keyb_SendKeys.\n");
     		Keyb_SendKeys("And the window resized and moved by Window_SetRect.\n", 0, 0);
     		Keyb_SendKeys("And a window capture in c:\\Windowgrab.bmp.\n", 0, 0);
     		Keyb_SendKeys("Some chars just for test: \\/:;,.ºª^[]{}´?¿~#@!¡\n", 0, 0);  		
+#endif
 #if defined(PLATFORM_WIN32)			
     		Window_SetRect(windowId, 10, 10, 800, 400);
 #endif    	
@@ -190,7 +209,7 @@ void Test()
 	}
 	Puts("\nPress enter to terminate 'test.txt'");	TestGetchar();
 
-	int processId;
+	int64 processId;
 	TimeStop t;
 	while(-1 == (processId = GetProcessIdFromWindowCaption("test.txt", false))) {
 		if (t.Elapsed() > 10000)
@@ -208,7 +227,7 @@ void Test()
 	Puts("\nPress enter to continue...");	TestGetchar();
 	
 	Puts("\nWindows list:");
-	Array<long> widL, pidL;
+	Array<int64> widL, pidL;
 	Array<String> name, fileName, caption;
 	GetWindowsList(widL, pidL, name, fileName, caption);
 	for (int i = 0; i < widL.GetCount(); ++i) {
@@ -235,8 +254,22 @@ void Test()
 	Puts("\nPress enter to end...");	TestGetchar();
 } 
 
+
+
 CONSOLE_APP_MAIN
-{
+{	
+	Puts("\nBasic system identification:");
+	String kernel, kerVersion, kerArchitecture, distro, distVersion, desktop, deskVersion;
+	if (!GetOsInfo(kernel, kerVersion, kerArchitecture, distro, distVersion, desktop, deskVersion))
+		Puts("Error getting Os info");
+	else { 	
+		Puts(Format("Kernel:  %s, version: %s,\narchitecture: %s", kernel, kerVersion, kerArchitecture));
+		Puts(Format("Distro:  %s, version: %s", distro, distVersion, desktop, deskVersion));
+		Puts(Format("Desktop: %s, version: %s", desktop, deskVersion));
+	}
+	Puts("\nPress enter to follow with system identification:");
+	getchar();
+       
 	FileDelete(AppendFileName(GetDesktopFolder(), "log"));
 	Puts("Introduce enter or (l) to log off, (r) to reboot or (s) to shutdown");
 	char str[50];

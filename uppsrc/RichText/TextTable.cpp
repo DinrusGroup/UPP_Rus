@@ -1,9 +1,10 @@
 #include "RichText.h"
 
-NAMESPACE_UPP
+namespace Upp {
 
 RichTable::Format RichText::GetTableFormat(int table) const
 {
+	Mutex::Lock __(mutex);
 	return GetConstTable(table).GetFormat();
 }
 
@@ -23,12 +24,13 @@ int  RichText::SetTable(int pos, const RichTable& table)
 	int pi = txt.FindPart(pos);
 	ASSERT(pos == 0 && txt.GetPartLength(pi) == 0 && txt.IsPara(pi));
 	RichTable pt(table, 1);
-	txt.SetPick(pi, pt);
+	txt.SetPick(pi, pick(pt));
 	return GetRichPos(bpos).table;
 }
 
 RichTable RichText::CopyTable(int table) const
 {
+	Mutex::Lock __(mutex);
 	RichTable tab(GetConstTable(table), 1);
 	return tab;
 }
@@ -100,6 +102,7 @@ void RichText::InsertParaSpecial(int table, bool before, const RichPara::Format&
 
 RichTable RichText::CopyTable(int table, const Rect& sel) const
 {
+	Mutex::Lock __(mutex);
 	return GetConstTable(table).Copy(sel);
 }
 
@@ -156,7 +159,7 @@ void  RichText::JoinCell(int table, const Rect& sel)
 				RichTxt& t = tab[i][j].text;
 				for(int pi = 0; pi < t.GetPartCount(); pi++)
 					if(t.IsTable(pi))
-						cell.text.CatPick(t.part[pi].Get<RichTable>());
+						cell.text.CatPick(pick(t.part[pi].Get<RichTable>()));
 					else
 					if(pi < t.GetPartCount() - 1 || t.GetPartLength(pi))
 						cell.text.Cat(t.Get(pi, style), style);
@@ -169,12 +172,13 @@ void  RichText::JoinCell(int table, const Rect& sel)
 
 RichCell::Format RichText::GetCellFormat(int table, const Rect& sel) const
 {
+	Mutex::Lock __(mutex);
 	return GetConstTable(table).GetCellFormat(sel);
 }
 
-void RichText::SetCellFormat(int table, const Rect& sel, const RichCell::Format& fmt, bool setkeep)
+void RichText::SetCellFormat(int table, const Rect& sel, const RichCell::Format& fmt, bool setkeep, bool setround)
 {
-	GetUpdateTable(table).SetCellFormat(sel, fmt, setkeep);
+	GetUpdateTable(table).SetCellFormat(sel, fmt, setkeep, setround);
 	RefreshAll();
 }
 
@@ -194,6 +198,7 @@ void RichText::ClearTable(int table, const Rect& sel)
 
 RichText::FormatInfo RichText::GetTableFormatInfo(int table, const Rect& sel) const
 {
+	Mutex::Lock __(mutex);
 	const RichTable& tab = GetConstTable(table);
 	bool first = true;
 	FormatInfo fi;
@@ -222,4 +227,4 @@ void       RichText::ApplyTableFormatInfo(int table, const Rect& sel, const Rich
 	RefreshAll();
 }
 
-END_UPP_NAMESPACE
+}

@@ -1,4 +1,4 @@
-description "RusIDE - .lay дизайнер\377B";
+description "TheIDE - .lay designer\377B";
 
 uses
 	ide\Common,
@@ -8,7 +8,7 @@ uses
 	CodeEditor;
 
 file
-	LayDes.h,
+	LayDes.h options(BUILDER_OPTION) PCH,
 	laydes.key,
 	sdiff.cpp,
 	laylib.cpp,
@@ -18,13 +18,13 @@ file
 	fontprop.cpp,
 	propane.cpp,
 	item.cpp,
-	layout.cpp optimize_speed,
+	layout.cpp,
 	visgen.cpp,
 	laydes.cpp,
 	layfile.cpp,
 	laywin.cpp,
 	LayDes.lay,
 	LayDes.iml,
-	"Инфо" readonly separator,
+	Info readonly separator,
 	Copying;
 

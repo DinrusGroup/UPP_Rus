@@ -1,6 +1,6 @@
 #include "Core.h"
 
-NAMESPACE_UPP
+namespace Upp {
 
 #ifdef _DEBUG
 void String0::Dsyn()
@@ -11,7 +11,7 @@ void String0::Dsyn()
 }
 #endif
 
-String0::Rc String0::voidptr[2] = { { 2, 0 }, { 0, 0 } };
+String0::Rc String0::voidptr[2];
 
 void String0::LSet(const String0& s)
 {
@@ -24,9 +24,11 @@ void String0::LSet(const String0& s)
 	}
 	else {
 		ptr = (char *)MemoryAlloc32();
-		qword *d = qptr;
-		const qword *q = s.qptr;
-		d[0] = q[0]; d[1] = q[1]; d[2] = q[2]; d[3] = q[3];
+//		qword *d = qptr;
+//		const qword *q = s.qptr;
+//		d[0] = q[0]; d[1] = q[1]; d[2] = q[2]; d[3] = q[3];
+		fast_copy128(ptr, s.ptr);
+		fast_copy128(ptr + 16, s.ptr + 16);
 	}
 }
 
@@ -77,7 +79,7 @@ unsigned String0::LHashValue() const
 	if(l < 15) {
 		dword w[4];
 		w[0] = w[1] = w[2] = w[3] = 0;
-		memcpy(w, ptr, l);
+		SVO_MEMCPY((char *)w, ptr, l);
 		((byte *)w)[SLEN] = l;
 		return CombineHash(w[0], w[1], w[2], w[3]);
 	}
@@ -90,12 +92,8 @@ int String0::LCompare(const String0& s) const
 	int la = GetLength();
 	const char *b = s.Begin();
 	int lb = s.GetLength();
-	int l = min(la, lb);
-	for(int i = 0; i < l; i++) {
-		int q = (byte)a[i] - (byte)b[i];
-		if(q) return q;
-	}
-	return la - lb;
+	int q = fast_memcmp(a, b, min(la, lb));
+	return q ? q : SgnCompare(la, lb);
 }
 
 char *String0::Alloc(int count, char& kind)
@@ -105,8 +103,11 @@ char *String0::Alloc(int count, char& kind)
 		return (char *)MemoryAlloc32();
 	}
 	size_t sz = sizeof(Rc) + count + 1;
-	Rc *rc = (Rc *)MemoryAlloc(sz);
-	rc->alloc = (int)sz - sizeof(Rc) - 1;
+	Rc *rc = (Rc *)MemoryAllocSz(sz);
+	if(count == INT_MAX)
+		rc->alloc = INT_MAX;
+	else
+		rc->alloc = (int)sz - sizeof(Rc) - 1;
 	rc->refcount = 1;
 	kind = min(rc->alloc, 255);
 	return (char *)(rc + 1);
@@ -117,6 +118,8 @@ char *String0::Insert(int pos, int count, const char *s)
 	ASSERT(pos >= 0 && count >= 0 && pos <= GetCount());
 	int len = GetCount();
 	int newlen = len + count;
+	if(newlen < len) // overflow, string >2GB
+		Panic("String is too big!");
 	char *str = (char *)Begin();
 	if(newlen < GetAlloc() && !IsSharedRef() && (!s || s < str || s > str + len)) {
 		if(pos < len)
@@ -127,18 +130,19 @@ char *String0::Insert(int pos, int count, const char *s)
 			LLen() = newlen;
 		str[newlen] = 0;
 		if(s)
-			memcpy(str + pos, s, count);
+			SVO_MEMCPY(str + pos, s, count);
 		Dsyn();
 		return str + pos;
 	}
 	char kind;
-	char *p = Alloc(max(2 * len, newlen), kind);
+	char *p = Alloc(max(len >= int((int64)2 * INT_MAX / 3) ? INT_MAX : len + (len >> 1), newlen),
+	                kind);
 	if(pos > 0)
-		memcpy(p, str, pos);
+		SVO_MEMCPY(p, str, pos);
 	if(pos < len)
-		memcpy(p + pos + count, str + pos, len - pos);
+		SVO_MEMCPY(p + pos + count, str + pos, len - pos);
 	if(s)
-		memcpy(p + pos, s, count);
+		SVO_MEMCPY(p + pos, s, count);
 	p[newlen] = 0;
 	Free();
 	ptr = p;
@@ -155,7 +159,7 @@ void String0::UnShare()
 		int len = LLen();
 		char kind;
 		char *p = Alloc(len, kind);
-		memcpy(p, ptr, len + 1);
+		SVO_MEMCPY(p, ptr, len + 1);
 		Free();
 		chr[KIND] = kind;
 		ptr = p;
@@ -230,7 +234,7 @@ void String0::Cat(const char *s, int len)
 {
 	if(IsSmall()) {
 		if(SLen() + len < 14) {
-			memcpy(chr + SLen(), s, len);
+			SVO_MEMCPY(chr + SLen(), s, len);
 			SLen() += len;
 			chr[(int)SLen()] = 0;
 			Dsyn();
@@ -239,7 +243,7 @@ void String0::Cat(const char *s, int len)
 	}
 	else
 		if((int)LLen() + len < LAlloc() && !IsSharedRef()) {
-			memcpy(ptr + LLen(), s, len);
+			SVO_MEMCPY(ptr + LLen(), s, len);
 			LLen() += len;
 			ptr[LLen()] = 0;
 			Dsyn();
@@ -255,9 +259,19 @@ void String0::Reserve(int r)
 	Trim(l);
 }
 
-void String0::Set(const char *s, int len)
+void String0::SetL(const char *s, int len)
 {
-	w[0] = w[1] = w[2] = w[3] = 0;
+	char *p = Alloc(len, chr[KIND]);
+	memcpy(p, s, len);
+	p[len] = 0;
+	ptr = p;
+	LLen() = len;
+	SLen() = 15;
+}
+
+void String0::Set0(const char *s, int len)
+{
+	Zero();
 	switch(len) {
 	#define MOV(x) case x: chr[x - 1] = s[x - 1];
 		MOV(14) MOV(13) MOV(12) MOV(11) MOV(10) MOV(9) MOV(8)
@@ -266,25 +280,21 @@ void String0::Set(const char *s, int len)
 		SLen() = len;
 		break;
 	default:
-		char *p = Alloc(len, chr[KIND]);
-		memcpy(p, s, len);
-		p[len] = 0;
-		ptr = p;
-		LLen() = len;
-		SLen() = 15;
+		SetL(s, len);
 	};
 	Dsyn();
 }
 
-String& String::operator=(const char *s)
+void String::AssignLen(const char *s, int slen)
 {
 	int  len = GetCount();
 	char *str = (char *)Begin();
 	if(s >= str && s <= str + len)
-		return *this = String(s, strlen__(s));
-	String0::Free();
-	String0::Set(s, strlen__(s));
-	return *this;
+		*this = String(s, slen);
+	else {
+		String0::Free();
+		String0::Set0(s, slen);
+	}
 }
 
 String String::GetVoid()
@@ -309,28 +319,30 @@ WString String::ToWString() const
 
 int String::GetCharCount() const
 {
-	return GetDefaultCharset() == CHARSET_UTF8 ?  utf8len(Begin(), GetCount()) : GetCount();	
+	return GetDefaultCharset() == CHARSET_UTF8 ?  utf8len(Begin(), GetCount()) : GetCount();
 }
 
 String::String(StringBuffer& b)
 {
-	if(b.begin == b.buffer) {
-		String0::Set(b.begin, (int)(uintptr_t)(b.end - b.begin));
+	if(b.pbegin == b.buffer) {
+		String0::Set0(b.pbegin, (int)(uintptr_t)(b.pend - b.pbegin));
 		return;
 	}
 	int l = b.GetLength();
 	if(l <= 14) {
 		Zero();
-		memcpy(chr, b.begin, l);
+		memcpy(chr, b.pbegin, l);
 		SLen() = l;
 		b.Free();
 	}
 	else {
-		ptr = b.begin;
+		ptr = b.pbegin;
 		ptr[l] = 0;
 		SLen() = 15;
 		LLen() = l;
 		chr[KIND] = min(b.GetAlloc(), 255);
+		if(GetAlloc() > 4 * GetLength() / 3)
+			Shrink();
 	}
 	b.Zero();
 
@@ -350,7 +362,7 @@ char *StringBuffer::Alloc(int count, int& alloc)
 	else {
 		size_t sz = sizeof(Rc) + count + 1;
 		Rc *rc = (Rc *)MemoryAlloc(sz);
-		alloc = rc->alloc = (int)sz - sizeof(Rc) - 1;
+		alloc = rc->alloc = (int)min((size_t)INT_MAX, sz - sizeof(Rc) - 1);
 		rc->refcount = 1;
 		return (char *)(rc + 1);
 	}
@@ -358,58 +370,73 @@ char *StringBuffer::Alloc(int count, int& alloc)
 
 void StringBuffer::Free()
 {
-	if(begin == buffer)
+	if(pbegin == buffer)
 		return;
-	int all = (int)(limit - begin);
+	int all = (int)(limit - pbegin);
 	if(all == 31)
-		MemoryFree32(begin);
+		MemoryFree32(pbegin);
 	if(all > 31)
-		MemoryFree((Rc *)begin - 1);
+		MemoryFree((Rc *)pbegin - 1);
 }
 
-void StringBuffer::Realloc(int n, const char *cat, int l)
+void StringBuffer::Realloc(dword n, const char *cat, int l)
 {
 	int al;
-	int ep = (int)(end - begin);
+	size_t ep = pend - pbegin;
+	if(n > INT_MAX)
+		n = INT_MAX;
 	char *p = Alloc(n, al);
-	memcpy(p, begin, min(GetLength(), n));
+	memcpy(p, pbegin, min((dword)GetLength(), n));
 	if(cat) {
+		if(ep + l > INT_MAX)
+			Panic("StringBuffer is too big!");
 		memcpy(p + ep, cat, l);
 		ep += l;
 	}
 	Free();
-	begin = p;
-	end = begin + ep;
-	limit = begin + al;
+	pbegin = p;
+	pend = pbegin + ep;
+	limit = pbegin + al;
 }
 
 void StringBuffer::Expand()
 {
 	Realloc(GetLength() * 2);
+	if(pend == limit)
+		Panic("StringBuffer is too big!");
 }
 
 void StringBuffer::SetLength(int l)
 {
-	Realloc(l);
-	end = begin + l;
+	if(l > GetAlloc())
+		Realloc(l);
+	pend = pbegin + l;
+}
+
+void StringBuffer::Shrink()
+{
+	int l = GetLength();
+	if(l < GetAlloc() && l > 14)
+		Realloc(l);
+	pend = pbegin + l;
 }
 
 void StringBuffer::Cat(const char *s, int l)
 {
-	if(end + l > limit)
+	if(pend + l > limit)
 		Realloc(max(GetLength(), l) + GetLength(), s, l);
 	else {
-		memcpy(end, s, l);
-		end += l;
+		SVO_MEMCPY(pend, s, l);
+		pend += l;
 	}
 }
 
 void StringBuffer::Cat(int c, int l)
 {
-	if(end + l > limit)
+	if(pend + l > limit)
 		Realloc(max(GetLength(), l) + GetLength(), NULL, l);
-	memset(end, c, l);
-	end += l;
+	memset(pend, c, l);
+	pend += l;
 }
 
 void StringBuffer::Set(String& s)
@@ -417,15 +444,15 @@ void StringBuffer::Set(String& s)
 	s.UnShare();
 	int l = s.GetLength();
 	if(s.GetAlloc() == 14) {
-		begin = (char *)MemoryAlloc32();
-		limit = begin + 31;
-		memcpy(begin, s.Begin(), l);
-		end = begin + l;
+		pbegin = (char *)MemoryAlloc32();
+		limit = pbegin + 31;
+		memcpy(pbegin, s.Begin(), l);
+		pend = pbegin + l;
 	}
 	else {
-		begin = s.ptr;
-		end = begin + l;
-		limit = begin + s.GetAlloc();
+		pbegin = s.ptr;
+		pend = pbegin + l;
+		limit = pbegin + s.GetAlloc();
 	}
 	s.Zero();
 }
@@ -455,6 +482,16 @@ String TrimBoth(const String& str)
 	return TrimLeft(TrimRight(str));
 }
 
+String TrimLeft(const char *sw, int len, const String& s)
+{
+	return s.StartsWith(sw, len) ? s.Mid(len) : s;
+}
+
+String TrimRight(const char *sw, int len, const String& s)
+{
+	return s.EndsWith(sw, len) ? s.Mid(0, s.GetCount() - len) : s;
+}
+
 struct StringICompare__
 {
 	int encoding;
@@ -477,4 +514,4 @@ int CompareNoCase(const String& a, const char *b, byte encoding)
 	return IterCompare(a.Begin(), a.End(), b, b + strlen(b), StringICompare__(encoding));
 }
 
-END_UPP_NAMESPACE
+}

@@ -20,7 +20,8 @@ bool IsCppKeyword(const String& id)
 bool IsCppType(const String& id)
 {
 	static const char *t[] = {
-		"цел", "дол", "крат", "байт", "проц", "ук", "бцел", "бул", "бкрат", "плав", "сим", "дим", "шим", "int", "long", "short", "void", "float", "double", "char", "signed", "unsigned", "bool", "const", "mutable", "struct", "class", "union"
+		"int", "long", "short", "void", "float", "double", "char", "signed", "unsigned", "bool",
+	    "const", "mutable", "struct", "class", "union"
 	};
 	static Index<String> kt;
 	ONCELOCK {
@@ -68,36 +69,48 @@ inline bool sOperator(byte c)
 	return sOperatorTab[c];
 }
 
-Vector<ItemTextPart> ParseItemNatural(const String& name, const CppItem& m, const char *s)
+Vector<ItemTextPart> ParseItemNatural(const String& name,
+                                      const String& natural,
+                                      const String& ptype, const String& pname,
+                                      const String& type, const String& tname,
+                                      const String& ctname,
+                                      const char *s)
 {
-	LLOG("ParseItemNatural " << m.natural << ", pname: " << m.pname
-	                         << ", tname: " << m.tname << ", m.ctname: " << m.ctname);
 	Vector<ItemTextPart> part;
+	int len = name.GetLength();
+	if(len == 0) {
+		ItemTextPart& p = part.Add();
+		p.pos = 0;
+		p.len = natural.GetLength();
+		p.type = ITEM_TEXT;
+		p.pari = -1;
+		return part;
+	}
 	bool param = false;
 	int pari = -1;
 	int par = 0;
 	while(*s) {
 		ItemTextPart& p = part.Add();
-		p.pos = (int)(s - ~m.natural);
+		p.pos = (int)(s - ~natural);
 		p.type = ITEM_TEXT;
 		p.pari = pari;
 		int n = 1;
 		if(*s >= '0' && *s <= '9') {
-			while(s[n] >= '0' && s[n] <= '9')
+			while(s[n] >= '0' && s[n] <= '9' || (s[n] == 'x' || s[n] == 'X'))
 				n++;
 			p.type = ITEM_NUMBER;
 		}
 		else
 		if(iscid(*s) || *s == ':') {
-			if(strncmp(s, name, name.GetLength()) == 0 && !iscid(s[name.GetLength()])) {
+			if(strncmp(s, name, len) == 0 && !iscid(s[len])) {
 				p.type = ITEM_NAME;
-				n = name.GetLength();
+				n = len;
 				param = true;
 			}
 			else {
 				String id;
 				n = 0;
-				while(IsAlNum(s[n]) || s[n] == '_' || s[n] == ':')
+				while(iscid(s[n]) || s[n] == ':')
 					id.Cat(s[n++]);
 				if(IsCppType(id))
 					p.type = ITEM_CPP_TYPE;
@@ -105,23 +118,23 @@ Vector<ItemTextPart> ParseItemNatural(const String& name, const CppItem& m, cons
 				if(IsCppKeyword(id))
 					p.type = ITEM_CPP;
 				else
-				if(InScList(id, m.pname))
+				if(InScList(id, pname))
 					p.type = ITEM_PNAME;
 				else
 				if(id == s_pick_) {
 					p.type = ITEM_UPP;
 				}
 				else
-				if(InScList(id, m.tname) || InScList(id, m.ctname))
+				if(InScList(id, tname) || InScList(id, ctname))
 					p.type = ITEM_TNAME;
 				else
 				if(param) {
-					int ii = InScListIndext(id, m.ptype);
+					int ii = InScListIndext(id, ptype);
 					if(ii >= 0)
 						p.type = ITEM_PTYPE + ii;
 				}
 				else {
-					int ii = InScListIndext(id, m.type);
+					int ii = InScListIndext(id, type);
 					if(ii >= 0)
 						p.type = ITEM_TYPE + ii;
 				}
@@ -157,13 +170,23 @@ Vector<ItemTextPart> ParseItemNatural(const String& name, const CppItem& m, cons
 				pari = 0;
 				par = 0;
 			}
-			while(s[n] && !iscid(s[n]))
+			while(s[n] && !iscid(s[n])) {  // Anonymous structure name
+				if(s[n] == '@') {
+					p.len = n;
+					return part;
+				}
 				n++;
+			}
 		}
 		p.len = n;
 		s += n;
 	}
 	return part;
+}
+
+Vector<ItemTextPart> ParseItemNatural(const String& name, const CppItem& m, const char *s)
+{
+	return ParseItemNatural(name, m.natural, m.ptype, m.pname, m.type, m.tname, m.ctname, s);
 }
 
 Vector<ItemTextPart> ParseItemNatural(const CppItemInfo& m, const char *s)

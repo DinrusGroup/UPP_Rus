@@ -2,7 +2,7 @@
 #include "OciCommon.h"
 #include "OraCommon.h"
 
-NAMESPACE_UPP
+namespace Upp {
 
 Date OciDecodeDate(const byte data[7]) {
 	Date d;
@@ -190,7 +190,7 @@ static bool scmpw(const byte *s, const char *w) {
 	}
 }
 
-bool OraclePerformScript(const String& text, StatementExecutor& exe, Gate2<int, int> progress_canceled)
+bool OraclePerformScript(const String& text, StatementExecutor& exe, Gate<int, int> progress_canceled)
 {
 	bool error = false;
 	String statement;
@@ -539,4 +539,4 @@ Sql::ERRORCLASS OciErrorClass(int errcode)
 	: Sql::ERROR_UNSPECIFIED;
 }
 
-END_UPP_NAMESPACE
+}

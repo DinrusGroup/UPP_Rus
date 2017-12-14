@@ -1,6 +1,6 @@
 #include "RichEdit.h"
 
-NAMESPACE_UPP
+namespace Upp {
 
 void RichEdit::SaveTableFormat(int table)
 {
@@ -25,7 +25,7 @@ void RichEdit::InsertTable()
 	if(dlg.Run() != IDOK)
 		return;
 	RichTable::Format fmt;
-	int nx = minmax((int)dlg.columns, 1, 20);
+	int nx = minmax((int)~dlg.columns, 1, 20);
 	for(int q = nx; q--;)
 		fmt.column.Add(1);
 	if(dlg.header)
@@ -41,7 +41,7 @@ void RichEdit::InsertTable()
 			p.format.newpage = false;
 			p.format.label.Clear();
 			h.Cat(p);
-			table.SetPick(i, j, h);
+			table.SetPick(i, j, pick(h));
 		}
 	NextUndo();
 	if(cursorp.posinpara)
@@ -88,12 +88,41 @@ int CharFilterEqualize(int c)
 	return IsDigit(c) || c == ':' ? c : 0;
 }
 
+struct RichEditTableProperties : WithTablePropertiesLayout<TopWindow> {
+	String header_qtf, footer_qtf;
+
+	void EditHdrFtr()
+	{
+		EditRichHeaderFooter(header_qtf, footer_qtf);
+	}
+	
+	void NewHdrFtr()
+	{
+		SyncHdrFtr();
+		if(newhdrftr)
+			EditHdrFtr();
+	}
+	
+	void SyncHdrFtr()
+	{
+		hdrftr.Enable(newhdrftr && newhdrftr.IsEnabled());
+	}
+	
+	typedef RichEditTableProperties CLASSNAME;
+
+	RichEditTableProperties() {
+		CtrlLayoutOKCancel(*this, t_("Table properties"));
+		newhdrftr <<= THISBACK(NewHdrFtr);
+		hdrftr <<= THISBACK(EditHdrFtr);
+		SyncHdrFtr();
+	}
+};
+
 void RichEdit::TableProps()
 {
 	if(IsSelection() || cursorp.table == 0)
 		return;
-	WithTablePropertiesLayout<TopWindow> dlg;
-	CtrlLayoutOKCancel(dlg, t_("Table properties"));
+	RichEditTableProperties dlg;
 	dlg.Breaker(dlg.destroy, IDNO);
 	RichTable::Format fmt = text.GetTableFormat(cursorp.table);
 	String ratios;
@@ -114,7 +143,14 @@ void RichEdit::TableProps()
 	Advn(r, dlg.grid.SetUnit(unit), fmt.grid);
 	Advn(r, dlg.header, fmt.header);
 	Advn(r, dlg.keep, fmt.keep);
+	Advn(r, dlg.newpage, fmt.newpage);
+	Advn(r, dlg.newhdrftr, fmt.newhdrftr);
+	dlg.header_qtf = fmt.header_qtf;
+	dlg.footer_qtf = fmt.footer_qtf;
 	r(dlg.gridcolor, fmt.gridcolor);
+	dlg.SyncHdrFtr();
+	dlg.newhdrftr.Enable(cursorp.level == 1);
+	dlg.hdrftr.Enable(cursorp.level == 1);
 	for(;;) {
 		switch(dlg.Run()) {
 		case IDCANCEL:
@@ -125,6 +161,12 @@ void RichEdit::TableProps()
 			return;
 		default:
 			r.Retrieve();
+			if(dlg.newhdrftr) {
+				fmt.header_qtf = dlg.header_qtf;
+				fmt.footer_qtf = dlg.footer_qtf;
+			}
+			else
+				fmt.header_qtf = fmt.footer_qtf = Null;
 			const RichTable& tbl = text.GetConstTable(cursorp.table);
 			bool valid = true;
 			Point violator(0, 0);
@@ -267,11 +309,11 @@ void RichEdit::SplitCell()
 		return;
 	WithSplitCellLayout<TopWindow> dlg;
 	CtrlLayoutOKCancel(dlg, t_("Split cell"));
-	dlg.cx.MinMax(1, 20);
+	dlg.cx.MinMax(1, 20).NotNull();
 	dlg.cx <<= 1;
-	dlg.cy.MinMax(1, 20);
+	dlg.cy.MinMax(1, 20).NotNull();
 	dlg.cy <<= 1;
-	if(dlg.Run() != IDOK)
+	if(dlg.Execute() != IDOK)
 		return;
 	NextUndo();
 	SaveTable(cursorp.table);
@@ -288,7 +330,6 @@ void RichEdit::CellProperties()
 	int  tab;
 	Rect a;
 	if(tablesel) {
-		dlg.keep.Hide();
 		tab = tablesel;
 		a = cells;
 	}
@@ -312,18 +353,25 @@ void RichEdit::CellProperties()
 		(dlg.color, fmt.color)
 		(dlg.border, fmt.bordercolor)
 		(dlg.keep, fmt.keep)
+		(dlg.round, fmt.round)
 	;
 	dlg.align.Set(0, ALIGN_TOP);
 	dlg.align.Set(1, ALIGN_CENTER);
 	dlg.align.Set(2, ALIGN_BOTTOM);
-	dlg.color.NullText("");
-	dlg.border.NullText("");
+	dlg.color.WithVoid().VoidText(t_("(no change)"));
+	dlg.border.WithVoid().VoidText(t_("(no change)"));
+	if(tablesel) {
+		dlg.keep.ThreeState();
+		dlg.keep <<= Null;
+		dlg.round.ThreeState();
+		dlg.round <<= Null;
+	}
 	if(dlg.Run() != IDOK)
 		return;
 	r.Retrieve();
 	NextUndo();
 	SaveTable(tab);
-	text.SetCellFormat(tab, a, fmt, tablesel);
+	text.SetCellFormat(tab, a, fmt, !tablesel || !IsNull(dlg.keep), !tablesel || !IsNull(dlg.round));
 	Finish();
 }
 
@@ -337,4 +385,4 @@ void RichEdit::JoinCell()
 	Move(text.GetCellPos(tablesel, cells.TopLeft()).pos);
 }
 
-END_UPP_NAMESPACE
+}

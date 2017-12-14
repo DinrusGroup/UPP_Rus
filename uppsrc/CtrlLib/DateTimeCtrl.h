@@ -59,7 +59,7 @@ public:
 	FlatSpin();
 	void SetText(const String& s);
 	void SetTips(const char *tipl, const char *tipr);
-	void SetCallbacks(const Callback &cbl, const Callback& cbr);
+	void SetCallbacks(const Event<>& cbl, const Event<>& cbr);
 
 	FlatSpin& Selectable(bool b = true);
 	int GetWidth(const String& s, bool with_buttons = true);
@@ -87,8 +87,8 @@ protected:
 public:
 	PopUpCtrl() : popup(false) {}
 
-	Callback WhenPopDown;
-	Callback WhenDeactivate;
+	Event<>  WhenPopDown;
+	Event<>  WhenDeactivate;
 	virtual void Deactivate();
 	virtual Size ComputeSize() = 0;
 	virtual void Reset() {}
@@ -162,6 +162,7 @@ private:
 	Point oldday;
 	Point prevday;
 	Point curday, firstday;
+	int   newweek, oldweek;
 
 	String stoday;
 	Size sztoday;
@@ -199,17 +200,16 @@ private:
 	virtual Image CursorImage(Point p, dword keyflags);
 
 	int& Day(int x, int y) { return days[y][x]; }
-	int& Day(Point p) 	   { return days[p.y][p.x]; }
+	int& Day(Point p) 	   { return Day(p.x, p.y); }
 	Point GetDay(Point p);
+	int GetWeek(Point p);
 
-	void RefreshDay(Point p);
-	void RefreshToday();
-	void RefreshHeader();
 	virtual Size ComputeSize();
 
 public:
 	Calendar();
-	Callback1<Time &> WhenTime;
+	Event<Time &> WhenTime;
+	Event<Date>   WhenWeek;
 
 	static const Style& StyleDefault();
 
@@ -246,7 +246,7 @@ public:
 
 	void PopUp(Ctrl *owner, Rect &rt);
 
-	Callback WhenSelect;
+	Event<>  WhenSelect;
 };
 
 struct LineCtrl : Ctrl
@@ -350,7 +350,6 @@ private:
 	void Timer();
 
 public:
-
 	virtual bool Key(dword key, int count);
 	virtual void Paint(Draw& w);
 	virtual void State(int reason);
@@ -407,7 +406,7 @@ public:
 	Clock clock;
 
 	CalendarClock(int m = MODE_TIME);
-	Callback WhenPopDown;
+	Event<>  WhenPopDown;
 
 	virtual void Deactivate();
 	virtual bool Key(dword key, int count);
@@ -428,7 +427,16 @@ class DateTimeCtrl : public T {
 	int mode;
 
 	void OnCalendarChoice() {
-		this->SetData(~cc.calendar);
+		Date dt = ~cc.calendar;
+		ConvertTime *cv = dynamic_cast<ConvertTime *>(this);
+		if(cv && cv->IsDayEnd()) {
+			Time tm = ToTime(dt);
+			tm.hour = 23;
+			tm.minute = tm.second = 59;
+			this->SetData(tm);
+		}
+		else
+			this->SetData(dt);
 		this->WhenAction();
 	}
 
@@ -450,7 +458,7 @@ class DateTimeCtrl : public T {
 		int width = sz.cx;
 		int height = sz.cy;
 
-		Rect rw = Ctrl::GetWorkArea();
+		Rect rw = this->Ctrl::GetWorkArea();
 		Rect rs = this->GetScreenRect();
 		Rect r;
 		r.left   = rs.left;
@@ -481,6 +489,10 @@ class DateTimeCtrl : public T {
 			r.right += diff;
 
 		}
+		if(WhenWeek)
+			cc.calendar.WhenWeek = WhenWeek.Proxy();
+		else
+			cc.calendar.WhenWeek.Clear();
 		cc.PopUp(this, r);
 		cc.calendar <<= this->GetData();
 		cc.clock <<= this->GetData();
@@ -488,6 +500,8 @@ class DateTimeCtrl : public T {
 
 public:
 	typedef DateTimeCtrl CLASSNAME;
+	
+	Event<Date> WhenWeek;
 
 	DateTimeCtrl(int m) : cc(m) {
 		drop.AddTo(*this);
@@ -498,7 +512,7 @@ public:
 		cc.calendar   <<= THISBACK(OnCalendarChoice);
 		cc.clock      <<= THISBACK(OnClockChoice);
 		cc.WhenPopDown  = THISBACK(OnClose);
-		cc.calendar.WhenSelect = Proxy(WhenSelect);
+		cc.calendar.WhenSelect = WhenSelect.Proxy();
 	}
 
 	virtual void GotFocus()  { T::GotFocus(); drop.RefreshFrame(); }
@@ -518,7 +532,7 @@ public:
 	DateTimeCtrl& OneButton(bool b = true)                         { cc.calendar.OneButton(true); return *this; }
 	DateTimeCtrl& NoOneButton()                                    { cc.calendar.OneButton(false); return *this; }
 
-	Callback WhenSelect;
+	Event<>  WhenSelect;
 };
 
 class DropDate : public DateTimeCtrl<EditDate>

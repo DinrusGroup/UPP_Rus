@@ -1,6 +1,6 @@
 #include "CtrlLib.h"
 
-NAMESPACE_UPP
+namespace Upp {
 
 SliderCtrl::SliderCtrl()
 : value(Null)
@@ -107,6 +107,7 @@ void SliderCtrl::LeftUp(Point pos, dword keyflags)
 	if (HasCapture())
 		WhenSlideFinish();
 	Refresh();
+	ReleaseCapture();
 }
 
 void SliderCtrl::MouseMove(Point pos, dword keyflags)
@@ -228,4 +229,4 @@ void SliderCtrl::LostFocus()
 
 SliderCtrl::~SliderCtrl() {}
 
-END_UPP_NAMESPACE
+}

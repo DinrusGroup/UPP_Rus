@@ -6,7 +6,7 @@ int ReadTemplateType(CParser& p)
 	for(int i = 0; i < __countof(nm); i++)
 		if(p.Id(nm[i]))
 			return i;
-	p.ThrowError("Неизвестный тип");
+	p.ThrowError("Unknown type");
 	return 0;
 }
 
@@ -55,7 +55,7 @@ PackageTemplate ReadTemplate(const char *filename)
 			const char *b = p.GetPtr();
 			while(!p.IsChar(';')) {
 				if(p.IsEof())
-					p.ThrowError("неожиданный конец файла");
+					p.ThrowError("unexpected end of file");
 				p.SkipTerm();
 			}
 			m.init = String(b, p.GetPtr());
@@ -101,21 +101,21 @@ void AppPreview::MouseWheel(Point p, int zdelta, dword keyflags) {
 void AppPreview::Layout()
 {
 	sb.SetTotal(line.GetCount());
-	sb.SetPage(GetSize().cy / Courier(12).Info().GetHeight());
+	sb.SetPage(GetSize().cy / CourierZ(12).GetCy());
 }
 
 void AppPreview::Paint(Draw& w)
 {
 	Size sz = GetSize();
-	FontInfo fi = Courier(12).Info();
+	Font fnt = CourierZ(12);
 	int y = 0;
 	int i = sb;
 	while(y < sz.cy) {
 		bool hdr = i < line.GetCount() && line[i].header;
-		w.DrawRect(0, y, sz.cx, fi.GetHeight(), hdr ? LtCyan : SColorPaper);
+		w.DrawRect(0, y, sz.cx, fnt.GetCy(), hdr ? LtCyan : SColorPaper);
 		if(i < line.GetCount())
-			w.DrawText(0, y, line[i].text, hdr ? Arial(12).Bold().Italic() : Courier(12), SColorText);
-		y += fi.GetHeight();
+			w.DrawText(0, y, line[i].text, hdr ? ArialZ(12).Bold().Italic() : fnt, SColorText);
+		y += fnt.GetCy();
 		i++;
 	}
 }
@@ -144,12 +144,12 @@ int FilterPackageName(int c)
 
 TemplateDlg::TemplateDlg()
 {
-	CtrlLayoutOKCancel(*this, "Создать новый пакет");
+	CtrlLayoutOKCancel(*this, "Create new package");
 	Sizeable().Zoomable();
 	description <<= THISBACK(Preview);
 	delay <<= THISBACK(Preview);
 	delay.SetDelay(300);
-	templist.AddColumn("Шаблон");
+	templist.AddColumn("Template");
 	templist.WhenEnterRow = THISBACK(EnterTemplate);
 	ok.Disable();
 	package <<= THISBACK(EnableCreate);
@@ -223,7 +223,6 @@ void TemplateDlg::Preview()
 {
 	const PackageTemplate& tp = ActualTemplate();
 	ArrayMap<String, EscValue> var = MakeVars();
-	int sc = preview.sb;
 	preview.Clear();
 	for(int i = 0; i < tp.file.GetCount(); i++) {
 		const FileTemplate& ft = tp.file[i];
@@ -232,7 +231,6 @@ void TemplateDlg::Preview()
 			preview.Add(Expand(ft.text, var));
 		}
 	}
-	preview.sb = sc;
 }
 
 void TemplateDlg::Create()
@@ -319,7 +317,7 @@ void TemplateDlg::EnterTemplate()
 			}
 		}
 		Add(ctrl.Top());
-		ctrl.Top() << delay;
+		ctrl.Top() << ~delay;
 		ctrl.Top().LeftPos(pos.x, cx).TopPos(pos.y);
 		pos.y += ctrl.Top().GetMinSize().cy + 6;
 		ctrl.Top().ClearModify();
@@ -342,10 +340,10 @@ void TemplateDlg::LoadNest(const char *path, bool main, bool recurse)
 			try {
 				PackageTemplate t = ReadTemplate(p);
 				if(main && t.main || !main && t.sub)
-					pt.Add() = t;
+					pt.Add() = pick(t);
 			}
 			catch(CParser::Error e) {
-				Exclamation("Шаблон пакета [* " + DeQtf(p) + "] неверен&[* " + e);
+				Exclamation("Package template [* " + DeQtf(p) + "] is invalid&[* " + e);
 			}
 		}
 		ff.Next();
@@ -363,7 +361,7 @@ void TemplateDlg::Load(const Vector<String>& p, bool main)
 	LoadNest(GetFileFolder(ConfigFile("x")), main, false);
 	Sort(pt, FieldRelation(&PackageTemplate::name, StdLess<String>()));
 	templist.Clear();
-	templist.Add("<пусто>");
+	templist.Add("<empty>");
 	for(int i = 0; i < pt.GetCount(); i++)
 		templist.Add(pt[i].name);
 	if(nest.GetCount())

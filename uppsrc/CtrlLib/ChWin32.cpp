@@ -1,6 +1,6 @@
 #include "CtrlLib.h"
 
-NAMESPACE_UPP
+namespace Upp {
 
 #define LLOG(x)   // RLOG(x)
 #define LTIMING(x) // RTIMING(x)
@@ -26,12 +26,16 @@ void ChHostSkin()
 
 #else
 
+}
+
 #include <uxtheme.h>
 #if defined(_MSC_VER) && _MSC_VER > 1400	// Visual C > 2005
 #include <vssym32.h>
 #else
 #include <tmschema.h>
 #endif
+
+namespace Upp {
 
 #define DLLFILENAME "uxtheme.dll"
 #define DLIMODULE   XpTheme
@@ -451,27 +455,27 @@ void ChHostSkin()
 		{
 			MenuBar::Style& s = MenuBar::StyleDefault().Write();
 			if(vista_aero) {
-				s.topitemtext[0] = s.topitemtext[1] = s.topitemtext[2] = 
-					s.itemtext = XpColor(XP_MENU, 8 /*MENU_POPUPITEM*/, 
+				s.topitemtext[0] = s.topitemtext[1] = s.topitemtext[2] =
+					s.itemtext = XpColor(XP_MENU, 8 /*MENU_POPUPITEM*/,
 					2 /*HOT*/, 3803/*TMT_TEXTCOLOR*/);
 				Win32Look(s.item, XP_MENU, 14 /*MENU_POPUPITEM*/, 2 /*HOT*/);
 				Win32Look(s.topitem[1], XP_MENU, 8 , 2 /*HOT*/);
 				Win32Look(s.topitem[2], XP_MENU, 8 , 3 /*HOT*/);
 				Win32Look(s.popupiconbar, XP_MENU, 13, 1);
-				s.leftgap = 32;
-				s.textgap = 6;
-				s.lsepm = 32;
+				s.leftgap = DPI(32);
+				s.textgap = Zx(6);
+				s.lsepm = Zx(32);
 				s.separator.l1 = Blend(SColorMenu(), SColorShadow());
 				s.separator.l2 = SColorLight();
 			}
 			Win32Look(s.arealook, XP_REBAR, 0, 1);
 		}
 
-		CtrlImg::Set("hthumb", XpImage(XP_TRACKBAR, TKP_THUMB, TUS_NORMAL, Null, Size(10, 20)));
+/*		CtrlImg::Set("hthumb", XpImage(XP_TRACKBAR, TKP_THUMB, TUS_NORMAL, Null, Size(10, 20)));
 		CtrlImg::Set("hthumb1", XpImage(XP_TRACKBAR, TKP_THUMB, TUS_PRESSED, Null, Size(10, 20)));
 		CtrlImg::Set("vthumb", XpImage(XP_TRACKBAR, TKP_THUMBVERT, TUS_NORMAL, Null, Size(20, 10)));
 		CtrlImg::Set("vthumb1", XpImage(XP_TRACKBAR, TKP_THUMBVERT, TUS_PRESSED, Null, Size(20, 10)));
-
+*/
 		XpElement e;
 		for(int i = 0; i < 4; i++) {
 			{
@@ -592,6 +596,31 @@ void ChSysInit()
 	ChReset();
 	XpClear();
 
+
+	HRESULT (STDAPICALLTYPE *SetProcessDpiAwareness)(int);
+	DllFn(SetProcessDpiAwareness, "Shcore.dll", "SetProcessDpiAwareness");
+	if(SetProcessDpiAwareness)
+		SetProcessDpiAwareness(1);
+	else {
+		BOOL (STDAPICALLTYPE * SetProcessDPIAware)(void);
+		DllFn(SetProcessDPIAware, "User32.dll", "SetProcessDPIAware");
+		if(SetProcessDPIAware && Ctrl::IsUHDEnabled())
+			(*SetProcessDPIAware)();
+	}
+	NONCLIENTMETRICS ncm;
+#if (WINVER >= 0x0600 && !defined(__MINGW32_VERSION))
+	ncm.cbSize = sizeof(ncm) - sizeof(ncm.iPaddedBorderWidth); // WinXP does not like it...
+#else
+	ncm.cbSize = sizeof(ncm);
+#endif
+	::SystemParametersInfo(SPI_GETNONCLIENTMETRICS, 0, &ncm, 0);
+	String name = FromSystemCharset(ncm.lfMenuFont.lfFaceName);
+	int height = abs((int)ncm.lfMenuFont.lfHeight);
+	
+	int q = Font::FindFaceNameIndex(name);
+	if(height > 0 && height < 200) // sanity..
+		Font::SetDefaultFont(Font(q >= 0 ? q : Font::SANSSERIF, height));
+	
 	GUI_GlobalStyle_Write(IsWinXP() && !ScreenInPaletteMode() && IsSysFlag(0x1022 /*SPI_GETFLATMENU*/)
 	                      ? GUISTYLE_XP : GUISTYLE_CLASSIC);
 #ifndef PLATFORM_WINCE
@@ -607,9 +636,14 @@ void ChSysInit()
 	GUI_DragDistance_Write(GetSystemMetrics(SM_CXDRAG));
 	GUI_DblClickTime_Write(GetDoubleClickTime());
 
+	int slines;
+	SystemParametersInfo(SPI_GETWHEELSCROLLLINES, 0, &slines, 0);
+	GUI_WheelScrollLines_Write(slines);
+
 	CtrlImg::Set(CtrlImg::I_information, Win32Icon(IDI_INFORMATION));
 	CtrlImg::Set(CtrlImg::I_question, Win32Icon(IDI_QUESTION));
 	CtrlImg::Set(CtrlImg::I_exclamation, Win32Icon(IDI_EXCLAMATION));
+	CtrlImg::Set(CtrlImg::I_error, Win32Icon(IDI_ERROR));
 
 	FrameButtonWidth_Write(GetSystemMetrics(SM_CYHSCROLL));
 	ScrollBarArrowSize_Write(GetSystemMetrics(SM_CXHSCROLL));
@@ -623,4 +657,4 @@ void ChSysInit()
 
 #endif
 
-END_UPP_NAMESPACE
+}

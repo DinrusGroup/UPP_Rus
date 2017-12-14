@@ -7,6 +7,6 @@ file
 	BlueBar.h,
 	BlueSkin.iml,
 	BlueSkin.cpp,
-	"Инфо" readonly separator,
+	Info readonly separator,
 	Copying;
 

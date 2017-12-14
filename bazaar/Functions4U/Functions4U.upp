@@ -3,29 +3,28 @@ description "Functions and classes for general use\377B255,170,0";
 uses
 	Core,
 	plugin\bz2,
-	Web,
 	Draw,
 	plugin\jpg,
 	plugin\gif,
-	plugin\tif,
-	plugin\png;
-
-uses(GUI) ide/Browser;
-
-uses(AES) AESStream;
+	plugin\png,
+	plugin/tif,
+	plugin/bmp,
+	plugin/lz4,
+	PdfDraw;
 
 library(WIN32) oleaut32;
 
 file
 	Functions4U.cpp,
 	Functions4U.h,
+	LocalProcess2.cpp,
+	LocalProcess2.h,
 	Functions4U_Gui.cpp,
 	Functions4U_Gui.h,
 	QtfEquation.cpp,
 	srcdoc.tpp,
 	src.tpp,
 	Functions4U.t,
-	License.txt,
 	StaticPlugin readonly separator,
 	StaticPlugin.cpp,
 	StaticPlugin.h,
@@ -36,9 +35,14 @@ file
 	SvgColors.cpp,
 	SvgColors.h,
 	BSDiff readonly separator,
-	bsdiffwrapper.h,
-	plugin/bsadditional.cpp,
-	plugin/bsdiff.cpp,
-	plugin/bspatch.cpp,
-	plugin/Credits.txt;
+	bsdiff.h,
+	Bsdiff\bsadditional.cpp,
+	Bsdiff\bsdiff.cpp,
+	Bsdiff\bspatch.cpp,
+	Bsdiff\bzlib.h,
+	Bsdiff\Credits.txt,
+	Html readonly separator,
+	Html/htmld.cpp,
+	Html/htmld.h,
+	Copying;
 

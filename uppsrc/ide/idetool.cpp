@@ -27,7 +27,7 @@ void Ide::ResolveUvsConflict() {
 			   ln != "END YOUR INSERT" &&
 			   ln != "END REPOSITORY INSERT" &&
 			   ln != "PENDING CONFLICT") {
-				Exclamation("Неразрешимый конфликт uvs -&обнаружены конфликтующие изменения");
+				Exclamation("Cannot resolve uvs conflict -&conflicting modifications found");
 				editor.SetCursor(editor.GetPos(i));
 				return;
 			}
@@ -43,9 +43,12 @@ void Ide::ResolveUvsConflict() {
 void Ide::GotoPos(String path, int line)
 {
 	LLOG("GotoPos " << path << ':' << line);
-	AddHistory();
-	editastext.FindAdd(path);
-	EditFile(path);
+	if(path.GetCount()) {
+		AddHistory();
+		if(IsDesignerFile(path))
+			DoEditAsText(path);
+		EditFile(path);
+	}
 	editor.SetCursor(editor.GetPos(line - 1));
 	editor.TopCursor(4);
 	editor.SetFocus();
@@ -54,7 +57,13 @@ void Ide::GotoPos(String path, int line)
 
 void Ide::GotoCpp(const CppItem& pos)
 {
-	GotoPos(GetCppFile(pos.file), pos.line);
+	GotoPos(GetSourceFilePath(pos.file), pos.line);
+}
+
+void Ide::CheckCodeBase()
+{
+	InvalidateFileTimeCache();
+	CodeBaseSync();
 }
 
 void Ide::RescanCode()
@@ -71,6 +80,7 @@ void Ide::RescanCode()
 	TimeStop t;
 	console.Clear();
 	RescanCodeBase();
+	SyncRefsShowProgress = true;
 	SyncRefs();
 	editor.SyncNavigator();
 //*/
@@ -147,7 +157,7 @@ String StatDate(int d)
 	return String().Cat() << d << " days";
 }
 
-void Put(const String& name, String& qtf, const FileStat& fs)
+void sPut(const String& name, String& qtf, const FileStat& fs)
 {
 	qtf << "::@W " << DeQtf(Nvl(name, ".<none>"))
 	    << ":: [> " << fs.count
@@ -160,18 +170,62 @@ void Put(const String& name, String& qtf, const FileStat& fs)
 	    << ":: " << (fs.count ? fs.days / fs.count : 0) << " days]";
 }
 
-void Put(String& qtf, ArrayMap<String, FileStat>& pfs, ArrayMap<String, FileStat>& all) {
+void sPut(String& qtf, ArrayMap<String, FileStat>& pfs, ArrayMap<String, FileStat>& all) {
 	FileStat pall;
 	for(int i = 0; i < pfs.GetCount(); i++) {
 		FileStat& fs = pfs[i];
-		Put(pfs.GetKey(i), qtf, fs);
+		sPut(pfs.GetKey(i), qtf, fs);
 		pall.Add(fs);
 		all.GetAdd(pfs.GetKey(i)).Add(fs);
 	}
-	Put("Все файлы", qtf, pall);
+	sPut("All files", qtf, pall);
 	qtf << "}}&&";
 }
 
+
+void ShowQTF(const String& qtf, const char *title)
+{
+	RichText txt = ParseQTF(qtf);
+	ClearClipboard();
+	AppendClipboard(ParseQTF(qtf));
+
+	WithStatLayout<TopWindow> dlg;
+	CtrlLayoutOK(dlg, title);
+	dlg.stat = qtf;
+	dlg.Sizeable().Zoomable();
+	dlg.Run();
+}
+
+void Ide::Licenses()
+{
+	Progress pi;
+	const Workspace& wspc = IdeWorkspace();
+	pi.SetTotal(wspc.GetCount());
+	VectorMap<String, String> license_package;
+	for(int i = 0; i < wspc.GetCount(); i++) {
+		String n = wspc[i];
+		pi.SetText(n);
+		if(pi.StepCanceled()) return;
+		String l = LoadFile(SourcePath(n, "Copying"));
+		if(l.GetCount())
+			MergeWith(license_package.GetAdd(l), ", ", n);
+	}
+	if(license_package.GetCount() == 0) {
+		Exclamation("No license files ('Copying') have been found.");
+		return;
+	}
+	String qtf;
+	for(int i = 0; i < license_package.GetCount(); i++) {
+		bool m = license_package[i].Find(',') >= 0;
+		qtf << (m ? "Packages [* \1" : "Package [* \1")
+		    << license_package[i]
+		    << (m ? "\1] have" : "\1] has")
+		    << " following licence notice:&"
+		    << "{{@Y [C1 " << DeQtf(license_package.GetKey(i)) << "]}}&&";
+	}
+	
+	ShowQTF(qtf, "Licenses");
+}
 
 void Ide::Statistics()
 {
@@ -210,17 +264,13 @@ void Ide::Statistics()
 	String hdr = "]:: [= Files:: Lines:: - avg.:: Length:: - avg.:: Oldest:: Newest:: Avg. age]";
 	for(int i = 0; i < wspc.GetCount(); i++) {
 		qtf << tab << DeQtf(wspc[i]) << hdr;
-		Put(qtf, stat[i], all);
+		sPut(qtf, stat[i], all);
 	}
 
-	qtf << tab << "Все пакеты" << hdr;
-	Put(qtf, all, all);
+	qtf << tab << "All packages" << hdr;
+	sPut(qtf, all, all);
 
-	WithStatLayout<TopWindow> dlg;
-	CtrlLayoutOK(dlg, "Статистика");
-	dlg.stat = qtf;
-	dlg.Sizeable().Zoomable();
-	dlg.Run();
+	ShowQTF(qtf, "Statistics");
 }
 
 String FormatElapsedTime(double run)
@@ -228,25 +278,25 @@ String FormatElapsedTime(double run)
 	String rtime;
 	double hrs = floor(run / 3600);
 	if(hrs > 0)
-		rtime << NFormat("%0n час, ", hrs);
+		rtime << NFormat("%0n hours, ", hrs);
 	int minsec = fround(run - 3600 * hrs);
 	int min = minsec / 60, sec = minsec % 60;
 	if(min || hrs)
-		rtime << NFormat("%d мин, ", min);
-	rtime << NFormat("%d сек", sec);
+		rtime << NFormat("%d min, ", min);
+	rtime << NFormat("%d sec", sec);
 	return rtime;
 }
 
 void Ide::AlterText(WString (*op)(const WString& in))
 {
-	if(designer)
+	if(designer || !editor.IsSelection() || editor.IsReadOnly())
 		return;
 	editor.NextUndo();
-	if(!editor.IsSelection())
-		editor.SelectAll();
 	WString w = editor.GetSelectionW();
 	editor.RemoveSelection();
+	int l = editor.GetCursor();
 	editor.Paste((*op)(w));
+	editor.SetSelection(l, editor.GetCursor());
 }
 
 void Ide::TextToUpper()
@@ -283,10 +333,71 @@ void Ide::SwapCase()
 	AlterText(sSwapCase);
 }
 
+static WString sCString(const WString& s)
+{
+	return AsCString(s.ToString()).ToWString();
+}
+
+void Ide::ToCString()
+{
+	AlterText(sCString);
+}
+
+static WString sComment(const WString& s) 
+{
+	return "/*" + s + "*/";
+}
+
+void Ide::ToComment()
+{
+	AlterText(sComment);
+}
+
+static WString sCommentLines(const WString& s)
+{
+	String r;
+	StringStream ss(s.ToString());
+	for(;;) {
+		String line = ss.GetLine();
+		if(ss.IsError())
+			return s;
+		else
+		if(!line.IsVoid())
+			r << "//" << line << "\n";
+		if(ss.IsEof())
+			break;
+	}
+	return r.ToWString();
+}
+
+void Ide::CommentLines()
+{
+	AlterText(sCommentLines);
+}
+
+static WString sUncomment(const WString& s) 
+{
+	WString h = s;
+	h.Replace("/*", "");
+	h.Replace("//", "");
+	h.Replace("*/", "");
+	return h;
+}
+
+void Ide::UnComment()
+{
+	AlterText(sUncomment);
+}
+
+void Ide::ReformatComment()
+{
+	editor.ReformatComment();
+}
+
 void Ide::Times()
 {
 	WithStatisticsLayout<TopWindow> statdlg;
-	CtrlLayout(statdlg, "Прошло времени");
+	CtrlLayout(statdlg, "Elapsed times");
 	statdlg.SetTimeCallback(-1000, statdlg.Breaker(IDRETRY), 50);
 	do
 	{
@@ -300,47 +411,127 @@ void Ide::Times()
 	while(statdlg.Run() == IDRETRY);
 }
 
-Vector<String> Ide::SvnDirs()
-{
-	Vector<String> d = GetUppDirs();
-	Vector<String> r;
-	for(int i = 0; i < d.GetCount(); i++)
-		if(IsSvnDir(d[i]))
-			r.Add(d[i]);
-	return r;
-}
-
 INITBLOCK {
 	RegisterGlobalConfig("svn-msgs");
 }
 
-void SvnSyncDirs(const Vector<String>& working)
+void RepoSyncDirs(const Vector<String>& working)
 {
 	if(!CheckSvn())
 		return;
-	SvnSync svn;
+	Ptr<Ctrl> f = Ctrl::GetFocusCtrl();
+	RepoSync repo;
 	String msgs;
 	LoadFromGlobal(msgs, "svn-msgs");
-	svn.SetMsgs(msgs);
+	repo.SetMsgs(msgs);
 	for(int i = 0; i < working.GetCount(); i++)
-		svn.Dir(working[i]);
-	svn.DoSync();
-	msgs = svn.GetMsgs();
+		repo.Dir(working[i]);
+	repo.DoSync();
+	msgs = repo.GetMsgs();
 	StoreToGlobal(msgs, "svn-msgs");
+	if(f)
+		f->SetFocus();
 }
 
-void Ide::SyncSvnDirs(const Vector<String>& working)
+void Ide::SyncRepoDirs(const Vector<String>& working)
 {
 	SaveFile();
-	SvnSyncDirs(working);
+	RepoSyncDirs(working);
+	ScanWorkspace();
+	SyncWorkspace();
 }
 
-void Ide::SyncSvn()
-{
-	SyncSvnDirs(SvnDirs());
+void Ide::SyncRepo(){
+	Vector<String> d = RepoDirs();
+	if(d.GetCount())
+		SyncRepoDirs(d);
+	else
+		SyncRepoDirs(RepoDirs(true));
 }
 
-void Ide::SyncSvnDir(const String& working)
+void Ide::SyncRepoDir(const String& working)
 {
-	SyncSvnDirs(Vector<String>() << working);
+	SyncRepoDirs(Vector<String>() << working);
+}
+
+void Ide::GotoDirDiffLeft(int line, DirDiffDlg *df)
+{
+	EditFile(df->GetLeftFile());
+	editor.SetCursor(editor.GetPos(line));
+	editor.SetFocus();
+}
+
+void Ide::GotoDirDiffRight(int line, DirDiffDlg *df)
+{
+	EditFile(df->GetRightFile());
+	editor.SetCursor(editor.GetPos(line));
+	editor.SetFocus();
+}
+
+void Ide::DoDirDiff()
+{
+	Index<String> dir;
+	Vector<String> d = GetUppDirs();
+	for(int i = 0; i < d.GetCount(); i++)
+		dir.FindAdd(d[i]);
+	FindFile ff(ConfigFile("*.bm"));
+	while(ff) {
+		VectorMap<String, String> var;
+		LoadVarFile(ff.GetPath(), var);
+		Vector<String> p = Split(var.Get("UPP", String()), ';');
+		for(int i = 0; i < p.GetCount(); i++)
+			dir.FindAdd(p[i]);
+		ff.Next();
+	}
+	String n = GetFileFolder(editfile);
+	if(n.GetCount())
+		dir.FindAdd(n);
+	SortIndex(dir);
+	
+	static DirDiffDlg dlg;
+	dlg.diff.WhenLeftLine = THISBACK1(GotoDirDiffLeft, &dlg);
+	dlg.diff.WhenRightLine = THISBACK1(GotoDirDiffRight, &dlg);
+	for(int i = 0; i < dir.GetCount(); i++) {
+		dlg.Dir1AddList(dir[i]);
+		dlg.Dir2AddList(dir[i]);
+	}
+	if(d.GetCount())
+		dlg.Dir1(d[0]);
+	if(!dlg.IsOpen()) {
+		dlg.SetFont(veditorfont);
+		dlg.Maximize();
+		dlg.Title("Compare directories");
+		dlg.OpenMain();
+	}
+	else
+		dlg.SetFocus();
+}
+
+void Ide::AsErrors()
+{
+	ClearErrorsPane();
+	SetBottom(BERRORS);
+	String s = editor.IsSelection() ? editor.GetSelection() : editor.Get();
+	StringStream ss(s);
+	while(!ss.IsEof())
+		ConsoleLine(ss.GetLine(), true);
+	SetErrorEditor();
+}
+
+void Ide::LaunchAndroidSDKManager(const AndroidSDK& androidSDK)
+{
+	One<Host> host = CreateHost(false);
+	IGNORE_RESULT(host->Execute(androidSDK.GetLauchSDKManagerCmd()));
+}
+
+void Ide::LaunchAndroidAVDManager(const AndroidSDK& androidSDK)
+{
+	One<Host> host = CreateHost(false);
+	IGNORE_RESULT(host->Execute(androidSDK.GetLauchAVDManagerCmd()));
+}
+
+void Ide::LauchAndroidDeviceMonitor(const AndroidSDK& androidSDK)
+{
+	One<Host> host = CreateHost(false);
+	IGNORE_RESULT(host->Execute(androidSDK.MonitorPath()));
 }

@@ -2,6 +2,8 @@
 
 #define LLOG(x)  // LOG(x)
 
+namespace Upp {
+
 static bool sLogRpcCalls;
 
 void LogXmlRpcCalls(bool b)
@@ -114,4 +116,6 @@ void XmlRpcCall::ClearError()
 	faultCode = 0;
 	faultString.Clear();
 	error.Clear();
+}
+
 }

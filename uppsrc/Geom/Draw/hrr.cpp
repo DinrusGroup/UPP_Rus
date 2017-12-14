@@ -2,7 +2,6 @@
 // hrr: high resolution raster.
 
 #include "GeomDraw.h"
-#pragma hdrstop
 
 #include "hrr.h"
 
@@ -10,7 +9,7 @@
 #include <plugin/gif/gif.h>
 #include <plugin/png/png.h>
 
-NAMESPACE_UPP
+namespace Upp {
 
 #define LLOG(x) // LOG(x)
 
@@ -455,8 +454,8 @@ static dword CeilPack64(int64 i)
 {
 	if(i < 0x7fffffff)
 		return (dword)i;
-	if(i < INT64(0x3fffffff00))
-		return (dword)((i + INT64(0x80000000ff)) >> 8);
+	if(i < I64(0x3fffffff00))
+		return (dword)((i + I64(0x80000000ff)) >> 8);
 	return 0xffffffff;
 }
 
@@ -881,17 +880,27 @@ HRRInfo::HRRInfo()
 {
 }
 
-HRRInfo::HRRInfo(Rectf log_rect, int levels, Color background, int method, int quality,
-	bool mono, Color mono_black, Color mono_white)
-: log_rect(log_rect), levels(levels), background(background), method(method), quality(quality)
-, mono(mono), mono_black(mono_black), mono_white(mono_white)
+HRRInfo::HRRInfo(const Rectf& log_rect_, const Rectf& map_rect_,
+	int levels_, Color background_, int method_, int quality_,
+	bool mono_, Color mono_black_, Color mono_white_)
+: log_rect(log_rect_)
+, map_rect(map_rect_)
+, levels(levels_)
+, background(background_)
+, method(method_)
+, quality(quality_)
+, mono(mono_)
+, mono_black(mono_black_)
+, mono_white(mono_white_)
 {
-	double wadd = log_rect.Height() - log_rect.Width();
-	map_rect = log_rect;
-	if(wadd >= 0)
-		map_rect.right += wadd;
-	else
-		map_rect.top += wadd;
+	if(IsNull(map_rect)) {
+		double wadd = log_rect.Height() - log_rect.Width();
+		map_rect = log_rect;
+		if(wadd >= 0)
+			map_rect.right += wadd;
+		else
+			map_rect.top += wadd;
+	}
 }
 
 void HRRInfo::Serialize(Stream& stream)
@@ -1696,8 +1705,8 @@ void HRR::Serialize()
 					stream.Put(0, byte_size);
 				else
 					stream.SeekCur(byte_size);
-p/				stieam.SersalizeRa	((byte p)pixel_iirectors[l].Beg	n(),
-//p				siziof(pixes_direct	ry[0][0p) * pixil_direcsory[l].	etCount());
+//				stream.SerializeRaw((byte *)pixel_directory[l].Begin(),
+//					sizeof(pixel_directory[0][0]) * pixel_directory[l].GetCount());
 			}
 		if(version >= 3 && (IsNull(info.background) || info.mono)) {
 			mask_directory_offset.SetCount(info.levels);
@@ -2001,4 +2010,4 @@ int HRR::SizeOfInstance() const
 	return sizeof(*this) + directory_sizeof + cache_sizeof;
 }
 
-END_UPP_NAMESPACE
+}

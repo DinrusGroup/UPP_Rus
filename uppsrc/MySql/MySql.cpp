@@ -2,7 +2,9 @@
 
 #ifndef flagNOMYSQL
 
-NAMESPACE_UPP
+#define LLOG(x) // DLOG(x)
+
+namespace Upp {
 
 class MySqlConnection : public SqlConnection {
 protected:
@@ -31,6 +33,7 @@ private:
 	String         MakeQuery() const;
 	void           FreeResult();
 	String         EscapeString(const String& v);
+	bool           MysqlQuery(const char *query);
 
 public:
 	MySqlConnection(MySqlSession& session, MYSQL *mysql);
@@ -43,12 +46,21 @@ static const char *sEmpNull(const char *s) {
 	return s && *s == '\0' ? NULL : s;
 }
 
-bool MySqlSession::Connect(const char *user, const char *password, const char *database,
-                           const char *host, int port, const char *socket) {
+INITBLOCK {
+	mysql_library_init(0, NULL, NULL);
+}
+
+EXITBLOCK {
+	mysql_library_end();
+}
+
+bool MySqlSession::DoConnect()
+{
 	mysql = mysql_init((MYSQL*) 0);
-	if(mysql && mysql_real_connect(mysql, sEmpNull(host), sEmpNull(user),
-	                               sEmpNull(password), sEmpNull(database), port,
-	                               sEmpNull(socket), 0)) {
+	level = 0;
+	if(mysql && mysql_real_connect(mysql, sEmpNull(connect_host), sEmpNull(connect_user),
+	                               sEmpNull(connect_password), sEmpNull(connect_database),
+	                               connect_port, sEmpNull(connect_socket), 0)) {
 		Sql sql(*this);
 		username = sql.Select("substring_index(USER(),'@',1)");
 		mysql_set_character_set(mysql, "utf8");
@@ -58,6 +70,24 @@ bool MySqlSession::Connect(const char *user, const char *password, const char *d
 	}
 	Close();
 	return false;
+}
+
+bool MySqlSession::Reconnect()
+{
+	LLOG("Trying to reconnect");
+	Close();
+	return DoConnect();
+}
+
+bool MySqlSession::Connect(const char *user, const char *password, const char *database,
+                           const char *host, int port, const char *socket) {
+	connect_user = user;
+	connect_password = password;
+	connect_database = database;
+	connect_host = host;
+	connect_port = port;
+	connect_socket = socket;
+	return DoConnect();
 }
 
 inline static const char *EmpNull(const String& s)
@@ -70,7 +100,6 @@ bool MySqlSession::Open(const char *connect) {
 	String database = Null;
 	String host = Null;
 	int port = MYSQL_PORT;
-	level = 0;
 	const char *p = connect, *b;
 	for(b = p; *p && *p != '/' && *p != '@'; p++)
 		;
@@ -109,6 +138,7 @@ bool MySqlSession::Open(const char *connect) {
 }
 
 void MySqlSession::Close() {
+	SessionClose();
 	if(mysql) {
 		mysql_close(mysql);
 		mysql = NULL;
@@ -116,14 +146,35 @@ void MySqlSession::Close() {
 	}
 }
 
+bool MySqlSession::MysqlQuery(const char *query)
+{
+	int itry = 0;
+	for(;;) {
+		if(!mysql_query(mysql, query))
+			break;
+		int code = mysql_errno(mysql);
+		if(level == 0 && itry++ == 0 &&
+		   (code == 2006 || code == 2013 || code == 2055) &&
+		   WhenReconnect())
+			continue;
+		SetError(mysql_error(mysql), query, code);
+		return false;
+	}
+	return true;
+}
+
+bool MySqlConnection::MysqlQuery(const char *query)
+{
+	return session.MysqlQuery(query);
+}
+
 void MySqlSession::Begin()
 {
 	static const char btrans[] = "start transaction";
 	if(trace)
 		*trace << btrans << ";\n";
-	if(mysql_query(mysql, btrans))
-		SetError(mysql_error(mysql), btrans);
-	level++;
+	if(MysqlQuery(btrans))
+		level++;
 }
 
 void MySqlSession::Commit()
@@ -131,9 +182,8 @@ void MySqlSession::Commit()
 	static const char ctrans[] = "commit";
 	if(trace)
 		*trace << ctrans << ";\n";
-	if(mysql_query(mysql, ctrans))
-		SetError(mysql_error(mysql), ctrans);
-	level--;
+	if(MysqlQuery(ctrans))
+		level--;
 }
 
 void MySqlSession::Rollback()
@@ -141,9 +191,8 @@ void MySqlSession::Rollback()
 	static const char rtrans[] = "rollback";
 	if(trace)
 		*trace << rtrans << ";\n";
-	if(mysql_query(mysql, rtrans))
-		SetError(mysql_error(mysql), rtrans);
-	if(level > 0) level--;
+	if(MysqlQuery(rtrans) && level > 0)
+		level--;
 }
 
 int MySqlSession::GetTransactionLevel() const
@@ -260,22 +309,16 @@ bool MySqlConnection::Execute() {
 			s++;
 		}
 	Cancel();
-/*	Stream *trace = session.GetTrace();
-	dword time;
-	if(session.IsTraceTime())
-		time = GetTickCount();*/
-	if(mysql_query(mysql, query)) {
-		session.SetError(mysql_error(mysql), query);
+	if(!MysqlQuery(query))
 		return false;
-	}
 	result = mysql_store_result(mysql);
-/*	if(trace) { // cxl 2005-5-2, duplicated traces...
-		if(session.IsTraceTime())
-			*trace << Format("--------------\nexec %d ms:\n", msecs(time));
-		*trace << ToString() << '\n';
-	}*/
+	rows = (int)mysql_affected_rows(mysql);
+
+	while(mysql_more_results (mysql)) { // Only first resultset is considered, rest is ignored
+		mysql_next_result (mysql);      // This is required to avoid synchronization error on CALL
+	}
+
 	if(result) {
-		rows = (int)mysql_affected_rows(mysql);
 		int fields = mysql_num_fields(result);
 		info.SetCount(fields);
 		convert.Alloc(fields, false);
@@ -291,9 +334,12 @@ bool MySqlConnection::Execute() {
 				f.type = INT_V;
 				break;
 			case FIELD_TYPE_LONGLONG:
+				f.type = INT64_V;
+				break;
 			case FIELD_TYPE_DECIMAL:
 			case FIELD_TYPE_FLOAT:
 			case FIELD_TYPE_DOUBLE:
+			case FIELD_TYPE_NEWDECIMAL:
 				f.type = DOUBLE_V;
 				break;
 			case FIELD_TYPE_DATE:
@@ -374,6 +420,9 @@ void MySqlConnection::GetColumn(int i, Ref f) const {
 		case INT_V:
 			f = atoi(s);
 			break;
+		case INT64_V:
+			f = ScanInt64(s);
+			break;
 		case DOUBLE_V:
 			f = ScanDouble(s, NULL, true);
 			break;
@@ -418,7 +467,7 @@ String      MySqlConnection::GetUser() const    { return session.GetUser(); }
 String      MySqlConnection::ToString() const   { return statement; }
 
 String MySqlTextType(int n) {
-	return n < 256 ? Format("varchar(%d)", n) : String("text");
+	return n < 65536 ? Format("varchar(%d)", n) : String("text");
 }
 
 const char *MySqlReadString(const char *s, String& stmt) {
@@ -454,7 +503,7 @@ const char *MySqlReadString(const char *s, String& stmt) {
 	return s;
 }
 
-bool MySqlPerformScript(const String& txt, StatementExecutor& se, Gate2<int, int> progress_canceled) {
+bool MySqlPerformScript(const String& txt, StatementExecutor& se, Gate<int, int> progress_canceled) {
 	const char *text = txt;
 	for(;;) {
 		String stmt;
@@ -492,6 +541,6 @@ bool MySqlUpdateSchema(const SqlSchema& sch, int i, StatementExecutor& se) {
 	return true;
 }
 
-END_UPP_NAMESPACE
+}
 
 #endif

@@ -8,9 +8,10 @@ using namespace Upp;
 class RasterPlayer : public Ctrl {
 private:
 	virtual void Paint(Draw& w);
+	bool IsKilled();
 	
-	Array<Image> images;
-	Array<int> delays;
+	Upp::Array<Image> images;
+	Upp::Array<int> delays;
 	int ind;
 	Color background;
 	double speed;

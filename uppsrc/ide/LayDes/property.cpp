@@ -6,8 +6,8 @@ void ItemProperty::Paint(Draw& w)
 	w.DrawRect(sz, SColorLtFace);
 	w.DrawRect(0, GetHeight() - 1, sz.cx, 1, SColorText);
 	w.DrawText(2,
-	           (EditField::GetStdHeight() + 6 - GetTextSize(name, Arial(11)).cy) / 2, name,
-	           GetData() == defval ? Arial(11) : Arial(11).Bold());
+	           (EditField::GetStdHeight() + 6 - GetTextSize(name, StdFont()).cy) / 2, name,
+	           GetData() == defval ? StdFont()() : StdFont().Bold());
 }
 
 int ItemProperty::GetHeight() const
@@ -82,15 +82,18 @@ String RawProperty::Save() const
 	String s = ~editor;
 	CParser p(s);
 	int level = 0;
-	while(!p.IsEof()) {
-		if(p.Char('('))
-			level++;
-		else
-		if(p.Char(')'))
-			level--;
-		else
-			p.SkipTerm();
+	try {
+		while(!p.IsEof()) {
+			if(p.Char('('))
+				level++;
+			else
+			if(p.Char(')'))
+				level--;
+			else
+				p.SkipTerm();
+		}
 	}
+	catch(CParser::Error) {}
 	if(level < 0)
 		s = String('(', -level) + s;
 	else
@@ -111,7 +114,7 @@ struct IntProperty : public EditorProperty<EditInt> {
 	}
 
 	IntProperty() {
-		Add(editor.HSizePos(100, 2).TopPos(2));
+		Add(editor.HSizePosZ(100, 2).TopPos(2));
 	}
 
 	static ItemProperty *Create() { return new IntProperty; }
@@ -129,7 +132,7 @@ struct DoubleProperty : public EditorProperty<EditDouble> {
 	}
 
 	DoubleProperty() {
-		Add(editor.HSizePos(100, 2).TopPos(2));
+		Add(editor.HSizePosZ(100, 2).TopPos(2));
 	}
 
 	static ItemProperty *Create() { return new DoubleProperty; }
@@ -146,7 +149,7 @@ struct StringProperty : public EditorProperty<EditString> {
 		return AsCString(~editor);
 	}
 	StringProperty() {
-		Add(editor.HSizePos(100, 2).TopPos(2));
+		Add(editor.HSizePosZ(100, 2).TopPos(2));
 	}
 
 	static ItemProperty *Create() { return new StringProperty; }
@@ -165,7 +168,7 @@ struct BoolProperty : public EditorProperty<Option> {
 		return (int)~editor ? "true" : "false";
 	}
 	BoolProperty() {
-		Add(editor.HSizePos(100, 2).TopPos(3));
+		Add(editor.HSizePosZ(100, 2).TopPos(3));
 	}
 
 	static ItemProperty *Create() { return new BoolProperty; }
@@ -181,7 +184,7 @@ struct ColorProperty : public EditorProperty<ColorPusher> {
 	typedef ColorProperty CLASSNAME;
 
 	ColorProperty() {
-		Add(editor.HSizePos(100, 2).TopPos(2));
+		Add(editor.HSizePosZ(100, 2).TopPos(2));
 		editor.WithText().SColors().NullText("Null").Track();
 	}
 

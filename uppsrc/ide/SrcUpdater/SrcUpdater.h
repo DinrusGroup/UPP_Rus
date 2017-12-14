@@ -4,8 +4,9 @@
 #include "Wizard.h"
 #include <usvn/usvn.h>
 #include <ide/version.h>
+#include <ide/Common/Common.h>
 
-#ifndef PLATFORM_POSIX
+#if !defined(PLATFORM_POSIX) && !defined(flagWIN32)
 #error Updater is only implemented for POSIX compliant platforms
 #endif
 
@@ -100,7 +101,7 @@ public:
 		String desc;
 		Color c;
 		Font f;
-		void operator()(int fa,const String& description,const struct Color& color,bool italic){
+		void operator()(int fa,const String& description,const class Color& color,bool italic){
 			n=fa;
 			desc=description;
 			c=color;
@@ -134,7 +135,7 @@ public:
 	String GetLocal()const {return local;}
 	String GetError()const {return error;}
 	void ClearError()      {error="";}
-	Callback WhenUpdateAvailable;
+	Event<>  WhenUpdateAvailable;
 };
 
 #endif

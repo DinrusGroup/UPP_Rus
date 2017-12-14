@@ -1,6 +1,6 @@
 #include "Painter.h"
 
-NAMESPACE_UPP
+namespace Upp {
 
 struct GlyphPainter : NilPainter, LinearPathConsumer {
 	Vector<float>       glyph;
@@ -82,15 +82,17 @@ struct sMakeGlyph : LRUCache<Value, GlyphKey>::Maker {
 		gp.tolerance = gk.tolerance;
 		PaintCharacter(gp, Pointf(0, 0), gk.chr, gk.fnt);
 		int sz = gp.glyph.GetCount() * 4;
-		v = RawPickToValue(gp.glyph);
+		v = RawPickToValue(pick(gp.glyph));
 		return sz;
 	}
 };
 
 void BufferPainter::ApproximateChar(LinearPathConsumer& t, const CharData& ch, double tolerance)
 {
+	PAINTER_TIMING("ApproximateChar");
 	Value v;
 	INTERLOCKED {
+		PAINTER_TIMING("ApproximateChar::Fetch");
 		static LRUCache<Value, GlyphKey> cache;
 		cache.Shrink(500000);
 		sMakeGlyph h;
@@ -118,10 +120,11 @@ void BufferPainter::ApproximateChar(LinearPathConsumer& t, const CharData& ch, d
 			t.Move(p + ch.p);
 		}
 		else {
+			PAINTER_TIMING("ApproximateChar::Line");
 			p.y = g[i++];
 			t.Line(p + ch.p);
 		}
 	}
 }
 
-END_UPP_NAMESPACE
+}

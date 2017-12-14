@@ -1,6 +1,6 @@
 #include "CtrlCore.h"
 
-NAMESPACE_UPP
+namespace Upp {
 
 #define LLOG(x)   // DLOG(x)
 
@@ -122,6 +122,35 @@ void  Ctrl::Remove()
 		parent->RemoveChild(this);
 }
 
+int Ctrl::GetChildIndex(const Ctrl *child) const
+{
+	GuiLock __;
+	int i = 0;
+	for (Ctrl *c = GetFirstChild(); c; c = c->GetNext()) {
+		if(c == child) return i;
+		i++;
+	}
+	return -1;
+}
+
+int Ctrl::GetChildCount() const
+{
+	GuiLock __;
+	int n = 0;
+	for (Ctrl *c = GetFirstChild(); c; c = c->GetNext())
+		n++;
+	return n;
+}
+
+Ctrl * Ctrl::GetIndexChild(int ii) const
+{
+	GuiLock __;
+	Ctrl *c = GetFirstChild();
+	for(int i = 0; i < ii && c; i++)
+		c = c->GetNext();
+	return c;
+}
+
 bool Ctrl::HasChild(Ctrl *q) const
 {
 	GuiLock __;
@@ -230,8 +259,9 @@ const Ctrl *Ctrl::GetOwnerCtrl() const    { return const_cast<Ctrl *>(this)->Get
 TopWindow *Ctrl::GetTopWindow()
 {
 	GuiLock __;
-	Ctrl *q = GetTopCtrl();
+	Ctrl *q = this;
 	while(q) {
+		q = q->GetTopCtrl();
 		TopWindow *w = dynamic_cast<TopWindow *>(q);
 		if(w) return w;
 		q = q->GetOwner();
@@ -261,4 +291,4 @@ const TopWindow *Ctrl::GetMainWindow() const
 	return const_cast<Ctrl *>(this)->GetMainWindow();
 }
 
-END_UPP_NAMESPACE
+}

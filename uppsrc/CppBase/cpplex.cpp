@@ -1,12 +1,13 @@
 #include "CppBase.h"
 
-NAMESPACE_UPP
+// #define LOGNEXT _DBG_
+
+namespace Upp {
 
 #ifdef _MSC_VER
 #pragma inline_depth(255)
 #pragma optimize("t", on)
 #endif
-
 
 #define case_id \
 	case '_':case 'a':case 'b':case 'c':case 'd':case 'e':case 'f':case 'g':case 'h': \
@@ -14,7 +15,7 @@ NAMESPACE_UPP
 	case 'r':case 's':case 't':case 'u':case 'v':case 'w':case 'x':case 'y':case 'z': \
 	case 'A':case 'B':case 'C':case 'D':case 'E':case 'F':case 'G':case 'H':case 'I': \
 	case 'J':case 'K':case 'L':case 'M':case 'N':case 'O':case 'P':case 'Q':case 'R': \
-	case 'S':case 'T':case 'U':case 'V':case 'W':case 'X':case 'Y':case 'Z'
+	case 'S':case 'T':case 'U':case 'V':case 'W':case 'X':case 'Y':case 'Z':case '$'
 
 #define case_nonzero_digit \
 	case '1':case '2':case '3':case '4':case '5':case '6':case '7':case '8':case '9'
@@ -86,16 +87,12 @@ Lex::Lex()
 	for(int i = 0; cppk[i]; i++)
 		id.Add(cppk[i]);
 	endkey = id.GetCount();
-	braceslevel = ignore_low = ignore_high = body = 0;
+	braceslevel = body = 0;
 }
 
-void Lex::Init(const char *s, const Vector<String>& ig)
+void Lex::Init(const char *s)
 {
 	ptr = s;
-	ignore_low = id.GetCount();
-	for(int i = 0; i < ig.GetCount(); i++)
-		id.Add(ig[i]);
-	ignore_high = id.GetCount();
 }
 
 void Lex::StartStatCollection()
@@ -168,20 +165,10 @@ void Lex::Next()
 			while(iscid(*ptr))
 				x.Cat(*ptr++);
 			int q = id.FindAdd(x);
-			if(q >= ignore_low && q < ignore_high)
-				while(*ptr && (byte)*ptr <= ' ') {
-					ptr++;
-					if(*ptr == '(') {
-						int level = 1;
-						while(*ptr && level) {
-							if(*ptr == '(')
-								level++;
-							if(*ptr == ')')
-								level--;
-							ptr++;
-						}
-					}
-				}
+			if(q == tk_rval_ - 256) { // simple hack for transitionary macro
+				AddCode('&');
+				AddCode('&');
+			}
 			else
 				AddCode(q + 256);
 			break;
@@ -361,9 +348,16 @@ bool   Lex::IsId(int pos)
 	return Code(pos) >= endkey + 256;
 }
 
+void Lex::ThrowError(const char *e)
+{
+	WhenError(e);
+	throw Parser::Error();
+}
+
 String Lex::Id(int pos)
 {
-	ASSERT(IsId(pos));
+	if(!IsId(pos))
+		ThrowError("expected id");
 	return id[Code(pos) - 256];
 }
 
@@ -388,6 +382,59 @@ void Lex::Get(int n)
 		if(term.GetCount() == 0)
 			break;
 	}
+#ifdef LOGNEXT
+	Dump(0);
+#endif
+}
+
+void Lex::Dump(int pos)
+{
+#ifdef LOGNEXT
+	int code = Code(pos);
+	switch(code) {
+	case t_string: LOG(AsCString(Text(pos))); break;
+	case t_double: LOG(Double(pos)); break;
+	case t_integer: LOG(Int(pos)); break;
+	case t_character: LOG("char " << AsCString(String(Chr(pos), 1))); break;
+	default:
+		if(code < 0)
+			LOG(decode(Code(),
+				t_dblcolon, "::",
+				t_mulass, "*=",
+				t_divass, "/=",
+				t_modass, "%=",
+				t_xorass, "^=",
+				t_neq, "!=",
+				t_dot_asteriks, ".*",
+				t_elipsis, "...",
+				t_inc, "++",
+				t_addass, "+=",
+				t_dec, "--",
+				t_arrow_asteriks, "->*",
+				t_arrow, "->",
+				t_subass, "-=",
+				t_and, "&&",
+				t_andass, "&=",
+				t_or, "||",
+				t_orass, "|=",
+				t_eq, "==",
+				t_shl, "<<",
+				t_shlass, "<<=",
+				t_le, "<=",
+				t_shr, ">>",
+				t_shrass, ">>=",
+				t_ge, ">=",
+				te_integeroverflow, "<integer overflow>",
+				te_badcharacter, "<bad char>",
+				te_badstring, "<bad string>",
+				"???"));
+		else
+		if(code < 256)
+			LOG((char)code);
+		else
+			LOG(id[code - 256]);
+	}
+#endif
 }
 
 void Lex::SkipToGrounding()
@@ -414,28 +461,32 @@ void Lex::SkipToGrounding()
 int Lex::Int(int pos)
 {
 	Prepare(pos);
-	ASSERT(term[pos].code == t_integer);
+	if(term[pos].code != t_integer)
+		ThrowError("expected integer literal");
 	return (int)term[pos].number;
 }
 
 double Lex::Double(int pos)
 {
 	Prepare(pos);
-	ASSERT(term[pos].code == t_double);
+	if(term[pos].code != t_double)
+		ThrowError("expected floating point literal");
 	return term[pos].number;
 }
 
 String Lex::Text(int pos)
 {
 	Prepare(pos);
-	ASSERT(term[pos].code == t_string);
+	if(term[pos].code != t_string)
+		ThrowError("expected string literal");
 	return term[pos].text;
 }
 
 int Lex::Chr(int pos)
 {
 	Prepare(pos);
-	ASSERT(term[pos].code == t_character);
+	if(term[pos].code != t_character)
+		ThrowError("expected character literal");
 	return (byte)*term[pos].text;
 }
 
@@ -445,4 +496,4 @@ const char *Lex::Pos(int pos)
 	return pos < term.GetCount() ? term[pos].ptr : ptr;
 }
 
-END_UPP_NAMESPACE
+}

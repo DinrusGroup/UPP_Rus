@@ -1,6 +1,6 @@
 #include "Draw.h"
 
-NAMESPACE_UPP
+namespace Upp {
 
 Image WithHotSpots(const Image& m, int x1, int y1, int x2, int y2)
 {
@@ -31,7 +31,7 @@ Image CreateImage(Size sz, Color color)
 	return CreateImage(sz, (RGBA)color);
 }
 
-Size DstSrc(ImageBuffer& dest, Point& p, const Image& src, Rect& sr)
+force_inline Size DstSrc(ImageBuffer& dest, Point& p, const Image& src, Rect& sr)
 {
 	if(p.x < 0) {
 		sr.left += -p.x;
@@ -49,7 +49,7 @@ Size DstSrc(ImageBuffer& dest, Point& p, const Image& src, Rect& sr)
 }
 
 void DstSrcOp(ImageBuffer& dest, Point p, const Image& src, const Rect& srect,
-              void (*op)(RGBA *t, const RGBA *s, int n))
+                           void (*op)(RGBA *t, const RGBA *s, int n))
 {
 	Rect sr = srect;
 	Size sz = DstSrc(dest, p, src, sr);
@@ -66,6 +66,22 @@ void Copy(ImageBuffer& dest, Point p, const Image& src, const Rect& srect)
 void Over(ImageBuffer& dest, Point p, const Image& src, const Rect& srect)
 {
 	DstSrcOp(dest, p, src, srect, AlphaBlend);
+}
+
+Image GetOver(const Image& dest, const Image& src)
+{
+	Image r = dest;
+	Over(r, src);
+	return r;
+}
+
+void Fill(ImageBuffer& dest, const Rect& rect, RGBA color)
+{
+	Rect r = dest.GetSize() & rect;
+	int cx = r.GetWidth();
+	if(cx)
+		for(int y = r.top; y < r.bottom; y++)
+			Fill(dest[y] + r.left, color, cx);
 }
 
 void OverStraightOpaque(ImageBuffer& dest, Point p, const Image& src, const Rect& srect)
@@ -86,6 +102,18 @@ void  Over(Image& dest, Point p, const Image& _src, const Rect& srect)
 	Image src = _src;
 	ImageBuffer b(dest);
 	Over(b, p, src, srect);
+	dest = b;
+}
+
+void  Over(Image& dest, const Image& _src)
+{
+	Over(dest, Point(0, 0), _src, _src.GetSize());
+}
+
+void Fill(Image& dest, const Rect& rect, RGBA color)
+{
+	ImageBuffer b(dest);
+	Fill(b, rect, color);
 	dest = b;
 }
 
@@ -120,6 +148,37 @@ Image Crop(const Image& img, const Rect& rc)
 Image Crop(const Image& img, int x, int y, int cx, int cy)
 {
 	return Crop(img, RectC(x, y, cx, cy));
+}
+
+bool IsUniform(const RGBA *s, RGBA c, int add, int n)
+{
+	while(n-- > 0) {
+		if(*s != c)
+			return false;
+		s += add;
+	}
+	return true;
+}
+
+Image AutoCrop(const Image& m, RGBA c)
+{
+	Size isz = m.GetSize();
+	Rect r = isz;
+	for(r.top = 0; r.top < isz.cy && IsUniform(m[r.top], c, 1, isz.cx); r.top++)
+		;
+	for(r.bottom = isz.cy; r.bottom > r.top && IsUniform(m[r.bottom - 1], c, 1, isz.cx); r.bottom--)
+		;
+	if(r.bottom <= r.top)
+		return Null;
+	int h = r.GetHeight();
+	const RGBA *p = m[r.top];
+	for(r.left = 0; r.left < isz.cy && IsUniform(p + r.left, c, isz.cx, h); r.left++)
+		;
+	for(r.right = isz.cx; r.right > r.left && IsUniform(p + r.right - 1, c, isz.cx, h); r.right--)
+		;
+	Point p1 = m.GetHotSpot() - r.TopLeft();
+	Point p2 = m.Get2ndSpot() - r.TopLeft();
+	return WithHotSpots(Crop(m, r), p1.x, p1.y, p2.x, p2.y);
 }
 
 Image ColorMask(const Image& src, Color key)
@@ -413,14 +472,14 @@ void  Filter(RasterEncoder& target, Raster& src, ImageFilter9& filter)
 	sLine(target, sz.cx, l, filter);
 	target.WriteLine();
 	for(int y = 1; y < sz.cy - 1; y++) {
-		l[0] = l[1];
-		l[1] = l[2];
+		l[0] = pick(l[1]);
+		l[1] = pick(l[2]);
 		l[2] = src[y + 1];
 		sLine(target, sz.cx, l, filter);
 		target.WriteLine();
 	}
-	l[0] = l[1];
-	l[1] = l[2];
+	l[0] = pick(l[1]);
+	l[1] = pick(l[2]);
 	l[2] = src[sz.cy - 1];
 	sLine(target, sz.cx, l, filter);
 	target.WriteLine();
@@ -710,7 +769,6 @@ static Pointf Cvp(double x, double y, double sina, double cosa)
 Image Rotate(const Image& m, int angle)
 {
 	Size isz = m.GetSize();
-	Point center = isz / 2;
 	Pointf centerf = Pointf(Point(isz)) / 2.0;
 	double sina, cosa;
 	Draw::SinCos(-angle, sina, cosa);
@@ -718,9 +776,6 @@ Image Rotate(const Image& m, int angle)
 	Pointf p2 = Cvp(centerf.x, -centerf.y, sina, cosa);
 	Size sz2 = Size(2 * (int)max(tabs(p1.x), tabs(p2.x)),
 	                2 * (int)max(tabs(p1.y), tabs(p2.y)));
-	Pointf dcenterf = Sizef(sz2) / 2.0;
-	Point dcenter = sz2 / 2;
-
 	ImageBuffer ib(sz2);
 	Fill(~ib, RGBAZero(), ib.GetLength());
 	RGBA *t = ~ib;
@@ -747,4 +802,29 @@ Image Rotate(const Image& m, int angle)
 	return ib;
 }
 
-END_UPP_NAMESPACE
+Image Dither(const Image& m, int dival)
+{
+	static byte dither[8][8]= {
+		{ 1, 49, 13, 61, 4, 52, 16, 64 },
+        { 33, 17, 45, 29, 36, 20, 48, 32 },
+        { 9, 57, 5, 53, 12, 60, 8, 56 },
+        { 41, 25, 37, 21, 44, 28, 40, 24 },
+        { 3, 51, 15, 63, 2, 50, 14, 62 },
+        { 35, 19, 47, 31, 34, 18, 46, 30 },
+        { 11, 59, 7, 55, 10, 58, 6, 54 },
+        { 43, 27, 39, 23, 42, 26, 38, 22 },
+	};
+	
+	Size isz = m.GetSize();
+	ImageBuffer ib(m.GetSize());
+	const RGBA *s = ~m;
+	RGBA *t = ~ib;
+	for(int y = 0; y < isz.cy; y++)
+		for(int x = 0; x < isz.cx; x++) {
+			int g = Grayscale(*s++) * 100 / dival;
+			*t++ = g > dither[y & 7][x & 7] ? White() : Black();
+		}
+	return ib;
+}
+
+}

@@ -65,7 +65,7 @@ bool Puzzle::Move(int x, int y)
 
 void Puzzle::ShowStatus()
 {
-	String txt = t_("Перемещения: ");
+	String txt = t_("Moves: ");
 	txt << moves;
 	status = txt;
 }
@@ -117,10 +117,10 @@ void Puzzle::LeftDown(Point p, dword)
 		int& sm = score.GetAdd(String().Cat() << size.cx << "x" << size.cy);
 		if(moves < sm) {
 			sm = moves;
-			PromptOK(t_("Вы выиграли с новыми лучшими очками!"));
+			PromptOK(t_("You win with the new best score!"));
 		}
 		else
-			PromptOK(t_("Вы выиграли!"));
+			PromptOK(t_("You win!"));
 		Generate();
 	}
 	else
@@ -129,15 +129,15 @@ void Puzzle::LeftDown(Point p, dword)
 
 void Puzzle::About()
 {
-	PromptOK("[A5 Пазл]&Используется технология [*^http://www.ultimatepp.org^ Ultimate`+`+].");
+	PromptOK("[A5 Puzzle]&Using [*^http://www.ultimatepp.org^ Ultimate`+`+] technology.");
 }
 
 void Puzzle::Scores()
 {
 	WithScoreLayout<TopWindow> d;
-	CtrlLayoutOK(d, t_("Лучшие очки"));
-	d.score.AddColumn(t_("Размеры"));
-	d.score.AddColumn(t_("Перемещения"));
+	CtrlLayoutOK(d, t_("Best scores"));
+	d.score.AddColumn(t_("Dimension"));
+	d.score.AddColumn(t_("Moves"));
 	d.score.ColumnWidths("71 48");
 	d.score.NoCursor().NoGrid();
 	Vector<int> o = GetSortOrder(score.GetKeys());
@@ -149,7 +149,7 @@ void Puzzle::Scores()
 void Puzzle::Setup()
 {
 	WithSetupLayout<TopWindow> d;
-	CtrlLayoutOKCancel(d, t_("Настройка пазла"));
+	CtrlLayoutOKCancel(d, t_("Puzzle setup"));
 	CtrlRetriever r;
 	Size sz = size;
 	r
@@ -167,23 +167,23 @@ void Puzzle::Setup()
 
 void Puzzle::New()
 {
-	if(PromptYesNo(t_("Начать новую игру?")))
+	if(PromptYesNo(t_("Start a new game?")))
 		Generate();
 }
 
 void Puzzle::GameMenu(Bar& bar)
 {
-	bar.Add(t_("Новая игра"), THISBACK(New));
-	bar.Add(t_("Настроить.."), THISBACK(Setup));
-	bar.Add(t_("Лучшие очки.."), THISBACK(Scores));
+	bar.Add(t_("New game"), THISBACK(New));
+	bar.Add(t_("Setup.."), THISBACK(Setup));
+	bar.Add(t_("Best scores.."), THISBACK(Scores));
 	bar.Separator();
-	bar.Add(t_("Выход"), Breaker());
+	bar.Add(t_("Exit"), Breaker());
 }
 
 void Puzzle::MainMenu(Bar& bar)
 {
-	bar.Add(t_("Игра"), THISBACK(GameMenu));
-	bar.Add(t_("Об игре"), THISBACK(About));
+	bar.Add(t_("Game"), THISBACK(GameMenu));
+	bar.Add(t_("About"), THISBACK(About));
 }
 
 void Puzzle::Init()
@@ -197,8 +197,8 @@ void Puzzle::Init()
 void Puzzle::Xmlize(XmlIO xml)
 {
 	XmlizeLangAttr(xml, lang);
-	xml("Очки", score)
-	   ("Размеры", size);
+	xml("Scores", score)
+	   ("Dimension", size);
 	Init();
 }
 

@@ -42,6 +42,13 @@ class XMLToolBarItem : DeepCopyOption<XMLToolBarItem>
 		// a submenu, if any
 		One<XMLToolBar> subMenu;
 		
+		// set if separator
+		bool isSeparator;
+		
+		// internal command, if any
+		// if set, the item is generated on the fly and not tied to a command
+		Callback internalCb;
+		
 	public:
 		String const &GetId(void) const				{ return commandId; }
 		String const &GetLabel(void) const			{ return label; }
@@ -49,6 +56,9 @@ class XMLToolBarItem : DeepCopyOption<XMLToolBarItem>
 		String const &GetTooltip(void) const		{ return tooltip; }
 		XMLToolBar const &GetSubMenu(void) const	{ return *subMenu; }
 		bool IsSubMenu(void) const					{ return !subMenu.IsEmpty(); }
+		bool IsSeparator(void) const				{ return isSeparator; }
+		bool IsInternal(void) const					{ return internalCb; }
+		Callback const &GetInternal(void) const		{ return internalCb; }
 		
 		// xml support
 		void Xmlize(XmlIO xml);
@@ -60,7 +70,7 @@ class XMLToolBarItem : DeepCopyOption<XMLToolBarItem>
 		XMLToolBarItem(const XMLToolBarItem &item, int dummy);
 		
 		// pick constructor
-		XMLToolBarItem(XMLToolBarItem pick_ &item);
+		XMLToolBarItem(XMLToolBarItem rval_ item);
 
 #ifdef flagDEBUG
 		// debugging stuff -- dumps bar content
@@ -121,6 +131,18 @@ class XMLToolBar : DeepCopyOption<XMLToolBar>
 		
 		// add a submenu entry by callback
 		XMLToolBar &Add(Callback1<XMLToolBar &> bar);
+		
+		// add a fixed, unnamed internal command
+		// used for on-the-fly built menus
+		XMLToolBar &Add(String const &label, Callback cb);
+		XMLToolBar &Add(Image const &icon, Callback cb);
+		XMLToolBar &Add(String const &label, Image const &icon, Callback cb);
+		XMLToolBar &Add(String const &label, String const &tooltip, Callback cb);
+		XMLToolBar &Add(Image const &icon, String const &tooltip, Callback cb);
+		XMLToolBar &Add(String const &label, Image const &icon, String const &tooltip, Callback cb);
+		
+		// add a separator
+		XMLToolBar &Separator(void);
 
 		// gets toolbar name
 		String const &GetName(void) const				{ return name; }
@@ -140,6 +162,7 @@ class XMLToolBar : DeepCopyOption<XMLToolBar>
 		// debugging stuff -- dumps bar content
 		void Dump(int level = 0);
 #endif
+		rval_default(XMLToolBar);
 };
 
 ////////////////////////////////////////////////////////////////////////////////////

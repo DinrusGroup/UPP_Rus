@@ -41,7 +41,11 @@ public:
 	virtual void   AssignAccessKeys(dword used);
 	virtual Rect   GetVoidRect() const;
 
+	Color color;
+
 public:
+	LabelBox& SetColor(Color c)          { color = c; return *this; }
+
 	LabelBox();
 	virtual ~LabelBox();
 	LabelBox& operator=(const char *s)   { SetText(s); return *this; }
@@ -127,12 +131,13 @@ protected:
 public:
 	Drawing  Get() const                         { return picture; }
 
-	Picture& Background(Color color)             { background = color; Refresh(); return *this; }
+	Picture& Background(Color color);
 	Picture& KeepRatio(bool keep = true)         { ratio = keep; Refresh(); return *this; }
 	Picture& NoKeepRatio()                       { return KeepRatio(false); }
 	Picture& Set(const Drawing& _picture)        { picture = _picture; Refresh(); return *this; }
 
 	Picture& operator=(const Drawing& _picture)  { return Set(_picture); }
+	Picture& operator=(const Painting& _picture) { return Set(AsDrawing(_picture)); }
 
 	Picture();
 };
@@ -157,7 +162,7 @@ public:
 	SeparatorCtrl& Margin(int l, int r);
 	SeparatorCtrl& Margin(int w)                { return Margin(w, w); }
 	SeparatorCtrl& SetSize(int w);
-	SeparatorCtrl& SetStyle(const Style& s)     { style = &s; Refresh(); return *this; }
+	SeparatorCtrl& SetStyle(const Style& s);
 
 	SeparatorCtrl();
 };

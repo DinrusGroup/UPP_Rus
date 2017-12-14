@@ -1,6 +1,6 @@
 #include "Web.h"
 
-NAMESPACE_UPP
+namespace Upp {
 
 //#define SMTP_DEBUG // uncomment this line to turn on LOG-based SMTP emulation
 //#define SMTP_LOG // uncomment this line to turn on command-line based logging of SMTP communication
@@ -142,7 +142,7 @@ static const char default_mime[] = "application/octet-stream";
 String SmtpMail::Encode(const String& text)
 {
 	String txt = ToCharset(CHARSET_UTF8, text);
-	String r = "=?Utf-8?q?";
+	String r = "=?UTF-8?Q?";
 	for(const char *s = txt; *s; s++) {
 		if((byte)*s < ' ' || (byte)*s > 127 || *s == '=' || *s == '?' || *s == ' ')
 			r << '=' << FormatIntHexUpper((byte)*s, 2);
@@ -329,13 +329,15 @@ bool SmtpMail::Send()
 					msg << "Date: "
 						<< dayofweek[DayOfWeek(time_sent)] << ", "
 						<< (int)time_sent.day << ' ' << month[time_sent.month - 1] << ' ' << (int)time_sent.year
-						<< ' ' << Sprintf("%2d:%02d:%02d +0100", time_sent.hour, time_sent.minute, time_sent.second)
+						<< ' ' << Sprintf("%2d:%02d:%02d " + GetTimeZoneText(),
+						                  time_sent.hour, time_sent.minute, time_sent.second)
 						<< "\r\n";
 				}
 				if(multi || alter)
 					msg << "Content-Type: Multipart/" << (alter ? "alternative" : "mixed")
 						<< "; boundary=\"" << delimiter << "\"\r\n"
 						"\r\n";
+				msg << add_header;
 			}
 
 			for(int i = 0; i < text.GetCount(); i++) {
@@ -433,7 +435,8 @@ SmtpMail& SmtpMail::New()
 	mime.Clear();
 	error.Clear();
 	transcript_text.Clear();
+	add_header.Clear();
 	return *this;
 }
 
-END_UPP_NAMESPACE
+}

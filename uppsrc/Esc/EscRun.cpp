@@ -1,7 +1,7 @@
 #include "Esc.h"
 
 
-NAMESPACE_UPP
+namespace Upp {
 
 #define LTIMING(x) // RTIMING(x)
 
@@ -31,14 +31,14 @@ void LambdaArgs(CParser& p, EscLambda& l)
 					else
 						p.SkipTerm();
 					if(p.IsEof())
-						p.ThrowError("неожиданный конец файла при чтении дефолтного значения для аргумента "
+						p.ThrowError("unexpected end of file while reading default value for argument "
 						             + l.arg.Top());
 				}
 				l.def.Add(String(s, p.GetPtr()));
 			}
 			else
 				if(l.def.GetCount())
-					p.ThrowError("отсутствует дефолтное значение для аргумента " + l.arg.Top());
+					p.ThrowError("missing default value for argument " + l.arg.Top());
 			if(p.Char(')'))
 				break;
 			p.PassChar(',');
@@ -56,7 +56,7 @@ EscValue ReadLambda(CParser& p)
 	l.filename = p.GetFileName();
 	l.line = p.GetLine();
 	if(!p.Char('{'))
-		p.ThrowError("отсутствует '{'");
+		p.ThrowError("missing '{'");
 	SkipBlock(p);
 	l.code = String(t, p.GetPtr());
 	return lambda;
@@ -70,7 +70,7 @@ EscValue ReadLambda(const char *s)
 
 String EscEscape::InCall()
 {
-	return IsNull(id) ? String() : " в вызове к '" + id + "'";
+	return IsNull(id) ? String() : " in call to '" + id + "'";
 }
 
 String EscEscape::DumpType(int i)
@@ -78,36 +78,36 @@ String EscEscape::DumpType(int i)
 	if(i < arg.GetCount())
 		return String().Cat() << " (" << arg[i].GetTypeName() << " present)";
 	else
-		return " (нехватка аргументов)";
+		return " (not enough arguments)";
 }
 
 void  EscEscape::CheckNumber(int i)
 {
 	if(i < arg.GetCount() && arg[i].IsNumber())
 		return;
-	ThrowError(String().Cat() << "число ожидалось в качестве параметра " << i + 1 << InCall()
+	ThrowError(String().Cat() << "number expected as parameter " << i + 1 << InCall()
 	           << DumpType(i));
 }
 
 double EscEscape::Number(int i)
 {
 	if(i >= arg.GetCount())
-		ThrowError("очень мало параметров" + InCall());
+		ThrowError("too little parameters" + InCall());
 	return esc.Number(arg[i], "parameter" + InCall());
 }
 
 int EscEscape::Int(int i)
 {
 	if(i >= arg.GetCount())
-		ThrowError("очень мало параметров" + InCall());
-	return esc.Int(arg[i], "parameter" + InCall());
+		ThrowError("too little parameters" + InCall());
+	return (int)esc.Int(arg[i], "parameter" + InCall());
 }
 
 void  EscEscape::CheckArray(int i)
 {
 	if(i < arg.GetCount() && arg[i].IsArray())
 		return;
-	ThrowError(String().Cat() << "массив ожидался в качестве параметра " << i + 1 << InCall()
+	ThrowError(String().Cat() << "array expected as parameter " << i + 1 << InCall()
 	           << DumpType(i));
 }
 
@@ -115,10 +115,10 @@ void  EscEscape::CheckMap(int i)
 {
 	if(i < arg.GetCount() && arg[i].IsMap())
 		return;
-	ThrowError(String().Cat() << "карта ожидалась в качестве параметра " << i + 1 << InCall());
+	ThrowError(String().Cat() << "map expected as parameter " << i + 1 << InCall());
 }
 
-void Escape(ArrayMap<String, EscValue>& globals, const char *function, Callback1<EscEscape&> escape)
+void Escape(ArrayMap<String, EscValue>& globals, const char *function, Event<EscEscape&> escape)
 {
 	CParser p(function);
 	EscValue& v = globals.GetPut(p.ReadId());
@@ -132,7 +132,7 @@ void Escape(ArrayMap<String, EscValue>& globals, const char *function, void (*es
 	Escape(globals, function, callback(escape));
 }
 
-void  EscValue::Escape(const char *method, Callback1<EscEscape&> escape)
+void  EscValue::Escape(const char *method, Event<EscEscape&> escape)
 {
 	CParser p(method);
 	String id = p.ReadId();
@@ -143,7 +143,7 @@ void  EscValue::Escape(const char *method, Callback1<EscEscape&> escape)
 	MapSet(id, v);
 }
 
-void  EscValue::Escape(const char *method, EscHandle *h, Callback1<EscEscape&> escape)
+void  EscValue::Escape(const char *method, EscHandle *h, Event<EscEscape&> escape)
 {
 	CParser p(method);
 	String id = p.ReadId();
@@ -176,7 +176,7 @@ EscValue Execute(ArrayMap<String, EscValue>& global, EscValue *self,
 		String argnames;
 		for(int i = 0; i < l.arg.GetCount(); i++)
 			argnames << (i ? ", " : "") << l.arg[i];
-		throw CParser::Error(NFormat("неверное число аргументов (%d передано, ожидалось: %s)", arg.GetCount(), argnames));
+		throw CParser::Error(NFormat("invalid number of arguments (%d passed, expected: %s)", arg.GetCount(), argnames));
 	}
 	EscValue ret;
 	{
@@ -274,7 +274,7 @@ String   Expand(const String& doc, ArrayMap<String, EscValue>& global,
 				sub.Spaces();
 				term = sub.GetPtr();
 				if(term[0] != ':' || term[1] != '>')
-					throw CParser::Error("отсутствует :>" + String(term));
+					throw CParser::Error("missing :>" + String(term));
 				term += 2;
 			}
 			catch(CParser::Error& e) {
@@ -289,4 +289,4 @@ String   Expand(const String& doc, ArrayMap<String, EscValue>& global,
 	return out;
 }
 
-END_UPP_NAMESPACE
+}

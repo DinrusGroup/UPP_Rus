@@ -21,7 +21,7 @@ void ReferenceDlg::Set(const String& s)
 
 ReferenceDlg::ReferenceDlg()
 {
-	CtrlLayoutOKCancel(*this, "Справка");
+	CtrlLayoutOKCancel(*this, "Reference");
 	Breaker(classlist, IDYES);
 	item.WhenEnterRow = THISBACK(EnterItem);
 	item.WhenLeftDouble = THISBACK(EnterItemOk);

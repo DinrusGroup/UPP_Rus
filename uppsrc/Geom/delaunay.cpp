@@ -1,7 +1,6 @@
 #include "Geom.h"
-#pragma hdrstop
 
-NAMESPACE_UPP
+namespace Upp {
 
 #define DELDUMP
 
@@ -194,7 +193,7 @@ void Delaunay::AddHull(int i)
 	{ // collinear, extend fan
 		Triangle& tm = triangles[im];
 		int in = tm.Next(2);
-		Triangle& tn = triangles[in];
+//		Triangle& tn = triangles[in];
 
 		int j = tm[1];
 
@@ -237,4 +236,4 @@ void Delaunay::AddHull(int i)
 	}
 }
 
-END_UPP_NAMESPACE
+}

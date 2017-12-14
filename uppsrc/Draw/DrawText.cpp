@@ -1,10 +1,10 @@
 #include "Draw.h"
 
-NAMESPACE_UPP
+namespace Upp {
 
-#ifdef flagWINGL
-#include <WinGl/FontGl.h>
-#include <WinGl/ResGl.h>
+#if defined(flagWINGL) || defined(flagLINUXGL)
+#include <CoreGl/FontGl.h>
+#include <CoreGl/ResGl.h>
 #endif
 
 #define LLOG(x)    // LOG(x)
@@ -31,7 +31,7 @@ WString TextUnicode(const char *s, int n, byte cs, Font font)
 void Draw::DrawText(int x, int y, int angle, const wchar *text, Font font,
 		            Color ink, int n, const int *dx)
 {
-#ifdef flagWINGL
+#if defined(flagWINGL) || defined(flagLINUXGL)
 	if(IsNull(ink))
 		return;
 	DrawTextOp(x, y, angle, text, font, ink, n, dx);
@@ -40,30 +40,33 @@ void Draw::DrawText(int x, int y, int angle, const wchar *text, Font font,
 	if(n < 0)
 		n = wstrlen(text);
 	Std(font);
-	double sina;
-	double cosa;
-	int    d = 0;
+	double sina = 0;
+	double cosa = 1;
+	int    posx = 0;
 	if(angle)
 		Draw::SinCos(angle, sina, cosa);
+	Font font0 = font;
+	if(GetInfo() & DRAWTEXTLINES)
+		font.Underline(false).Strikeout(false);
 	for(int i = 0; i < n; i++) {
 		wchar chr = text[i];
 		GlyphInfo gi = GetGlyphInfo(font, chr);
 		if(gi.IsNormal())
 			if(angle)
-				DrawTextOp(int(x + cosa * d), int(y - sina * d), angle, &chr, font, ink, 1, NULL);
+				DrawTextOp(int(x + cosa * posx), int(y - sina * posx), angle, &chr, font, ink, 1, NULL);
 			else {
 				int c = 1;
 				int dd = 0;
-				while(i + c < n) {
+				while(i + c < n && c < 1000) {
 					GlyphInfo gi2 = GetGlyphInfo(font, text[i + c]);
 					if(!gi2.IsNormal())
 						break;
-					dd += dx ? dx[c] : gi.width;
+					dd += dx ? dx[c - 1] : gi.width;
 					c++;
 					gi = gi2;
 				}
-				DrawTextOp(x + d, y, 0, text + i, font, ink, c, dx);
-				d += dd;
+				DrawTextOp(x + posx, y, 0, text + i, font, ink, c, dx);
+				posx += dd;
 				i += c - 1;
 				if(dx)
 					dx += c - 1;
@@ -74,10 +77,10 @@ void Draw::DrawText(int x, int y, int angle, const wchar *text, Font font,
 			fnt.Face(gi.lspc);
 			fnt.Height(gi.rspc);
 			if(angle)
-				DrawTextOp(int(x + cosa * d), int(y - sina * (font.GetAscent() - fnt.GetAscent() + d)),
+				DrawTextOp(int(x + cosa * posx), int(y - sina * (font.GetAscent() - fnt.GetAscent() + posx)),
 				             angle, &chr, fnt, ink, 1, NULL);
 			else
-				DrawTextOp(x + d, y + font.GetAscent() - fnt.GetAscent(), 0, &chr, fnt, ink, 1, NULL);
+				DrawTextOp(x + posx, y + font.GetAscent() - fnt.GetAscent(), 0, &chr, fnt, ink, 1, NULL);
 			GlyphMetrics(gi, font, chr);
 		}
 		else
@@ -85,12 +88,12 @@ void Draw::DrawText(int x, int y, int angle, const wchar *text, Font font,
 			ComposedGlyph cg;
 			Compose(font, chr, cg);
 			if(angle) {
-				DrawTextOp(int(x + cosa * d), int(y - sina * d), angle, &cg.basic_char, font, ink, 1, NULL);
-				DrawTextOp(int(x + cosa * (d + cg.mark_pos.x)), int(y - sina * (cg.mark_pos.y + d)), angle, &cg.mark_char, cg.mark_font, ink, 1, NULL);
+				DrawTextOp(int(x + cosa * posx), int(y - sina * posx), angle, &cg.basic_char, font, ink, 1, NULL);
+				DrawTextOp(int(x + cosa * (posx + cg.mark_pos.x)), int(y - sina * (cg.mark_pos.y + posx)), angle, &cg.mark_char, cg.mark_font, ink, 1, NULL);
 			}
 			else {
-				DrawTextOp(x + d, y, 0, &cg.basic_char, font, ink, 1, NULL);
-				DrawTextOp(x + cg.mark_pos.x + d, y + cg.mark_pos.y, 0, &cg.mark_char, cg.mark_font, ink, 1, NULL);
+				DrawTextOp(x + posx, y, 0, &cg.basic_char, font, ink, 1, NULL);
+				DrawTextOp(x + cg.mark_pos.x + posx, y + cg.mark_pos.y, 0, &cg.mark_char, cg.mark_font, ink, 1, NULL);
 			}
 			GlyphMetrics(gi, font, chr);
 		}
@@ -103,12 +106,51 @@ void Draw::DrawText(int x, int y, int angle, const wchar *text, Font font,
 				gi = GetGlyphInfo(fnt, chr);
 			}
 			if(angle)
-				DrawTextOp(int(x + cosa * d), int(y - sina * d), angle, &chr, fnt, ink, 1, NULL);
+				DrawTextOp(int(x + cosa * posx), int(y - sina * posx), angle, &chr, fnt, ink, 1, NULL);
 			else
-				DrawTextOp(x + d, y, 0, &chr, fnt, ink, 1, NULL);
+				DrawTextOp(x + posx, y, 0, &chr, fnt, ink, 1, NULL);
 		}
-		d += dx ? *dx++ : gi.width;
+		posx += dx ? *dx++ : gi.width;
 	}
+
+	if((GetInfo() & DRAWTEXTLINES) && (font0.IsUnderline() || font0.IsStrikeout())) {
+		int hg = abs(font0.GetCy());
+		if(hg == 0) hg = 10;
+		int thickness = max(hg / 20, 1);
+
+		int ascent = font0.GetAscent();
+		Size offset = Point(0, ascent);
+		if(angle) {
+			offset.cx = fround(ascent * sina);
+			offset.cy = fround(ascent * cosa);
+		}
+
+		x += offset.cx;
+		y += offset.cy;
+		if(font0.IsUnderline()) {
+			int p = max(hg / 15, int(font0.Info().GetDescent() > 0));
+			DrawLine(
+				int(x + p * sina),
+				int(y + p * cosa),
+				int(x + posx * cosa + p * sina),
+				int(y - posx * sina + p * cosa),
+				thickness,
+				ink
+			);
+		}
+		if(font0.IsStrikeout()) {
+			int p = -ascent / 3;
+			DrawLine(
+				int(x + p * sina),
+				int(y + p * cosa),
+				int(x + posx * cosa + p * sina),
+				int(y - posx * sina + p * cosa),
+				thickness,
+				ink
+			);
+		}
+	}
+
 #endif
 }
 
@@ -179,8 +221,8 @@ void Draw::DrawText(int x, int y, const String& text, Font font, Color ink, cons
 
 Size GetTextSize(const wchar *text, Font font, int n)
 {
-#ifdef flagWINGL
-	return GetTextSize(text, resources.GetFont(font), n); 
+#if defined(flagWINGL) || defined(flagLINUXGL)
+	return GetTextSize(text, resources.GetFont(font), n);
 #else
 	FontInfo fi = font.Info();
 	if(n < 0)
@@ -217,4 +259,4 @@ Size GetTextSize(const String& text, Font font)
 	return GetTextSize(text, font, text.GetLength());
 }
 
-END_UPP_NAMESPACE
+}

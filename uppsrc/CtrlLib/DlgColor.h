@@ -17,7 +17,7 @@ public:
 	virtual void  LeftDouble(Point pt, dword keyflags);
 	virtual void  MouseMove(Point pt, dword keyflags);
 
-	Callback      WhenLeftDouble;
+	Event<>       WhenLeftDouble;
 
 private:
 	void          SetColor(Color color, bool set_norm, bool set_hsv);
@@ -36,7 +36,6 @@ private:
 	Color         normalized_color;
 	int           h16, s16, v16;
 	int           round_step;
-	int           wheel_style;
 	enum STYLE { S_WHEEL, S_RECT, S_HEXAGON };
 	STYLE         style;
 	Image         cache;
@@ -85,7 +84,7 @@ public:
 	Ctrl&          GetImplCtrl()                            { return impl->GetCtrl(); }
 
 public:
-	Callback       WhenSetColor;
+	Event<>        WhenSetColor;
 
 public:
 	class Impl
@@ -140,6 +139,7 @@ public:
 	virtual  void MouseMove(Point p, dword);
 	virtual  void MouseLeave();
 	virtual  bool Key(dword key, int count);
+	virtual  void Layout();
 
 private:
 	void PopupDeactivate();
@@ -147,7 +147,7 @@ private:
 	struct Popup : Ctrl {
 		ColorPopUp *color;
 		
-		virtual void Deactivate() { color->PopupDeactivate(); }		
+		virtual void Deactivate() { color->PopupDeactivate(); }
 	};
 
 	int      Get(Point p);
@@ -160,8 +160,8 @@ private:
 	Color    GetColor(int i) const;
 	void     Select();
 
-	void 	 DrawFilledFrame(Draw &w, int x, int y, int cx, int cy, Color fcol, Color bcol);
-	void 	 DrawFilledFrame(Draw &w, Rect &r, Color fcol, Color bcol);
+	void     DrawFilledFrame(Draw &w, int x, int y, int cx, int cy, Color fcol, Color bcol);
+	void     DrawFilledFrame(Draw &w, Rect &r, Color fcol, Color bcol);
 
 	int      colori;
 	bool     notnull;
@@ -169,11 +169,15 @@ private:
 	bool     norampwheel;
 	bool     animating;
 	bool     hints;
+	bool     open;
+	bool     withvoid;
 	String   nulltext;
+	String   voidtext;
 	Color    color;
 
 	ColorRampCtrl  ramp;
 	ColorWheelCtrl wheel;
+	Button         settext;
 	One<Popup>     popup;
 
 	static Color   hint[18];
@@ -181,8 +185,8 @@ private:
 	friend void ColorPopUp_InitHint();
 
 public:
-	Callback WhenCancel;
-	Callback WhenSelect;
+	Event<>  WhenCancel;
+	Event<>  WhenSelect;
 
 	static void Hint(Color c);
 
@@ -194,6 +198,8 @@ public:
 	ColorPopUp& NotNull(bool b = true)               { notnull = b; return *this; }
 	ColorPopUp& SColors(bool b = true)               { scolors = b; return *this; }//Deprecated
 	ColorPopUp& NullText(const char *s)              { nulltext = s; Refresh(); return *this; }
+	ColorPopUp& WithVoid(bool b = true)              { withvoid = b; Refresh(); return *this; }
+	ColorPopUp& VoidText(const char *s)              { voidtext = s; Refresh(); return *this; }
 	ColorPopUp& NoRampWheel(bool b = true)           { norampwheel = b; return *this; }
 	ColorPopUp& Hints(bool b = true)                 { hints = b; return *this; }
 
@@ -214,10 +220,12 @@ public:
 protected:
 	bool       push;
 	bool       withtext;
+	bool       withhex;
 	bool       track;
 	Color      color, saved_color;
 	ColorPopUp colors;
 	String     nulltext;
+	String     voidtext;
 
 	void AcceptColors();
 	void CloseColors();
@@ -229,8 +237,11 @@ public:
 
 	ColorPusher& NullText(const char *s)    { nulltext = s; colors.NullText(s); Refresh(); return *this; }
 	ColorPusher& NotNull(bool b = true)     { colors.NotNull(b); return *this; }
+	ColorPusher& WithVoid(bool b = true)    { colors.WithVoid(b); return *this; }
+	ColorPusher& VoidText(const char *s)    { voidtext = s; colors.VoidText(s); Refresh(); return *this; }
 	ColorPusher& SColors(bool b = true)     { colors.SColors(b); return *this; }
-	ColorPusher& WithText()                 { withtext = true; return *this; }
+	ColorPusher& WithText()                 { withtext = true; Refresh(); return *this; }
+	ColorPusher& WithHex()                  { withhex = true; Refresh(); return *this; }
 	ColorPusher& Track(bool b = true)       { track = b; return *this; }
 	ColorPusher& NoTrack()                  { return Track(false); }
 	ColorPusher& NoRampWheel(bool b = true) { colors.NoRampWheel(b); return *this; }
@@ -262,6 +273,5 @@ public:
 
 String FormatColor(Color c);
 Color  ReadColor(CParser& p);
-Color  ColorFromText(const char *s);
 
 #endif//__TCtrlLib_DlgColor__

@@ -1,7 +1,7 @@
 #include <Esc/Esc.h>
 
 
-NAMESPACE_UPP
+namespace Upp {
 
 #ifdef _MSC_VER
 #pragma inline_depth(255)
@@ -12,14 +12,14 @@ NAMESPACE_UPP
 
 void Esc::OutOfMemory()
 {
-	ThrowError("Нехватка памяти");
+	ThrowError("Out of memory");
 }
 
 void Esc::TestLimit()
 {
 	if(!IsNull(op_limit))
 		if(op_limit < 0)
-			ThrowError("вне лимита операций - считается замороженным");
+			ThrowError("out of operations limit - considered frozen");
 	if(EscValue::GetTotalCount() >= EscValue::GetMaxTotalCount())
 		OutOfMemory();
 }
@@ -28,7 +28,7 @@ EscValue Esc::Get(const SRVal& val)
 {
 	LTIMING("Get");
 	if(skipexp)
-		return 1;
+		return (int64)1;
 	EscValue v = val.lval ? *val.lval : val.rval;
 	if(val.sbs.IsArray()) {
 		const Vector<EscValue>& sbs = val.sbs.GetArray();
@@ -42,7 +42,7 @@ EscValue Esc::Get(const SRVal& val)
 				if(ss.IsArray() && ss.GetArray().GetCount() >= 2) {
 					EscValue v1 = ss.ArrayGet(0);
 					EscValue v2 = ss.ArrayGet(1);
-					int i = v1.IsInt() ? v1.GetInt() : 0;
+					int i = v1.GetInt();
 					int n = count - i;
 					if(ss.GetCount() == 2)
 						n = v2.IsInt() ? v2.GetInt() : n;
@@ -57,20 +57,20 @@ EscValue Esc::Get(const SRVal& val)
 					if(i >= 0 && n >= 0 && i + n <= count)
 						v = v.ArrayGet(i, n);
 					else
-						ThrowError("срез вне диапазона");
+						ThrowError("slice out of range");
 				}
 				else {
-					int i = Int(ss, "index");
+					int64 i = Int(ss, "index");
 					if(i < 0)
 						i += count;
 					if(i >= 0 && i < count)
-						v = v.ArrayGet(i);
+						v = v.ArrayGet((int)i);
 					else
-						ThrowError("индекс вне диапазона");
+						ThrowError("index out of range");
 				}
 			}
 			else
-				ThrowError("неверная индирекция");
+				ThrowError("invalid indirection");
 			TestLimit();
 		}
 	}
@@ -99,12 +99,12 @@ void Esc::Assign(EscValue& val, const Vector<EscValue>& sbs, int si, const EscVa
 		if(si < sbs.GetCount()) {
 			if(ss.IsArray())
 				ThrowError("slice must be last subscript");
-			int i = Int(ss, "index");
+			int64 i = Int(ss, "index");
 			if(i >= 0 && i < val.GetCount()) {
-				EscValue x = val.ArrayGet(i);
-				val.ArraySet(i, 0.0);
+				EscValue x = val.ArrayGet((int)i);
+				val.ArraySet((int)i, 0.0);
 				Assign(x, sbs, si, src);
-				if(!val.ArraySet(i, x))
+				if(!val.ArraySet((int)i, x))
 					OutOfMemory();
 				return;
 			}
@@ -113,7 +113,7 @@ void Esc::Assign(EscValue& val, const Vector<EscValue>& sbs, int si, const EscVa
 			int count = val.GetCount();
 			if(ss.IsArray()) {
 				if(!src.IsArray() || ss.GetArray().GetCount() < 2)
-					ThrowError("срезу можно присваивать только массив");
+					ThrowError("only array can be assigned to the slice");
 				EscValue v1 = ss.ArrayGet(0);
 				EscValue v2 = ss.ArrayGet(1);
 				int i = v1.IsInt() ? v1.GetInt() : 0;
@@ -133,21 +133,21 @@ void Esc::Assign(EscValue& val, const Vector<EscValue>& sbs, int si, const EscVa
 					return;
 				}
 				else
-					ThrowError("срез вне диапазона");
+					ThrowError("slice out of range");
 			}
 			else {
-				int i = ss.IsVoid() ? val.GetCount() : Int(ss, "index");
+				int64 i = ss.IsVoid() ? val.GetCount() : Int(ss, "index");
 				if(i < 0)
 					i = count + i;
-				if(i >= 0) {
-					if(!val.ArraySet(i, src))
-						ThrowError("вне памяти");
+				if(i >= 0 && i < INT_MAX) {
+					if(!val.ArraySet((int)i, src))
+						ThrowError("out of memory");
 					return;
 				}
 			}
 		}
 	}
-	ThrowError("неверная индирекция");
+	ThrowError("invalid indirection");
 }
 
 void Esc::Assign(const SRVal& val, const EscValue& src)
@@ -155,7 +155,7 @@ void Esc::Assign(const SRVal& val, const EscValue& src)
 	if(skipexp)
 		return;
 	if(!val.lval)
-		ThrowError("требуется л-значение");
+		ThrowError("l-value required");
 	if(val.sbs.IsArray() && val.sbs.GetCount())
 		Assign(*val.lval, val.sbs.GetArray(), 0, src);
 	else
@@ -166,11 +166,11 @@ EscValue Esc::ExecuteLambda(const String& id, EscValue lambda, SRVal self, Vecto
 {
 	LTIMING("ExecuteLambda");
 	if(!lambda.IsLambda())
-		ThrowError(NFormat("'%s' не лямбда", id));
+		ThrowError(NFormat("'%s' is not a lambda", id));
 	const EscLambda& l = lambda.GetLambda();
 	if(!l.varargs && arg.GetCount() > l.arg.GetCount()
 	   || arg.GetCount() < l.arg.GetCount() - l.def.GetCount())
-		ThrowError("неверное число аргументов при вызове '" + id + "'");
+		ThrowError("invalid number of arguments in call to '" + id + "'");
 	Esc sub(global, l.code, op_limit, l.filename, l.line);
 	sub.self = Get(self);
 	for(int i = 0; i < l.arg.GetCount(); i++) {
@@ -266,7 +266,7 @@ void Esc::Subscript(Esc::SRVal& r, Esc::SRVal _self, String id)
 				Term(_self);
 				EscValue g = Get(_self);
 				if(!_self.lval || (!g.IsVoid() && !g.IsMap()))
-					ThrowError("l-значение map или l-значение void ожидались справа от !");
+					ThrowError("l-value map or l-value void expected on the right side of !");
 				if(g.IsVoid()) {
 					EscValue v;
 					v.SetEmptyMap();
@@ -300,11 +300,11 @@ void Esc::Term(SRVal& r)
 	op_limit--;
 	TestLimit();
 	if(Char2('0', 'x') || Char2('0', 'X')) {
-		r = ReadNumber(16);
+		r = ReadNumber64(16);
 		return;
 	}
 	if(Char2('0', 'b') || Char2('0', 'B')) {
-		r = ReadNumber(2);
+		r = ReadNumber64(2);
 		return;
 	}
 	if(IsChar2('0', '.')) {
@@ -312,10 +312,11 @@ void Esc::Term(SRVal& r)
 		return;
 	}
 	if(Char('0')) {
-		r = IsNumber() ? ReadNumber(8) : 0;
+		r = IsNumber() ? ReadNumber64(8) : 0;
 		return;
 	}
 	if(IsNumber()) {
+		// TODO: int64 !
 		r = ReadDouble();
 		return;
 	}
@@ -326,8 +327,8 @@ void Esc::Term(SRVal& r)
 	if(IsChar('\'')) {
 		WString s = FromUtf8(ReadString('\''));
 		if(s.GetLength() != 1)
-			ThrowError("неверный символьный литерал");
-		r = s[0];
+			ThrowError("invalid character literal");
+		r = (int64)s[0];
 		return;
 	}
 	if(Char('@')) {
@@ -381,7 +382,7 @@ void Esc::Term(SRVal& r)
 	bool  _global = false;
 	if(Char('.')) {
 		if(!self.IsMap())
-			ThrowError("доступ к члену вне кода члена");
+			ThrowError("member-access in non-member code");
 		_self.lval = &self;
 	}
 	else
@@ -395,7 +396,7 @@ void Esc::Term(SRVal& r)
 
 		if(id == "self") {
 			if(!self.IsMap())
-				ThrowError("self не в членском коде");
+				ThrowError("self in non-member code");
 			_self.lval = &self;
 			r = self;
 		}
@@ -429,7 +430,7 @@ void Esc::Term(SRVal& r)
 		}
 	}
 	else
-		ThrowError("неверное выражение");
+		ThrowError("invalid expression");
 }
 
 String Lims(const String& s)
@@ -440,15 +441,15 @@ String Lims(const String& s)
 double Esc::Number(const EscValue& a, const char *oper)
 {
 	if(!a.IsNumber())
-		ThrowError(String().Cat() << "ожидалось число для '" << oper << "', найдено " << Lims(a.ToString()));
+		ThrowError(String().Cat() << "number expected for '" << oper << "', encountered " << Lims(a.ToString()));
 	return a.GetNumber();
 }
 
-int Esc::Int(const EscValue& a, const char *oper)
+int64 Esc::Int(const EscValue& a, const char *oper)
 {
-	if(!a.IsInt())
-		ThrowError(String().Cat() << "ожидалось целое число для '" << oper << "', найдено " << Lims(a.ToString()));
-	return a.GetInt();
+	if(!a.IsNumber())
+		ThrowError(String().Cat() << "integer expected for '" << oper << "', encountered " << Lims(a.ToString()));
+	return a.GetInt64();
 }
 
 double Esc::Number(const Esc::SRVal& a, const char *oper)
@@ -456,7 +457,7 @@ double Esc::Number(const Esc::SRVal& a, const char *oper)
 	return Number(Get(a), oper);
 }
 
-int Esc::Int(const Esc::SRVal& a, const char *oper)
+int64 Esc::Int(const Esc::SRVal& a, const char *oper)
 {
 	return Int(Get(a), oper);
 }
@@ -465,27 +466,43 @@ void Esc::Unary(Esc::SRVal& r)
 {
 	if(Char2('+', '+')) {
 		Unary(r);
-		Assign(r, Number(r, "++") + 1);
+		EscValue v = Get(r);
+		if(v.IsInt64())
+			Assign(r, Int(v, "++") + 1);
+		else
+			Assign(r, Number(v, "++") + 1);
 	}
 	else
 	if(Char2('-', '-')) {
 		Unary(r);
-		Assign(r, Number(r, "++") - 1);
+		EscValue v = Get(r);
+		if(v.IsInt64())
+			Assign(r, Int(v, "--") - 1);
+		else
+			Assign(r, Number(v, "--") - 1);
 	}
 	else
 	if(Char('-')) {
 		Unary(r);
-		r = -Number(r, "-");
+		EscValue v = Get(r);
+		if(v.IsInt64())
+			r = -Int(v, "-");
+		else
+			r = -Number(v, "-");
 	}
 	else
 	if(Char('+')) {
 		Unary(r);
-		r = Number(r, "+");
+		EscValue v = Get(r);
+		if(v.IsInt64())
+			r = Int(v, "+");
+		else
+			r = Number(v, "+");
 	}
 	else
 	if(Char('!')) {
 		Unary(r);
-		r = !IsTrue(Get(r));
+		r = (int64)!IsTrue(Get(r));
 	}
 	else
 	if(Char('~')) {
@@ -497,12 +514,18 @@ void Esc::Unary(Esc::SRVal& r)
 
 	if(Char2('+', '+')) {
 		EscValue v = Get(r);
-		Assign(r, Number(v, "++") + 1);
+		if(v.IsInt64())
+			Assign(r, Int(v, "++") + 1);
+		else
+			Assign(r, Number(v, "++") + 1);
 		r = v;
 	}
 	if(Char2('-', '-')) {
 		EscValue v = Get(r);
-		Assign(r, Number(v, "--") - 1);
+		if(v.IsInt64())
+			Assign(r, Int(v, "--") - 1);
+		else
+			Assign(r, Number(v, "--") - 1);
 		r = v;
 	}
 }
@@ -537,24 +560,29 @@ void Esc::Mul(Esc::SRVal& r)
 			if(y.IsArray() && x.IsInt())
 				r = MulArray(y, x);
 			else
+			if(x.IsInt64() && y.IsInt64())
+				r = Int(x, "*") * Int(y, "*");
+			else
 				r = Number(x, "*") * Number(y, "*");
 		}
 		else
 		if(!IsChar2('/', '=') && Char('/')) {
 			SRVal w;
 			Unary(w);
-			double b = Number(w, "/");
+			EscValue x = Get(r);
+			EscValue y = Get(w);
+			double b = Number(y, "/");
 			if(b == 0)
-				ThrowError("деление на ноль");
-			r = Number(r, "/") / b;
+				ThrowError("divide by zero");
+			r = Number(x, "/") / b;
 		}
 		else
 		if(!IsChar2('%', '=') && Char('%')) {
 			SRVal w;
 			Unary(w);
-			int b = Int(w, "%");
+			int64 b = Int(w, "%");
 			if(b == 0)
-				ThrowError("деление на ноль");
+				ThrowError("divide by zero");
 			r = Int(r, "%") % b;
 		}
 		else
@@ -576,14 +604,23 @@ void Esc::Add(Esc::SRVal& r)
 				r = v;
 			}
 			else
-			if(!(v.IsArray() && b.IsVoid()))
-				r = Number(v, "+") + Number(b, "+");
+			if(!(v.IsArray() && b.IsVoid())) {
+				if(v.IsInt64() && b.IsInt64())
+					r = Int(v, "+") + Int(b, "+");
+				else 
+					r = Number(v, "+") + Number(b, "+");
+			}
 		}
 		else
 		if(!IsChar2('-', '=') && Char('-')) {
 			SRVal w;
 			Mul(w);
-			r = Number(r, "-") - Number(w, "-");
+			EscValue v = Get(r);
+			EscValue b = Get(w);
+			if(v.IsInt64() && b.IsInt64())
+				r = Int(v, "-") - Int(b, "-");
+			else
+				r = Number(v, "-") - Number(b, "-");
 		}
 		else
 			return;
@@ -620,8 +657,10 @@ void Esc::Shift(Esc::SRVal& r)
 double Esc::DoCompare(const EscValue& a, const EscValue& b, const char *op)
 {
 	LTIMING("DoCompare");
+	if(a.IsInt64() && b.IsInt64())
+		return SgnCompare(a.GetInt64(), b.GetInt64());
 	if(a.IsNumber() && b.IsNumber())
-		return a.GetNumber() - b.GetNumber();
+		return SgnCompare(a.GetNumber(), b.GetNumber());
 	if(a.IsArray() && b.IsArray()) {
 		const Vector<EscValue>& x = a.GetArray();
 		const Vector<EscValue>& y = b.GetArray();
@@ -642,7 +681,7 @@ double Esc::DoCompare(const EscValue& a, const EscValue& b, const char *op)
 		return 1;
 	if(a.IsVoid() && !b.IsVoid())
 		return -1;
-	ThrowError("неверные значения для сравнения " + a.GetTypeName() + ' ' + op + ' ' + b.GetTypeName());
+	ThrowError("invalid values for comparison " + a.GetTypeName() + ' ' + op + ' ' + b.GetTypeName());
 	return 0;
 }
 
@@ -806,38 +845,55 @@ void Esc::Assign(Esc::SRVal& r)
 			Assign(r, v);
 		}
 		else
-		if(!(v.IsArray() && b.IsVoid()))
-			Assign(r, Number(v, "+=") + Number(b, "+="));
+		if(!(v.IsArray() && b.IsVoid())) {
+			if(v.IsInt64() && b.IsInt64())
+				Assign(r, Int(v, "+=") + Int(b, "+="));
+			else
+				Assign(r, Number(v, "+=") + Number(b, "+="));
+		}
 	}
 	else
 	if(Char2('-', '=')) {
 		SRVal w;
 		Cond(w);
-		Assign(r, Number(r, "-=") - Number(w, "-="));
+		EscValue v = Get(r);
+		EscValue b = Get(w);
+		if(v.IsInt64() && b.IsInt64())
+			Assign(r, Int(v, "-=") - Int(b, "-="));
+		else
+			Assign(r, Number(v, "-=") - Number(b, "-="));
 	}
 	else
 	if(Char2('*', '=')) {
 		SRVal w;
 		Cond(w);
-		Assign(r, Number(r, "*=") * Number(w, "*="));
+		EscValue x = Get(r);
+		EscValue y = Get(w);
+		if(x.IsInt64() && y.IsInt64())
+			Assign(r, Int(x, "*=") * Int(y, "*="));
+		else
+			Assign(r, Number(x, "*=") * Number(y, "*="));
 	}
 	else
 	if(Char2('/', '=')) {
 		SRVal w;
 		Cond(w);
-		double b = Number(w, "/=");
-		if(b == 0)
-			ThrowError("деление на ноль");
-		Assign(r, Number(r, "/=") / b);
+		EscValue v = Get(r);
+		EscValue b = Get(w);
+		double q = Number(v, "/=");
+		if(q == 0)
+			ThrowError("divide by zero");
+		Assign(r, Number(b, "/=") / q);
 	}
 	else
 	if(Char2('%', '=')) {
 		SRVal w;
 		Cond(w);
-		double b = Number(w, "%=");
+		int64 a = Int(r, "%=");
+		int64 b = Int(w, "%=");
 		if(b == 0)
-			ThrowError("деление на ноль");
-		Assign(r, Number(r, "%=") / b);
+			ThrowError("divide by zero");
+		Assign(r, a % b);
 	}
 }
 
@@ -849,7 +905,7 @@ void Esc::Exp(Esc::SRVal& r)
 	Spaces();
 	stack_level--;
 	if(stack_level <= 0)
-		ThrowError("переполнение стека");
+		ThrowError("stack overflow");
 	Assign(r);
 	stack_level++;
 }
@@ -863,7 +919,7 @@ EscValue Esc::GetExp() {
 void Esc::SkipTerm()
 {
 	if(IsEof())
-		ThrowError("неожиданный конец файла");
+		ThrowError("unexpected end of file");
 	CParser::SkipTerm();
 	Spaces();
 }
@@ -884,7 +940,7 @@ void Esc::SkipExp()
 		else
 			SkipTerm();
 		if(IsEof())
-			ThrowError("неожиданный конец файла");
+			ThrowError("unexpected end of file");
 	}
 }
 
@@ -904,7 +960,7 @@ void Esc::SkipStatement()
 {
 	stack_level--;
 	if(stack_level <= 0)
-		ThrowError("переполнение стека");
+		ThrowError("stack overflow");
 	if(Id("if")) {
 		PassChar('(');
 		SkipExp();
@@ -1042,7 +1098,7 @@ void  Esc::DoStatement()
 				if(range.IsArray()) {
 					if(i >= range.GetCount())
 						break;
-					Assign(var, i);
+					Assign(var, (int64)i);
 				}
 				else
 				if(range.IsMap()) {
@@ -1104,19 +1160,19 @@ void  Esc::DoStatement()
 	else
 	if(Id("break")) {
 		if(!loop)
-			ThrowError("неуместный 'break'");
+			ThrowError("misplaced 'break'");
 		no_break = false;
 		PassChar(';');
 	}
 	else
 	if(Id("case"))
-		ThrowError("неуместный 'case'");
+		ThrowError("misplaced 'case'");
 	else
 	if(Id("default"))
-		ThrowError("неуместный 'default'");
+		ThrowError("misplaced 'default'");
 	else
 	if(Id("else"))
-		ThrowError("неуместный 'else'");
+		ThrowError("misplaced 'else'");
 	else
 	if(Id("return")) {
 		no_return = false;
@@ -1167,7 +1223,7 @@ void  Esc::DoStatement()
 		EscValue l = ReadLambda(*this);
 		if(type == 1) {
 			if(self.IsVoid())
-				ThrowError("нет экземпляра");
+				ThrowError("no instance");
 			self.MapSet(id, l);
 		}
 		else
@@ -1198,4 +1254,4 @@ void  Esc::Run()
 		DoStatement();
 }
 
-END_UPP_NAMESPACE
+}

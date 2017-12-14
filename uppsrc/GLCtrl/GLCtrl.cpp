@@ -1,6 +1,11 @@
 #include "GLCtrl.h"
 
-NAMESPACE_UPP
+namespace Upp {
+
+void GLCtrl::GLResize(int w, int h)
+{
+	glViewport(0, 0, (GLsizei)w, (GLsizei)h);
+}
 
 void GLCtrl::StdView()
 {
@@ -20,6 +25,8 @@ void GLCtrl::StdView()
 	glLoadIdentity();
 }
 
+#ifndef GUI_GTK
+
 Image GLCtrl::GLPane::MouseEvent(int event, Point p, int zdelta, dword keyflags)
 {
 	p = p - GetScreenView().TopLeft() + ctrl->GetScreenView().TopLeft();
@@ -32,4 +39,6 @@ Vector<int> GLCtrl::Pick(int x, int y)
 	return picking.Pick(x, y, THISBACK2(GLResize, GetSize().cx, GetSize().cy), THISBACK(GLPickingPaint));
 }
 
-END_UPP_NAMESPACE
+#endif
+
+}

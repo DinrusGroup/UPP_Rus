@@ -1,6 +1,6 @@
 #include "Esc.h"
 
-NAMESPACE_UPP
+namespace Upp {
 
 #define LTIMING(x) // RTIMING(x)
 
@@ -8,7 +8,7 @@ Vector<EscValue>& EscValue::CloneArray()
 {
 	LTIMING("CloneArray");
 	ASSERT(IsArray());
-	if(AtomicRead(array->refcount) != 1) {
+	if(array->refcount != 1) {
 		EscArray *c = new EscArray;
 		c->array <<= array->array;
 		array->Release();
@@ -117,7 +117,7 @@ void EscValue::InitString(const WString& s)
 	Vector<EscValue>& a = array->array;
 	a.SetCount(s.GetCount());
 	for(int i = 0; i < s.GetCount(); i++)
-		a[i] = s[i];
+		a[i] = (int64)s[i];
 	total++;
 }
 
@@ -144,9 +144,25 @@ EscValue::EscValue()
 EscValue::EscValue(double n)
 {
 	number = n;
-	type = ESC_NUMBER;
+	type = ESC_DOUBLE;
 	hash = 0;
 	total++;
 }
 
-END_UPP_NAMESPACE
+EscValue::EscValue(int64 n)
+{
+	i64 = n;
+	type = ESC_INT64;
+	hash = 0;
+	total++;
+}
+
+EscValue::EscValue(int n)
+{
+	i64 = n;
+	type = ESC_INT64;
+	hash = 0;
+	total++;
+}
+
+}

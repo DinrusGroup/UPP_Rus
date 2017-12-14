@@ -1,6 +1,6 @@
 #include "Core.h"
 
-NAMESPACE_UPP
+namespace Upp {
 
 /*
 SHA-1 in C
@@ -158,11 +158,15 @@ String Sha1Stream::FinishStringS()
 	return HexString(hash, 20, 4);
 }
 
-Sha1Stream::Sha1Stream()
-{
+void Sha1Stream::Reset() {
 	SHA1Init(state);
 	pos = 0;
 	size = 0;
+}
+
+Sha1Stream::Sha1Stream()
+{
+	Reset();
 }
 
 Sha1Stream::~Sha1Stream()
@@ -206,4 +210,4 @@ String  SHA1StringS(const String& data)
 	return SHA1StringS(~data, data.GetLength());
 }
 
-END_UPP_NAMESPACE
+}

@@ -103,24 +103,47 @@ to the StdBar method.  &]
 from not`-modified to modified (`"dirty`") or back.&]
 [s3;%% &]
 [s4; &]
+[s5;:TextCtrl`:`:WhenSel: [_^Callback^ Callback]_[* WhenSel]&]
+[s2;%% Called when cursor or selection changes.&]
+[s3; &]
+[s4; &]
 [s5;:TextCtrl`:`:CachePos`(int`): [@(0.0.255) void]_[* CachePos]([@(0.0.255) int]_[*@3 pos])&]
 [s2;%% This is specific optimization hint to the widget saying that 
-following operations will be performed near after [%-*@3 pos]. 
+following operations will be performed near [%-*@3 pos]. Unlikely 
+to be used in the client code.&]
+[s3;%% &]
+[s4; &]
+[s5;:TextCtrl`:`:CacheLinePos`(int`): [@(0.0.255) void]_[* CacheLinePos]([@(0.0.255) int]_[*@3 l
+inei])&]
+[s2;%% This is specific optimization hint to the widget saying that 
+following operations will be performed near line [%-*@3 linei]. 
 Unlikely to be used in the client code.&]
 [s3;%% &]
 [s4; &]
-[s5;:TextCtrl`:`:Load`(Stream`&`,byte`): [@(0.0.255) void]_[* Load]([_^Stream^ Stream][@(0.0.255) `&
+[s5;:TextCtrl`:`:Load`(Stream`&`,byte`): [@(0.0.255) int]_[* Load]([_^Stream^ Stream][@(0.0.255) `&
 ]_[*@3 s], [_^byte^ byte]_[*@3 charset]_`=_CHARSET`_DEFAULT)&]
-[s2;%% Loads the text from the stream with defined [%-*@3 charset].&]
+[s2;%% Loads the text from the stream with defined [%-*@3 charset]. 
+Function returns the detected line endings mode `- LE`_CRLF, 
+LE`_LF or LE`_DEFAULT if there were no line endings in the file. 
+If file is bigger then the limit set by MaxLength, editor is 
+put into `'truncated`' and read`-only mode.&]
 [s3;%% &]
 [s4; &]
-[s5;:TextCtrl`:`:Save`(Stream`&`,byte`,bool`)const: [@(0.0.255) void]_[* Save]([_^Stream^ S
-tream][@(0.0.255) `&]_[*@3 s], [_^byte^ byte]_[*@3 charset]_`=_CHARSET`_DEFAULT, 
-bool [*@3 crlf])_[@(0.0.255) const]&]
+[s5;:TextCtrl`:`:IsTruncated`(`)const: [@(0.0.255) bool]_[* IsTruncated]()_[@(0.0.255) cons
+t]&]
+[s2;%% Indicates that last Load had to truncate the size because 
+of MaxLength limit.&]
+[s3; &]
+[s4; &]
+[s5;:TextCtrl`:`:Save`(Stream`&`,byte`,int`)const: [@(0.0.255) void]_[* Save]([_^Stream^ St
+ream][@(0.0.255) `&]_[*@3 s], [_^byte^ byte]_[*@3 charset]_`=_CHARSET`_DEFAULT, 
+[@(0.0.255) int]_[*@3 line`_endings]_`=_LE`_DEFAULT)_[@(0.0.255) const]&]
 [s2;%% Saves the text to the stream with defined [%-*@3 charset]. Characters 
 that cannot be represented in suggested [%-*@3 charset] are saved 
-as `'?`'. If [%-*@3 crlf] is true, line endings are forced to be 
-`"`\r`\n`" even on POSIX platforms.&]
+as `'?`'. [%-*@3 line`_endings] parameter sets the line ending 
+mode. LE`_DEFAULT uses platform specific line endings (CRLF in 
+Windows, LF in POSIX), LE`_CRLF sets CRLF line endings, LE`_LF 
+sets LF line endings). If IsTruncated is true, Save is blocked.&]
 [s3;%% &]
 [s4; &]
 [s5;:TextCtrl`:`:GetInvalidCharPos`(byte`)const: [@(0.0.255) int]_[* GetInvalidCharPos]([_^byte^ b
@@ -234,6 +257,11 @@ t]_[*@3 pos])_[@(0.0.255) const]&]
 [s2;%% Returns the UNICODE character at [%-*@3 pos] offset.&]
 [s3;%% &]
 [s4; &]
+[s5;:Upp`:`:TextCtrl`:`:GetChar`(`)const: [@(0.0.255) int]_[* GetChar]()_[@(0.0.255) const]&]
+[s2;%% Returns UNICODE character at cursor, or 0 if cursor is behind 
+the last character.&]
+[s3; &]
+[s4; &]
 [s5;:TextCtrl`:`:GetLength`(`)const: [@(0.0.255) virtual] [@(0.0.255) int]_[* GetLength]()_
 [@(0.0.255) const]&]
 [s2;%% Returns the total number of characters in the text.&]
@@ -256,8 +284,18 @@ the position of cursor.&]
 [s4; &]
 [s5;:TextCtrl`:`:IsSelection`(`)const: [@(0.0.255) bool]_[* IsSelection]()_[@(0.0.255) cons
 t]&]
-[s2;%% Tests whether there is non`-empty selection.&]
+[s2;%% Tests whether there is non`-empty normal selection.&]
 [s3;%% &]
+[s4; &]
+[s5;:TextCtrl`:`:IsRectSelection`(`)const: [@(0.0.255) bool]_[* IsRectSelection]()_[@(0.0.255) c
+onst]&]
+[s2;%% Returns true if there is rectangular selection.&]
+[s3; &]
+[s4; &]
+[s5;:TextCtrl`:`:IsAnySelection`(`)const: [@(0.0.255) bool]_[* IsAnySelection]()_[@(0.0.255) c
+onst]&]
+[s2;%% Returns true if there is either rectangular or normal selection.&]
+[s3; &]
 [s4; &]
 [s5;:TextCtrl`:`:GetSelection`(int`&`,int`&`)const: [@(0.0.255) bool]_[* GetSelection]([@(0.0.255) i
 nt`&]_[*@3 l], [@(0.0.255) int`&]_[*@3 h])_[@(0.0.255) const]&]
@@ -342,6 +380,10 @@ in between is the same as calling it once.&]
 [s5;:TextCtrl`:`:ClearUndo`(`): [@(0.0.255) void]_[* ClearUndo]()&]
 [s2;%% Clears all undo and redo records.&]
 [s3;%% &]
+[s4; &]
+[s5;:TextCtrl`:`:ClearRedo`(`): [@(0.0.255) void]_[* ClearRedo]()&]
+[s2;%% Clears redo records.&]
+[s3; &]
 [s4; &]
 [s5;:TextCtrl`:`:PickUndoData`(`): [_^TextCtrl`:`:UndoData^ UndoData]_[* PickUndoData]()&]
 [s2;%% Picks undo and redo record. This is useful when single widget 
@@ -449,6 +491,12 @@ behind the widget is visible, allowing client code to provide
 any background it needs.&]
 [s3;%% &]
 [s4; &]
+[s5;:TextCtrl`:`:MaxLength`(int`): [_^TextCtrl^ TextCtrl][@(0.0.255) `&]_[* MaxLength]([@(0.0.255) i
+nt]_[*@3 len])&]
+[s2;%% Sets the maximum size of text in unicode characters. Has to 
+be less than 1Gchars. The default is 400Mchars.&]
+[s3;%% &]
+[s4; &]
 [s5;:TextCtrl`:`:IsProcessTab`(`): [@(0.0.255) bool]_[* IsProcessTab]()&]
 [s2;%% Tests whether ProcessTab mode is active.&]
 [s3;%% &]
@@ -468,4 +516,4 @@ to store and restore undo/redo state.&]
 [s5;:TextCtrl`:`:UndoData`:`:Clear`(`): [@(0.0.255) void]_[* Clear]()&]
 [s2;%% Clears the undo/redo state&]
 [s3;%% &]
-[s3;%% .]
+[s3;%% .]]

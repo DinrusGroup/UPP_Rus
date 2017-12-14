@@ -1,4 +1,5 @@
-﻿#include "umake.h"
+#include "umake.h"
+
 bool SilentMode;
 
 String GetUmkFile(const char *fn)
@@ -7,7 +8,8 @@ String GetUmkFile(const char *fn)
 	                     GetHomeDirFile(".upp/umk") + ';' +
 	                     GetHomeDirFile(".upp/theide") + ';' +
 	                     GetHomeDirFile(".upp/ide") + ';' +
-	                     GetHomeDirectory());
+	                     GetHomeDirectory() + ';' +
+	                     GetFileFolder(GetExeFilePath()));
 }
 
 String GetBuildMethodPath(String method)
@@ -25,8 +27,13 @@ String Ide::GetDefaultMethod()
 VectorMap<String, String> Ide::GetMethodVars(const String& method)
 {
 	VectorMap<String, String> map;
-	LoadVarFile(GetBuildMethodPath(method), map);
+	LoadVarFile(GetMethodName(method), map);
 	return map;
+}
+
+String Ide::GetMethodName(const String& method)
+{
+	return GetBuildMethodPath(method);
 }
 
 void Puts(const char *s)
@@ -40,13 +47,32 @@ int CommaSpace(int c)
 	return c == ',' ? ' ' : c;
 }
 
+int IsCommaOrColon(int c)
+{
+	return c == ':' || c == ',' ? c : 0;
+}
+
+int GetHydraThreads()
+{
+	return CPU_Cores();
+}
+
+String GetAndroidSDKPath()
+{
+	return String();
+}
+
+#ifdef flagMAIN
+
 CONSOLE_APP_MAIN
 {
+#ifdef PLATFORM_POSIX
+	setlinebuf(stdout);
+#endif
 	Ide ide;
 	TheIde(&ide);
 	ide.console.SetSlots(CPU_Cores());
 	ide.console.console = true;
-	bool clset = false;
 	const Vector<String>& arg = CommandLine();
 	if(arg.GetCount() >= 3) {
 		for(int i = 3; i < arg.GetCount(); i++)
@@ -57,11 +83,15 @@ CONSOLE_APP_MAIN
 						SilentMode = true;
 					if(x[i] == 'v')
 						ide.console.verbosebuild = true;
-				}						
+				}
 			}
 		String v = GetUmkFile(arg[0] + ".var");
-		if(!FileExists(v)) {
-			Vector<String> h = Split(arg[0], ':');
+		if(IsNull(v) || !FileExists(v)) {
+		#ifdef PLATFORM_POSIX
+			Vector<String> h = Split(arg[0], IsCommaOrColon);
+		#else
+			Vector<String> h = Split(arg[0], ',');
+		#endif
 			for(int i = 0; i < h.GetCount(); i++)
 				h[i] = GetFullPath(TrimBoth(h[i]));
 			String x = Join(h, ";");
@@ -90,8 +120,6 @@ CONSOLE_APP_MAIN
 		}
 		ide.main = arg[1];
 		ide.wspc.Scan(ide.main);
-		clset = true;
-		bool stoponerror = false;
 		const Workspace& wspc = ide.IdeWorkspace();
 		if(!wspc.GetCount()) {
 			Puts("Empty assembly\n");
@@ -110,7 +138,7 @@ CONSOLE_APP_MAIN
 			SetExitCode(3);
 			return;
 		}
-		ide.method <<= m;
+		ide.method = m;
 		ide.debug.def.blitz = ide.release.def.blitz = 0;
 		ide.debug.def.debug = 2;
 		ide.release.def.debug = 0;
@@ -121,6 +149,7 @@ CONSOLE_APP_MAIN
 		ide.targetmode = 0;
 		bool clean = false;
 		bool makefile = false;
+		bool deletedir = true;
 		int  exporting = 0;
 		String mkf;
 		for(int i = 3; i < arg.GetCount(); i++)
@@ -137,12 +166,6 @@ CONSOLE_APP_MAIN
 					case 'r':
 						ide.targetmode = 1;
 						break;
-					case '1':
-						ide.targetmode = 2;
-						break;
-					case '2':
-						ide.targetmode = 3;
-						break;
 					case 'm':
 						ide.release.createmap = ide.debug.createmap = true;
 						break;
@@ -158,9 +181,6 @@ CONSOLE_APP_MAIN
 					case 'S':
 						ide.debug.linkmode = ide.release.linkmode = 2;
 						break;
-					case 'e':
-						stoponerror = true;
-						break;
 					case 'M':
 						makefile = true;
 						break;
@@ -174,6 +194,9 @@ CONSOLE_APP_MAIN
 						break;
 					case 'X':
 						exporting = 2;
+						break;
+					case 'k':
+						deletedir = false;
 						break;
 					case 'H':
 						if(i + 1 < x.GetCount() && x[i + 1] >= '1' && x[i + 1] <= '9')
@@ -201,7 +224,7 @@ CONSOLE_APP_MAIN
 			if(makefile)
 				ide.ExportMakefile(mkf);
 			else
-				ide.ExportProject(mkf, exporting == 2);
+				ide.ExportProject(mkf, exporting == 2, deletedir);
 		}
 		else
 		if(makefile) {
@@ -215,8 +238,10 @@ CONSOLE_APP_MAIN
 			SetExitCode(1);
 	}
 	else
-		Puts("Usage: umk assembly main_package build_method -options [+flags] [output]\n"
+		Puts("Usage: umk assembly main_package build_method -options [+flags] [output]\n\n"
 		     "Examples: umk examples Bombs GCC -ab +GUI,SHARED ~/bombs\n"
-		     "          umk examples:uppsrc Bombs ~/GCC.bm -rv +GUI,SHARED ~/bin\n"
-		     "See http://www.ultimatepp.org/app$ide$umk$en-us.html for details\n");	
+		     "          umk examples,uppsrc Bombs ~/GCC.bm -rv +GUI,SHARED ~/bin\n\n"
+		     "See http://www.ultimatepp.org/app$ide$umk$en-us.html for details\n");
 }
+
+#endif

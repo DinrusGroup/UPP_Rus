@@ -1,6 +1,6 @@
 #include "CtrlLib.h"
 
-NAMESPACE_UPP
+namespace Upp {
 
 class RightInfoFrame : public CtrlFrame {
 	virtual void FrameLayout(Rect& r);
@@ -58,7 +58,7 @@ InfoCtrl::InfoCtrl()
 {
 	SetFrame(ThinInsetFrame());
 	right = false;
-	defaulttext = t_("Готово");
+	defaulttext = t_("Ready");
 	Set(Null);
 	Transparent();
 }
@@ -289,17 +289,35 @@ void ProgressInfo::Refresh()
 	if(!info) return;
 	String txt = Format(~text, pos);
 	info->Set(tabi, txt, tw ? tw : GetTextSize(txt, StdFont()).cx + 8);
-	info->Set(tabi + 1, PaintRect(ProgressDisplay(), 1000.0 * pos / total), cx);
+	info->Set(tabi + 1, PaintRect(ProgressDisplay(), 1000.0 * pos / (total ? total : 1000)), cx);
 }
 
 ProgressInfo& ProgressInfo::Set(int _pos, int _total)
 {
 	pos = _pos;
 	total = _total;
-	Refresh();
-	if(info)
-		info->Sync();
+
+	dword t = GetTickCount();
+	if((int)(t - set_time) >= granularity) {
+		set_time = t;
+	
+		Refresh();
+		if(info)
+			info->Sync();
+	}
 	return *this;
+}
+
+void ProgressInfo::Reset()
+{
+	tabi = 0;
+	cx = 200;
+	total = 100;
+	pos = 0;
+	tw = 0;
+	info = NULL;
+	granularity = 50;
+	set_time = 0;
 }
 
 ProgressInfo::~ProgressInfo()
@@ -308,4 +326,4 @@ ProgressInfo::~ProgressInfo()
 		info->Set(Null);
 }
 
-END_UPP_NAMESPACE
+}

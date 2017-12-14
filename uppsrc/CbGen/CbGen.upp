@@ -1,4 +1,4 @@
-description "Утилита для генерации (долгих, повторяющихся) обрвызовов файлов C++\377";
+description "Utility to generate (long and repetitive) callback C++ source files\377";
 
 uses
 	Core;

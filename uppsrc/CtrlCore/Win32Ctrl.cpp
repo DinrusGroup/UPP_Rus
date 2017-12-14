@@ -2,9 +2,9 @@
 
 #ifdef GUI_WIN
 
-#define LLOG(x) // DLOG(x)
+#define LLOG(x)  // DLOG(x)
 
-NAMESPACE_UPP
+namespace Upp {
 
 void Ctrl::GuiPlatformConstruct()
 {
@@ -40,28 +40,6 @@ bool Ctrl::GuiPlatformSetFullRefreshSpecial()
 	return isdhctrl;
 }
 
-void Ctrl::PaintCaret(SystemDraw& w)
-{
-}
-
-String GuiPlatformGetKeyDesc(dword key)
-{
-	static struct {
-		dword key;
-		const char *name;
-	} nkey[] = {
-		{ 0x100c0, "[`]" }, { 0x100bd, "[-]" }, { 0x100bb, "[=]" }, { 0x100dc, "[\\]" },
-		{ 0x100db, "[[]" }, { 0x100dd, "[]]" },
-		{ 0x100ba, "[;]" }, { 0x100de, "[']" },
-		{ 0x100bc, "[,]" }, { 0x100be, "[.]" }, { 0x100bf, "[/]" },
-		{ 0, NULL }
-	};
-	for(int i = 0; nkey[i].key; i++)
-		if(nkey[i].key == key)
-			return nkey[i].name;
-	return Null;
-}
-
 void Ctrl::GuiPlatformSelection(PasteClip&)
 {
 }
@@ -77,6 +55,7 @@ bool GuiPlatformHasSizeGrip()
 
 void GuiPlatformGripResize(TopWindow *q)
 {
+	LLOG("GuiPlatformGripResize " << Name(q));
 	HWND hwnd = q->GetHWND();
 	Point p = GetMousePos() - q->GetRect().TopLeft();
 	if(hwnd) {
@@ -97,6 +76,7 @@ void GuiPlatformAfterMenuPopUp()
 {
 }
 
+#if WINCARET
 void Ctrl::SetCaret(int x, int y, int cx, int cy)
 {
 	GuiLock __;
@@ -132,26 +112,16 @@ void Ctrl::SyncCaret() {
 		caretRect = cr;
 	}
 }
+#endif
 
 String Ctrl::Name() const {
 	GuiLock __;
-#ifdef CPU_64
-	String s = String(typeid(*this).name()) + " : 0x" + FormatIntHex(this);
-#else
-	String s = String(typeid(*this).name()) + " : " + Format("0x%x", (int) this);
-#endif
-	if(IsChild())
-		s << "(parent " << String(typeid(*parent).name()) << ")";
-	else
-		s << Format("(hwnd 0x%x)", (int)(intptr_t) GetHWND());
+	String s = Name0();
+	if(!IsChild())
+		s << Format(" (hwnd 0x%x)", (int)(intptr_t) GetHWND());
 	return s;
 }
 
-void Ctrl::WndCreateCaret(const Rect& cr)
-{
-	ICall(THISBACK1(WndCreateCaret0, cr));
 }
-
-END_UPP_NAMESPACE
 
 #endif

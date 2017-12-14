@@ -16,6 +16,9 @@ struct RGBA : Moveable<RGBA> {
 #endif
 #endif
 
+template <>
+String AsString(const RGBA& c);
+
 #ifndef PLATFORM_WIN32
 inline int        GetRValue(dword c)             { return (byte)(c >> 0); }
 inline int        GetGValue(dword c)             { return (byte)(c >> 8); }
@@ -25,7 +28,7 @@ inline dword      RGB(byte r, byte g, byte b)    { return r | (g << 8) | (b << 1
 
 const int COLOR_V = 39;
 
-class Color : AssignValueTypeNo<Color, COLOR_V, Moveable<Color> > {
+class Color : public ValueType<Color, COLOR_V, Moveable<Color> > {
 protected:
 	dword    color;
 
@@ -45,6 +48,8 @@ public:
 	bool     operator!=(Color c) const { return color != c.color; }
 
 	void     Serialize(Stream& s)      { s % color; }
+	void     Jsonize(JsonIO& jio);
+	void     Xmlize(XmlIO& xio);
 
 	Color()                            { SetNull(); }
 	Color(int r, int g, int b)         { color = RGB(r, g, b); }
@@ -52,8 +57,8 @@ public:
 
 	Color(const Nuller&)               { SetNull(); }
 
-	operator Value() const             { return RichValue<Color>(*this); }
-	Color(const Value& q)              { color = RichValue<Color>::Extract(q).color; }
+	operator Value() const             { return SvoToValue(*this); }
+	Color(const Value& q)              { color = q.Get<Color>().color; }
 
 	operator RGBA() const;
 	Color(RGBA rgba);
@@ -68,6 +73,9 @@ public:
 #else
 	operator dword() const             { return Get(); }
 #endif
+
+private:
+	Color(int);
 };
 
 RGBA operator*(int alpha, Color c);
@@ -113,6 +121,7 @@ Color  HsvColorf(double h, double s, double v);
 Color  Blend(Color c1, Color c2, int alpha = 128);
 
 String ColorToHtml(Color color);
+Color  ColorFromText(const char *s);
 
 int  Grayscale(const Color& c);
 bool IsDark(Color c);

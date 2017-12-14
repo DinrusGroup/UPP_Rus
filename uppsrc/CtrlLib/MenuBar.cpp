@@ -4,9 +4,9 @@
 #include <mmsystem.h>
 #endif
 
-NAMESPACE_UPP
+namespace Upp {
 
-#define LLOG(x)    // LOG(x)
+#define LLOG(x)    // DLOG(x)
 #define LTIMING(x) // RTIMING(x)
 
 static ColorF xpmenuborder[] = {
@@ -16,7 +16,11 @@ static ColorF xpmenuborder[] = {
 	&SColorMenu, &SColorMenu, &SColorMenu, &SColorMenu,
 };
 
-GLOBAL_VARP(BorderFrame, XPMenuFrame, (xpmenuborder));
+BorderFrame& XPMenuFrame()
+{
+	static BorderFrame h(xpmenuborder);
+	return h;
+}
 
 CtrlFrame& MenuFrame()
 {
@@ -27,7 +31,7 @@ CH_STYLE(MenuBar, Style, StyleDefault)
 {
 	topitem[0] = Null;
 	topitem[1] = topitem[2] = item = SColorHighlight();
-	topitemtext[0] = SColorMenuText();
+	topitemtext[0] = menutext = SColorMenuText();
 	topitemtext[1] = topitemtext[2] = itemtext = SColorHighlightText();
 	topbar = SColorFace();
 	maxiconsize = Size(16, 16);
@@ -43,9 +47,9 @@ CH_STYLE(MenuBar, Style, StyleDefault)
 	popupframe = Image(ib);
 	popupbody = SColorMenu();
 	popupiconbar = Null;
-	leftgap = 16;
-	textgap = 6;
-	lsepm = rsepm = 2;
+	leftgap = DPI(16) + Zx(4);
+	textgap = Zx(3);
+	lsepm = rsepm = Zx(2);
 	pullshift.x = 0;
 	pullshift.y = -1;
 }
@@ -107,7 +111,7 @@ void MenuBar::Clear()
 	lock--;
 }
 
-Bar::Item& MenuBar::AddItem(Callback cb)
+Bar::Item& MenuBar::AddItem(Event<>  cb)
 {
 	LLOG("MenuBar::AddItem " << Name());
 	MenuItemBase *q;
@@ -127,7 +131,7 @@ Bar::Item& MenuBar::AddItem(Callback cb)
 	return *q;
 }
 
-Bar::Item& MenuBar::AddSubMenu(Callback1<Bar&> proc)
+Bar::Item& MenuBar::AddSubMenu(Event<Bar&> proc)
 {
 	LLOG("MenuBar::AddSubMenu " << Name());
 	SubMenuBase *w;
@@ -244,7 +248,7 @@ void MenuBar::SyncState()
 void MenuBar::ChildGotFocus()
 {
 	if(submenu && !submenuitem->HasFocusDeep() && !ExistsTimeCallback()) {
-	   	if(submenu->IsOpen())
+		if(submenu->IsOpen())
 			submenu->DelayedClose();
 	}
 	KillDelayedClose();
@@ -277,6 +281,14 @@ bool MenuKeyHook(Ctrl *ctrl, dword key, int count)
 	return false;
 }
 
+bool MenuMouseHook(Ctrl *ctrl, bool inframe, int event, Point p,
+	               int zdelta, dword keyflags)
+{
+	if(findarg(event & Ctrl::ACTION, Ctrl::MOUSEWHEEL, Ctrl::DOWN, Ctrl::UP) >= 0)
+		s_doaltkey = false;
+	return false;
+}
+
 bool MenuStateHook(Ctrl *ctrl, int reason)
 {
 	if(reason == Ctrl::ACTIVATE)
@@ -288,6 +300,7 @@ INITBLOCK
 {
 	Ctrl::InstallKeyHook(MenuKeyHook);
 	Ctrl::InstallStateHook(MenuStateHook);
+	Ctrl::InstallMouseHook(MenuMouseHook);
 }
 
 bool MenuBar::Key(dword key, int count)
@@ -376,6 +389,7 @@ bool MenuBar::Key(dword key, int count)
 				}
 			}
 	}
+	LLOG("MenuBar::Key -> HotKey");
 	return HotKey(key);
 }
 
@@ -402,16 +416,19 @@ bool MenuBar::HotKey(dword key)
 			return true;
 		}
 		if(key == K_ALT_KEY) {
+			LLOG("K_ALT_KEY");
 			s_doaltkey = true;
 			return true;
 		}
 		if((key == K_F10 || key == (K_ALT_KEY|K_KEYUP) && s_doaltkey)
 		   && !submenu && !HasFocusDeep() && GetTopWindow() && GetTopWindow()->IsForeground()) {
+			LLOG("Open menu by F10 or ALT-UP");
 			SetupRestoreFocus();
 			for(Ctrl *q = pane.GetFirstChild(); q; q = q->GetNext())
 				if(q->SetFocus()) return true;
 		}
 	}
+	LLOG("MenuBar::HotKey");
 	return (key == K_LEFT || key == K_RIGHT) && parentmenu ? parentmenu->Key(key, 1) : false;
 }
 
@@ -452,7 +469,7 @@ void MenuBar::KillDelayedClose()
 	KillTimeCallback(TIMEID_STOP);
 }
 
-void MenuBar::Set(Callback1<Bar&> menu)
+void MenuBar::Set(const Event<Bar&> menu)
 {
 	if(lock) return;
 	Clear();
@@ -463,7 +480,7 @@ void MenuBar::Set(Callback1<Bar&> menu)
 	lock--;
 }
 
-void MenuBar::Post(Callback1<Bar&> bar)
+void MenuBar::Post(Event<Bar&> bar)
 {
 	KillTimeCallback(TIMEID_POST);
 	SetTimeCallback(0, THISBACK1(Set, bar), TIMEID_POST);
@@ -541,7 +558,7 @@ void MenuBar::PopUp(Ctrl *owner, Point p, Size rsz)
 		SetRect(p.x, p.y, sz.cx, sz.cy);
 #ifdef PLATFORM_WIN32
 	DWORD dummy;
-	CreateThread(NULL, 0, PlaySoundThread, NULL, 0, &dummy);
+	CloseHandle(CreateThread(NULL, 0, PlaySoundThread, NULL, 0, &dummy));
 #endif
 	doeffect = true;
 	Ctrl::PopUp(owner, true, true, GUI_DropShadows(), !owner);
@@ -552,13 +569,18 @@ void MenuBar::PopUp(Ctrl *owner, Point p, Size rsz)
 
 void MenuBar::Execute(Ctrl *owner, Point p)
 {
-	if(IsEmpty()) return;
+	static Vector<Ctrl *> ows; // Used to prevent another open local menu for single owner to be opened (repeated right-click)
+	int level = ows.GetCount();
+	if(IsEmpty() || FindIndex(ows, owner) >= 0)
+		return;
+	ows.Add(owner);
 	PopUp(owner, p);
 	EventLoop(this);
 	CloseMenu();
+	ows.SetCount(level);
 }
 
-void MenuBar::Execute(Ctrl *owner, Callback1<Bar&> proc, Point p)
+void MenuBar::Execute(Ctrl *owner, Event<Bar&> proc, Point p)
 {
 	MenuBar bar;
 	proc(bar);
@@ -584,4 +606,4 @@ MenuBar::~MenuBar()
 	LLOG("~MenuBar 1");
 }
 
-END_UPP_NAMESPACE
+}

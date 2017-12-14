@@ -1,7 +1,11 @@
 #include "Painter.h"
 #include "Fillers.h"
 
-NAMESPACE_UPP
+namespace Upp {
+
+#define LLOG(x) // DLOG(x)
+
+void PainterTarget::Fill(double width, SpanSource *ss, const RGBA& color) {}
 
 void BufferPainter::ClearOp(const RGBA& color)
 {
@@ -29,6 +33,7 @@ struct BufferPainter::OnPathTarget : LinearPathConsumer {
 
 Buffer<ClippingLine> BufferPainter::RenderPath(double width, SpanSource *ss, const RGBA& color)
 {
+	PAINTER_TIMING("RenderPath");
 	Buffer<ClippingLine> newclip;
 	if(width == 0) {
 		current = Null;
@@ -41,7 +46,34 @@ Buffer<ClippingLine> BufferPainter::RenderPath(double width, SpanSource *ss, con
 	bool evenodd = pathattr.evenodd;
 	bool regular = pathattr.mtx.IsRegular() && width < 0 && !ischar;
 	double tolerance;
-	LinearPathConsumer *g = &rasterizer;
+	LinearPathConsumer *g = alt ? (LinearPathConsumer *)alt : &rasterizer;
+	Rectf preclip = Null;
+	if(dopreclip && width != ONPATH) {
+		preclip = rasterizer.GetClip();
+		Xform2D imx = Inverse(pathattr.mtx);
+		Pointf tl, br, a;
+		tl = br = imx.Transform(preclip.TopLeft());
+		a = imx.Transform(preclip.TopRight());
+		tl = min(a, tl);
+		br = max(a, br);
+		a = imx.Transform(preclip.BottomLeft());
+		tl = min(a, tl);
+		br = max(a, br);
+		a = imx.Transform(preclip.BottomRight());
+		tl = min(a, tl);
+		br = max(a, br);
+		preclip = Rectf(tl, br);
+		
+		if(!preclip.Intersects(
+				Rectf(path_min, path_max).Inflated(max(width, 0.0) * (1 + attr.miter_limit)))) {
+			LLOG("Preclipped " << preclip << ", min " << path_min << ", max " << path_max);
+			current = Null;
+			return newclip;
+		}
+	}
+	if(!IsNull(alt_tolerance))
+		tolerance = alt_tolerance;
+	else
 	if(regular)
 		tolerance = 0.3;
 	else {
@@ -55,7 +87,7 @@ Buffer<ClippingLine> BufferPainter::RenderPath(double width, SpanSource *ss, con
 	}
 	else
 	if(width > 0) {
-		stroker.Init(width, pathattr.miter_limit, tolerance, pathattr.cap, pathattr.join);
+		stroker.Init(width, pathattr.miter_limit, tolerance, pathattr.cap, pathattr.join, preclip);
 		stroker.target = g;
 		if(pathattr.dash.GetCount()) {
 			dasher.Init(pathattr.dash, pathattr.dash_start);
@@ -119,31 +151,37 @@ Buffer<ClippingLine> BufferPainter::RenderPath(double width, SpanSource *ss, con
 		noaa_filler.Set(rg);
 		rg = &noaa_filler;
 	}
+	PAINTER_TIMING("RenderPath2");
 	for(;;) {
 		if(i >= path.type.GetCount() || path.type[i] == DIV) {
 			g->End();
 			if(width != ONPATH) {
-				for(int y = rasterizer.MinY(); y <= rasterizer.MaxY(); y++) {
-					solid_filler.t = subpixel_filler.t = span_filler.t = ib[y];
-					subpixel_filler.end = subpixel_filler.t + ib.GetWidth();
-					span_filler.y = subpixel_filler.y = y;
-					Rasterizer::Filler *rf = rg;
-					if(clip.GetCount()) {
-						const ClippingLine& s = clip.Top()[y];
-						if(s.IsEmpty()) goto empty;
-						if(!s.IsFull()) {
-							mf.Set(rg, s);
-							rf = &mf;
+				if(alt)
+					alt->Fill(width, ss, color);
+				else {
+					PAINTER_TIMING("Fill");
+					for(int y = rasterizer.MinY(); y <= rasterizer.MaxY(); y++) {
+						solid_filler.t = subpixel_filler.t = span_filler.t = ib[y];
+						subpixel_filler.end = subpixel_filler.t + ib.GetWidth();
+						span_filler.y = subpixel_filler.y = y;
+						Rasterizer::Filler *rf = rg;
+						if(clip.GetCount()) {
+							const ClippingLine& s = clip.Top()[y];
+							if(s.IsEmpty()) goto empty;
+							if(!s.IsFull()) {
+								mf.Set(rg, s);
+								rf = &mf;
+							}
 						}
+						if(doclip)
+							clip_filler.Clear();
+						rasterizer.Render(y, *rf, evenodd);
+						if(doclip)
+							clip_filler.Finish(newclip[y]);
+					empty:;
 					}
-					if(doclip)
-						clip_filler.Clear();
-					rasterizer.Render(y, *rf, evenodd);
-					if(doclip)
-						clip_filler.Finish(newclip[y]);
-				empty:;
+					rasterizer.Reset();
 				}
-				rasterizer.Reset();
 			}
 			if(i >= path.type.GetCount())
 				break;
@@ -157,12 +195,14 @@ Buffer<ClippingLine> BufferPainter::RenderPath(double width, SpanSource *ss, con
 			break;
 		}
 		case LINE: {
+			PAINTER_TIMING("LINE");
 			const LinearData *d = (LinearData *)data;
 			data += sizeof(LinearData);
 			g->Line(pos = regular ? pathattr.mtx.Transform(d->p) : d->p);
 			break;
 		}
 		case QUADRATIC: {
+			PAINTER_TIMING("QUADRATIC");
 			const QuadraticData *d = (QuadraticData *)data;
 			data += sizeof(QuadraticData);
 			if(regular) {
@@ -177,6 +217,7 @@ Buffer<ClippingLine> BufferPainter::RenderPath(double width, SpanSource *ss, con
 			break;
 		}
 		case CUBIC: {
+			PAINTER_TIMING("CUBIC");
 			const CubicData *d = (CubicData *)data;
 			data += sizeof(CubicData);
 			if(regular) {
@@ -203,7 +244,7 @@ Buffer<ClippingLine> BufferPainter::RenderPath(double width, SpanSource *ss, con
 	}
 	current = Null;
 	if(width == ONPATH) {
-		onpath = onpathtarget.path;
+		onpath = pick(onpathtarget.path);
 		pathlen = onpathtarget.len;
 	}
 	return newclip;
@@ -223,12 +264,12 @@ void BufferPainter::ClipOp()
 {
 	Buffer<ClippingLine> newclip = RenderPath(CLIP, NULL, RGBAZero());
 	if(attr.hasclip)
-		clip.Top() = newclip;
+		clip.Top() = pick(newclip);
 	else {
-		clip.Add() = newclip;
+		clip.Add() = pick(newclip);
 		attr.hasclip = true;
 		attr.cliplevel = clip.GetCount();
 	}
 }
 
-END_UPP_NAMESPACE
+}

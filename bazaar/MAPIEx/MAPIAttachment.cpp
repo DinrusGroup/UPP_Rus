@@ -1,3 +1,5 @@
+#ifdef _WIN32
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //
 // File: MAPIAttachment.cpp
@@ -14,7 +16,6 @@
 
 // Ported to U++ Framework by Koldo. See License.txt file
 
-//#include "MAPIExPCH.h"
 #include "MAPIEx.h"
 
 /////////////////////////////////////////////////////////////
@@ -197,3 +198,5 @@ bool MAPIAttachment::SaveAttachment(const String &szPath) {
 	} while(ulRead >= BUF_SIZE);
 	return SaveFile(szPath, file);
 }
+
+#endif

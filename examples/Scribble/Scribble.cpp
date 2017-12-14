@@ -47,7 +47,7 @@ void Scribble::Paint(Draw& w)
 		Point p1 = stroke[0] - pos;
 		for(int j = 1; j < stroke.GetCount(); j++) {
 			Point p2 = stroke[j] - pos;
-			w.DrawLine(p1, p2, 0);
+			w.DrawLine(p1, p2);
 			p1 = p2;
 		}
 		w.DrawRect(p1.x, p1.y, 1, 1, Black);
@@ -78,7 +78,7 @@ void Scribble::LeftDown(Point p, dword keyflags)
 void Scribble::SetupSize()
 {
 	WithSizeLayout<TopWindow> dlg;
-	CtrlLayoutOKCancel(dlg, "Размер рисунка");
+	CtrlLayoutOKCancel(dlg, "Drawing size");
 	dlg.cx.Min(1);
 	dlg.cy.Min(1);
 	dlg.cx <<= imagesize.cx;
@@ -103,7 +103,7 @@ void Scribble::Scroll()
 
 void Scribble::Exit()
 {
-	if(PromptOKCancel("Выйти из Scribble ?"))
+	if(PromptOKCancel("Exit Scribble ?"))
 		Close();
 }
 
@@ -114,29 +114,29 @@ void Scribble::About()
 
 void Scribble::FileBar(Bar& bar)
 {
-	bar.Add("Выйти", THISBACK(Exit));
+	bar.Add("Exit", THISBACK(Exit));
 }
 
 void Scribble::EditBar(Bar& bar)
 {
-	bar.Add("Размер рисунка..", THISBACK(SetupSize));
+	bar.Add("Drawing size..", THISBACK(SetupSize));
 }
 
 void Scribble::AboutBar(Bar& bar)
 {
-	bar.Add("О программе..", THISBACK(About));
+	bar.Add("About..", THISBACK(About));
 }
 
 void Scribble::MainBar(Bar& bar)
 {
-	bar.Add("Файл", THISBACK(FileBar));
-	bar.Add("Правка", THISBACK(EditBar));
-	bar.Add("Помощь", THISBACK(AboutBar));
+	bar.Add("File", THISBACK(FileBar));
+	bar.Add("Edit", THISBACK(EditBar));
+	bar.Add("Help", THISBACK(AboutBar));
 }
 
 Scribble::Scribble()
 {
-	imagesize = Size(200, 200);
+	imagesize = Size(600, 400);
 	Title("Scribble").Zoomable().Sizeable();
 	AddFrame(menu);
 	AddFrame(InsetFrame());

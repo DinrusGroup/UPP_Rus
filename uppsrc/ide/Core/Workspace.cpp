@@ -43,15 +43,8 @@ String FollowCygwinSymlink(const String& file) {
 	}
 }
 
-const char *SemiTextTest::Accept(const char *s) const {
-	if(*s != ';') return NULL;
-	s++;
-	while(*s == ' ') s++;
-	return s;
-};
-
 Vector<String> SplitDirs(const char *s) {
-	return Split(s, Single<SemiTextTest>());
+	return Split(s, ';');
 }
 
 static String varsname = "default";
@@ -86,22 +79,25 @@ bool LoadVarFile(const char *name, VectorMap<String, String>& _var)
 	try {
 		VectorMap<String, String> var;
 		String env = LoadFile(name);
-		CParser p(env);
-		while(!p.IsEof()) {
-			String v = p.ReadId();
-			p.Char('=');
-			if(p.IsString())
-				var.GetAdd(v) = p.ReadString();
-			else {
-				String ln;
-				while(p.PeekChar() != '\r' && p.PeekChar() != '\n' && p.PeekChar() != ';')
-					ln.Cat(p.GetChar());
-				var.GetAdd(v) = ln;
-				p.Spaces();
+		try {
+			CParser p(env);
+			while(!p.IsEof()) {
+				String v = p.ReadId();
+				p.Char('=');
+				if(p.IsString())
+					var.GetAdd(v) = p.ReadString();
+				else {
+					String ln;
+					while(p.PeekChar() != '\r' && p.PeekChar() != '\n' && p.PeekChar() != ';')
+						ln.Cat(p.GetChar());
+					var.GetAdd(v) = ln;
+					p.Spaces();
+				}
+				p.Char(';');
 			}
-			p.Char(';');
 		}
-		_var = var;
+		catch(CParser::Error) {}
+		_var = pick(var);
 		return true;
 	}
 	catch(...) {
@@ -245,6 +241,15 @@ String PackagePath(const String& name)
 	return MainNest().PackagePath(name);
 }
 
+String GetPackagePathNest(const String& path)
+{
+	String h = UnixPath(NormalizePath(path));
+	for(auto dir : GetUppDirs())
+		if(h.StartsWith(UnixPath(NormalizePath(dir)) + '/'))
+			return dir;
+	return Null;
+}
+
 String SourcePath(const String& package, const String& file) {
 	if(IsFullPath(file)) return NativePath(file);
 	return NormalizePath(AppendFileName(GetFileFolder(PackagePath(package)), file));
@@ -307,7 +312,7 @@ void SplitHostName(const char *hostname, String& host, int& port) {
 }
 
 Vector<String> SplitFlags0(const char *flags) {
-	return Split(flags, CharFilterTextTest(CharFilterWhitespace));
+	return Split(flags, CharFilterWhitespace);
 }
 
 Vector<String> SplitFlags(const char *flags, bool main, const Vector<String>& accepts)
@@ -339,18 +344,21 @@ bool HasFlag(const Vector<String>& conf, const char *flag) {
 
 Vector<String> Combine(const Vector<String>& conf, const char *flags) {
 	Vector<String> cfg(conf, 1);
-	CParser p(flags);
-	while(!p.IsEof()) {
-		bool isnot = p.Char('!');
-		if(!p.IsId()) break;
-		String flg = p.ReadId();
-		int i = FindIndex(cfg, flg);
-		if(isnot) {
-			if(i >= 0) cfg.Remove(i);
+	try {
+		CParser p(flags);
+		while(!p.IsEof()) {
+			bool isnot = p.Char('!');
+			if(!p.IsId()) break;
+			String flg = p.ReadId();
+			int i = FindIndex(cfg, flg);
+			if(isnot) {
+				if(i >= 0) cfg.Remove(i);
+			}
+			else
+				if(i < 0) cfg.Add(flg);
 		}
-		else
-			if(i < 0) cfg.Add(flg);
 	}
+	catch(CParser::Error) {}
 	return cfg;
 }
 
@@ -368,18 +376,19 @@ int    GetType(const Vector<String>& conf, const char *flags) {
 	Vector<String> f = SplitFlags(flags);
 	int q = FLAG_UNDEFINED;
 	for(int i = 0; i < f.GetCount(); i++)
-		if(HasFlag(conf, f[i]))
+		if(HasFlag(conf, f[i])) {
 			if(q == FLAG_UNDEFINED)
 				q = i;
 			else
 				q = FLAG_MISMATCH;
+		}
 	return q;
 }
 
 String RemoveType(Vector<String>& conf, const char *flags)
 {
 	String old;
-	Index<String> f = SplitFlags(flags);
+	Index<String> f(SplitFlags(flags));
 	for(int i = conf.GetCount(); --i >= 0;)
 		if(f.Find(conf[i]) >= 0)
 		{
@@ -430,8 +439,8 @@ void Workspace::Scan(const char *prjname, const Vector<String>& flag) {
 void Workspace::Dump() {
 	for(int i = 0; i < package.GetCount(); i++) {
 		Package& prj = package[i];
-		LOG("Пакет " << package.GetKey(i));
-		LOG(" файл ");
+		LOG("Package " << package.GetKey(i));
+		LOG(" file ");
 		for(int i = 0; i < prj.file.GetCount(); i++)
 			LOG("\t" << prj.file[i]);
 	}

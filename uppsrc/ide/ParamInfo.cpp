@@ -11,12 +11,14 @@ void AssistEditor::SyncParamInfo()
 			ParamInfo& m = param[q];
 			int i = GetCursorLine();
 			if(m.line >= 0 && m.line < GetLineCount() && i >= m.line && i < m.line + 10
-			   && m.editfile == RusIDE->editfile && GetWLine(m.line).StartsWith(m.test)) {
+			   && m.editfile == theide->editfile && GetWLine(m.line).StartsWith(m.test)) {
 				int c = GetCursor();
 				i = GetPos(m.line) + m.test.GetCount();
 				if(c >= i) {
 					int par = 0;
 					int pari = 0;
+					int str = 0;
+					bool esc = false;
 					for(;;) {
 						int ch = Ch(i++);
 						if(i > c) {
@@ -27,15 +29,21 @@ void AssistEditor::SyncParamInfo()
 							}
 							break;
 						}
-						if(ch == ')') {
+						if(findarg(ch, ')', ']', '}') >= 0) {
 							if(par <= 0)
 								break;
 							par--;
 						}
-						if(ch == '(')
+						else
+						if(findarg(ch, '(', '[', '{') >= 0)
 							par++;
-						if(ch == ',' && par == 0)
+						else
+						if(findarg(ch, '\"', '\'') >= 0 && !esc)
+							str = str ? 0 : ch;
+						else
+						if(ch == ',' && par == 0 && str == 0)
 							pari++;
+						esc = ch == '\\';
 					}
 				}
 			}
@@ -74,7 +82,7 @@ void AssistEditor::StartParamInfo(const CppItem& m, int pos)
 	f.line = GetLinePos(x);
 	f.test = GetWLine(f.line).Mid(0, x);
 	f.item = m;
-	f.editfile = RusIDE->editfile;
+	f.editfile = theide->editfile;
 	f.pos = pos;
 	SyncParamInfo();
 	parami = (parami + 1) % PARAMN;
@@ -85,4 +93,9 @@ void AssistEditor::State(int reason)
 	if(reason == FOCUS)
 		SyncParamInfo();
 	CodeEditor::State(reason);
+}
+
+int AssistEditor::GetCurrentLine()
+{
+	return GetLine(GetCursor());
 }

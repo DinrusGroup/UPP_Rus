@@ -9,9 +9,17 @@
 #include <TabBar/TabBar.h>
 #include <CodeEditor/CodeEditor.h>
 #include <usvn/usvn.h>
+#include <urepo/urepo.h>
 #include <ide/IconDes/IconDes.h>
+#include <ide/Java/Java.h>
 #include <ide/LayDes/LayDes.h>
-#include <TextDiffCtrl/TextDiffCtrl.h>   
+#include <ide/Debuggers/Debuggers.h>
+#include <TextDiffCtrl/TextDiffCtrl.h>
+#include <ide/Designers/Designers.h>
+#include <ide/Android/Android.h>
+
+#include "About.h"
+#include "MethodsCtrls.h"
 
 #define LAYOUTFILE <ide/ide.lay>
 #include <CtrlCore/lay.h>
@@ -24,8 +32,6 @@
 #define KEYNAMESPACE IdeKeys
 #define KEYFILE      <ide/ide.key>
 #include             <CtrlLib/key_header.h>
-
-#include "UppDlg.h"
 
 #include "version.h"
 
@@ -41,29 +47,9 @@ const char *FindTag(const char *txt, const char *tag);
 const char *FindAfter(const char *txt, const char *tag);
 int         IdeLocateLine(String old_file, int old_line, String new_file);
 
-class FileSelButton : public FileSel
-{
-public:
-	typedef FileSelButton CLASSNAME;
-	enum MODE { MODE_OPEN, MODE_SAVE, MODE_DIR };
-	FileSelButton(MODE mode = MODE_OPEN, const char *title = NULL);
+#include "UppDlg.h"
 
-	void               Attach(Ctrl& parent) { parent.AddFrame(button); }
-	void               Title(String t)      { title = t; }
-	String             GetTitle() const     { return title; }
-
-private:
-	void               OnAction();
-
-private:
-	FrameRight<Button> button;
-	String             title;
-	MODE               mode;
-};
-
-struct OpenFileButton  : FileSelButton { OpenFileButton(const char *title = NULL) : FileSelButton(MODE_OPEN, title) {} };
-struct SaveFileButton  : FileSelButton { SaveFileButton(const char *title = NULL) : FileSelButton(MODE_SAVE, title) {} };
-struct SelectDirButton : FileSelButton { SelectDirButton(const char *title = NULL) : FileSelButton(MODE_DIR,  title) {} };
+bool IsTextFile(const String& file, int maxline = INT_MAX);
 
 void Puts(const char *s);
 
@@ -76,9 +62,9 @@ public:
 
 protected:
 	struct Slot {
-		Slot() : outfile(NULL), quiet(true), exitcode(Null) {}
+		Slot() : outfile(NULL), quiet(true), exitcode(Null) { serial = INT_MAX; }
 
-		One<SlaveProcess> process;
+		One<AProcess>     process;
 		String            cmdline;
 		String            output;
 		String            key;
@@ -87,6 +73,7 @@ protected:
 		bool              quiet;
 		int               exitcode;
 		int               last_msecs;
+		int               serial;
 	};
 
 	struct Group {
@@ -98,45 +85,59 @@ protected:
 		int               msecs;
 		int               raw_msecs;
 	};
+	
+	struct Finisher {
+		int               serial;
+		Event<>           cb;
+	};
 
 	Array<Slot> processes;
 	ArrayMap<String, Group> groups;
+	Array<Finisher> finisher;
 	Vector<String> error_keys;
 	String current_group;
 	String spooled_output;
 	int console_lock;
 	bool wrap_text;
 	FrameBottom<EditString> input;
+	String line;
+	int    serial;
 
 	void CheckEndGroup();
 	void FlushConsole();
 
 public:
-	Callback WhenSelect;
-	Callback1<Bar&> WhenBar;
+	Event<>  WhenSelect;
+	Event<Bar&> WhenBar;
+	Event<const String&> WhenLine;
+	Event<>         WhenRunEnd;
 	bool console;
 	bool verbosebuild;
 
-	int  Execute(const char *cmdline, Stream *out = NULL, const char *envptr = NULL, bool quiet = false);
-	int  Execute(One<SlaveProcess> process, const char *cmdline, Stream *out = NULL, bool quiet = false);
+	int  Execute(const char *cmdline, Stream *out = NULL, const char *envptr = NULL, bool quiet = false, bool noconvert = false);
+	int  Execute(One<AProcess> pick_ process, const char *cmdline, Stream *out = NULL, bool quiet = false);
 	int  GetSlotCount() const { return processes.GetCount(); }
 	int  AllocSlot();
 	bool Run(const char *cmdline, Stream *out = NULL, const char *endptr = NULL, bool quiet = false, int slot = 0, String key = Null, int blitz_count = 1);
-	bool Run(One<SlaveProcess> process, const char *cmdline, Stream *out = NULL, bool quiet = false, int slot = 0, String key = Null, int blitz_count = 1);
+	bool Run(One<AProcess> pick_ process, const char *cmdline, Stream *out = NULL, bool quiet = false, int slot = 0, String key = Null, int blitz_count = 1);
 	void BeginGroup(String group);
 	void EndGroup();
 
 	Console& operator<<(const String& s)      { Append(s); return *this; }
 
+	void ToErrors(const String& s);
+	void AppendOutput(const String& s);
 	bool IsRunning();
 	bool IsRunning(int slot);
 	int  Flush();
 	void Kill(int slot);
 	void Kill();
-	void ClearError()                         { error_keys.Clear(); }
-	Vector<String> PickErrors()               { Vector<String> e = error_keys; error_keys.Clear(); return e; }
+	void ClearError()                         { error_keys.Clear(); line.Clear(); WhenRunEnd(); }
+	Vector<String> PickErrors()               { Vector<String> e = pick(error_keys); error_keys.Clear(); return pick(e); }
 	void Wait(int slot);
 	bool Wait();
+	
+	void OnFinish(Event<>  cb);
 
 	void WrapText(bool w)                     { wrap_text = w; }
 
@@ -163,9 +164,12 @@ String                    GetDefaultMethod();
 
 bool CheckLicense();
 bool Install();
+void AutoInstantSetup();
 
-#define HELPNAME    "Тематики Справки"
-#define METAPACKAGE "<мета>"
+#define HELPNAME    "Help Topics"
+#define METAPACKAGE "<meta>"
+
+bool IsHelpName(const char *path);
 
 class TopicCtrl : public HelpWindow {
 public:
@@ -200,7 +204,7 @@ private:
 	void Next();
 
 public:
-	Callback WhenTopic;
+	Event<>  WhenTopic;
 
 	void SyncDocTree();
 	void SearchWord(const String& s);
@@ -270,168 +274,44 @@ public:
 	RightTabs();
 };
 
-class EditorTabBar : public FileTabs
-{
-public:
+struct EditorTabBar : public FileTabs {
 	EditorTabBar();
+
 	String GetFile(int n) const;
-	bool FindSetFile(const String& fn);
-	void SetAddFile(const String& fn);
-	void RenameFile(const String& fn, const String& nn);
-	void SetSplitColor(const String& fn, const Color& c);
-	void ClearSplitColor();
+	bool   FindSetFile(const String& fn);
+	void   SetAddFile(const String& fn);
+	void   RenameFile(const String& fn, const String& nn);
+	void   SetSplitColor(const String& fn, const Color& c);
+	void   ClearSplitColor();
+	void   FixIcons();
 
 	typedef EditorTabBar CLASSNAME;
 };
 
 int    memcmp_i(const char *s, const char *t, int n);
-String ParseTemplatedType(const String& type, Vector<String>& tparam);
+
 String ResolveTParam(const String& type, const Vector<String>& tparam);
 void   ResolveTParam(Vector<String>& type, const Vector<String>& tparam);
-String Qualify(const String& scope, const String& type);
+String Qualify(const String& scope, const String& type, const String& usings);
+
 int    CharFilterMacro(int c);
 int    CharFilterFileName(int c);
 
-bool isincludefnchar(int c);
+bool   isincludefnchar(int c);
 
-struct AssistEditor : CodeEditor {
-	virtual bool Key(dword key, int count);
-	virtual void LostFocus();
-	virtual void MouseWheel(Point p, int zdelta, dword keyflags);
-	virtual void LeftDown(Point p, dword keyflags);
-	virtual void SelectionChanged();
-	virtual void DirtyFrom(int line);
-	virtual void State(int reason);
+Size   GetDrawFileNameSize(const String& h);
+void   DrawFileName(Draw& w, const Rect& r, const String& h, Color ink);
 
-	struct IndexItem : Moveable<IndexItem> {
-		String text;
-		Color  ink;
-		int    line;
-	};
-	byte              navigator;
-	SplitterFrame     navigatorframe;
-	StaticRect        navigatorpane;
+void   AddPath(EditString *es);
+void   InsertPath(EditString *es);
 
-	CodeBrowser       browser;
-	ParentCtrl        scopepane;
-	ParentCtrl        itempane;
-	Splitter          scope_item;
+void   DlSpellerLangs(DropList& dl);
 
-	Splitter       popup;
-	ArrayCtrl      assist;
-	ArrayCtrl      type;
-	Index<String>                 assist_type;
-	ArrayMap<String, CppItemInfo> assist_item;
-	RichTextCtrl   annotation_popup;
-	
-	int            assist_cursor;
-	bool           auto_assist;
-	bool           assist_active;
-	bool           commentdp;
-	bool           inbody;
-	bool           thisback, thisbackn;
-	bool           include_assist;
-	Ide           *RusIDE;
-	WString        cachedline;
-	int            cachedpos;
-	int            cachedln;
-	bool           include_local;
-	int            include_back;
-	String         include_path;
-	int            scan_counter;
-	
-	RichTextCtrl   param_info;
-	String         param_qtf;
-	struct ParamInfo {
-		int            line;
-		int            pos;
-		WString        test;
-		CppItem        item;
-		String         editfile;
-		
-		ParamInfo()    { line = -1; }
-	};
-	enum { PARAMN = 16 };
-	ParamInfo param[PARAMN];
-	int       parami;
-	
-	void           PopUpAssist(bool auto_insert = false);
-	void           CloseAssist();
-	void           Assist();
-	bool           IncludeAssist();
-	String         ReadIdBack(int q, bool include = false);
-	void           SyncAssist();
-	void           AssistInsert();
-	bool           InCode();
-	
-	void           SyncParamInfo();
-	void           StartParamInfo(const CppItem& m, int pos);
-
-	void           Complete();
-	void           Abbr();
-
-	void           Context(Parser& parser, int pos);
-	void           ExpressionType(const String& type, const Vector<String>& xp, int ii,
-	                              Index<String>& typeset, bool variable,
-	                              bool can_shortcut_operator, Index<String>& visited_bases);
-	void           ExpressionType(const String& type, const Vector<String>& xp, int ii,
-	                              Index<String>& typeset, bool variable);
-//	void           ExpressionType(const String& type, const Vector<String>& xp, int ii,
-//	                              Index<String>& typeset);
-	Index<String>  ExpressionType(const Parser& parser, const Vector<String>& xp);
-
-	Index<String>  EvaluateExpressionType(const Parser& parser, const Vector<String>& xp);
-
-	String         RemoveDefPar(const char *s);
-	String         MakeDefinition(const String& cls, const String& _n);
-	void           DCopy();
-	void           Virtuals();
-	void           Thisbacks();
-	void           GatherItems(const String& type, bool only_public, Index<String>& in_types,
-	                           bool types);
-
-	void           SelParam();
-	int            Ch(int q);
-	int            ParsBack(int q);
-	Vector<String> ReadBack(int q);
-	void           SkipSpcBack(int& q);
-	String         IdBack(int& qq);
-	String         CompleteIdBack(int& q);
-
-	void           SwapSContext(Parser& p);
-	
-	void           SyncCursor();
-
-	void           SyncNavigator();
-	void           GotoBrowserScope();
-	void           BrowserGoto();
-	void           BrowserGotoNF();
-
-	bool           IsNavigator() const                             { return navigator; }
-	void           Navigator(bool navigator);
-
-	bool           GetAnnotationRefs(Vector<String>& tl, String& coderef, int q = -1);
-	bool           GetAnnotationRef(String& t, String& coderef, int q = -1);
-	void           SyncAnnotationPopup();
-	void           EditAnnotation(bool fastedit);
-	void           Annotate(const String& filename);
-	void           OpenTopic(String topic, String create, bool before);
-	void           NewTopic(String group, String coderef);
-	
-	bool           Esc();
-	
-	void           SerializeNavigator(Stream& s);
-	
-	Callback1<int> WhenFontScroll;
-
-	typedef AssistEditor CLASSNAME;
-
-	AssistEditor();
-};
+#include "Assist.h"
 
 void DirSel(EditField& f, FrameRight<Button>& b);
 bool CopyFolder(const char *dst, const char *src, Progress *pi);
-void SvnSyncDirs(const Vector<String>& working);
+void RepoSyncDirs(const Vector<String>& working);
 
 struct FindInFilesDlg : WithFindInFilesLayout<TopWindow> {
 	WString itext;
@@ -455,31 +335,40 @@ public:
 	virtual   void   PackageCursor();
 	virtual   void   SyncWorkspace();
 	virtual   void   BuildFileMenu(Bar& menu);
-	virtual   void   ProjectSvn(Bar& bar);
+	virtual   void   ProjectRepo(Bar& bar);
 	virtual   void   FilePropertiesMenu(Bar& menu);
 	virtual   String GetOutputDir();
+	virtual   String GetConfigDir();
 	virtual   void   FileSelected();
 	virtual   void   Serialize(Stream& s);
 	virtual   void   FileRename(const String& nm);
 	virtual   bool   FileRemove();
 	virtual   void   DragAndDrop(Point p, PasteClip& d);
+	virtual   void   DeactivateBy(Ctrl *new_focus);
+	virtual   void   Activate();
+	virtual   void   Layout();
 
-	virtual   void      PutConsole(const char *s);
-	virtual   void      PutVerbose(const char *s);
+	virtual   bool   IsVerbose() const;
+	virtual   void   PutConsole(const char *s);
+	virtual   void   PutVerbose(const char *s);
+	virtual   void   PutLinking();
+	virtual   void   PutLinkingEnd(bool ok);
 
 	virtual   const Workspace& IdeWorkspace() const;
 	virtual   bool             IdeIsBuilding() const;
 	virtual   String           IdeGetOneFile() const;
-	virtual   int              IdeConsoleExecute(const char *cmdline, Stream *out = NULL, const char *envptr = NULL, bool quiet = false);
-	virtual   int              IdeConsoleExecute(One<SlaveProcess> process, const char *cmdline, Stream *out = NULL, bool quiet = false);
-	virtual   int              IdeConsoleExecuteWithInput(const char *cmdline, Stream *out, const char *envptr, bool quiet);
+	virtual   int              IdeConsoleExecute(const char *cmdline, Stream *out = NULL, const char *envptr = NULL, bool quiet = false, bool noconvert = false);
+	virtual   int              IdeConsoleExecute(One<AProcess> pick_ process, const char *cmdline, Stream *out = NULL, bool quiet = false);
+	virtual   int              IdeConsoleExecuteWithInput(const char *cmdline, Stream *out, const char *envptr, bool quiet, bool noconvert);
 	virtual   int              IdeConsoleAllocSlot();
 	virtual   bool             IdeConsoleRun(const char *cmdline, Stream *out = NULL, const char *envptr = NULL, bool quiet = false, int slot = 0, String key = Null, int blitz_count = 1);
-	virtual   bool             IdeConsoleRun(One<SlaveProcess> process, const char *cmdline, Stream *out = NULL, bool quiet = false, int slot = 0, String key = Null, int blitz_count = 1);
+	virtual   bool             IdeConsoleRun(One<AProcess> pick_ process, const char *cmdline, Stream *out = NULL, bool quiet = false, int slot = 0, String key = Null, int blitz_count = 1);
 	virtual   void             IdeConsoleFlush();
 	virtual   void             IdeConsoleBeginGroup(String group);
 	virtual   void             IdeConsoleEndGroup();
 	virtual   bool             IdeConsoleWait();
+	virtual   bool             IdeConsoleWait(int slot);
+	virtual   void             IdeConsoleOnFinish(Event<>  cb);
 
 	virtual   bool      IdeIsDebug() const;
 	virtual   void      IdeEndDebug();
@@ -506,6 +395,10 @@ public:
 
 	virtual   String    IdeGetFileName();
 	virtual   String    IdeGetNestFolder();
+
+	virtual   String    IdeGetIncludePath();
+
+	virtual   bool      IsPersistentFindReplace();
 
 	virtual void   ConsoleShow();
 	virtual void   ConsoleSync();
@@ -534,12 +427,14 @@ public:
 	int        idestate;
 	int        debuglock;
 	int        hydra1_threads;
+	
+	int        gdbSelector;
 
 	int        chstyle;
 
 	One<IdeDesigner> designer;
 	AssistEditor     editor;
-	CodeEditor       editor2;
+	AssistEditor     editor2; // no edits happen in editor2, just view
 	EditorTabBar     tabs;
 	EscValue         macro_api;
 #ifdef PLATFORM_POSIX
@@ -549,23 +444,40 @@ public:
 	RightTabs   btabs;
 	StaticRect  bottom;
 	Splitter    editor_bottom;
-	Console     console, console2;
+	Console     console;
+	
+	ArrayCtrl   ffound;
+
+	ArrayCtrl   error;
+	int         error_count;
+	int         warning_count;
+	bool        addnotes;
+	ValueArray  prenotes;
+	bool        linking;
+	Vector<String> linking_line;
+	bool        removing_notes;
+
 	IdeCalc     calc;
 	Ptr<Ctrl>   bottomctrl;
 
-	enum Bottoms { BCLOSE, BCONSOLE, BCONSOLE2, BCALC, BDEBUG };
+	enum Bottoms { BCLOSE, BCONSOLE, BERRORS, BFINDINFILES, BCALC, BDEBUG };
 
 	FileOut    stdout_fout;
 
-	Splitter   editorsplit;
-	Splitter   pfsplit;
-	Splitter   wesplit;
+	Splitter      editorsplit;
+	Splitter      pfsplit;
+	StaticRect    wepane;
+	SplitterFrame weframe;
 
 	Splitter   right_split;
 	StaticRect right;
 
 	String    editfile;
 	FileTime  edittime;
+	int       editfile_line_endings;
+	int       editfile_repo;
+	bool      editfile_isfolder;
+	String    editfile_includes;
 
 	String    editfile2;
 
@@ -578,7 +490,8 @@ public:
 		LineEdit::EditPos pos;
 
 		void Serialize(Stream& s)        { s % file % pos; }
-	}bookmark[10];
+	}
+	bookmark[10];
 
 	struct FileData {
 		Time               filetime;
@@ -592,6 +505,10 @@ public:
 			filetime = Null; editpos.Clear(); undodata.Clear();
 			columnline = Null; lineinfo.Clear(); lineinforem.Clear();
 		}
+		void ClearP() {
+			lineinforem.Clear();
+			undodata.Clear();
+		}
 	};
 
 	String posfile[2];
@@ -603,6 +520,7 @@ public:
 
 	ArrayMap<String, FileData> filedata;
 	Index<String> editastext;
+	Index<String> editashex;
 
 	DropList   mainconfiglist;
 	String     mainconfigname;
@@ -623,10 +541,13 @@ public:
 	enum      { RUN_WINDOW, RUN_CONSOLE, RUN_FILE, RUN_FILE_CONSOLE };
 	int       runmode;
 	bool      runexternal;
+	bool      console_utf8;
+	int       consolemode;
 	String    stdout_file;
 	String    recent_stdout_file;
 
 // ------------------------------------
+	enum LineEndingEnum { LF, CRLF, DETECT_LF, DETECT_CRLF };
 
 	One<Debugger> debugger;
 
@@ -647,7 +568,8 @@ public:
 	bool      show_status_bar;
 	bool      toolbar_in_row;
 	bool      show_tabs;
-	bool      force_crlf;
+	bool      warnwhitespace;
+	int       line_endings;
 	bool      tabs_icons;
 	int       tabs_crosses;
 	bool      tabs_grouping;
@@ -655,6 +577,8 @@ public:
 	bool      tabs_serialize;
 	bool      no_parenthesis_indent;
 	bool      hilite_if_endif;
+	bool      thousands_separator;
+	bool      hline;
 	bool      wrap_console_text;
 	bool      mute_sounds;
 	bool      line_numbers;
@@ -664,10 +588,17 @@ public:
 	bool      mark_lines;
 	bool      find_pick_sel;
 	bool      find_pick_text;
+	bool      deactivate_save;
 	int       insert_include;
 	int       bordercolumn;
 	Color     bordercolor;
-
+	bool      persistent_find_replace;
+	bool      find_replace_restore_pos;
+	bool      auto_rescan;
+	bool      auto_check;
+	int       spellcheck_comments;
+	bool      wordwrap_comments;
+	bool      wordwrap;
 	/*
 		astyle code formatter control vars
 		added 2008.01.27 by Massimo Del Fedele
@@ -695,7 +626,7 @@ public:
 	bool	astyle_EmptyLineFill;
 	bool	astyle_TabSpaceConversionMode;
 	WString	astyle_TestBox;
-
+	
 	// Formats a string of code with a given formatter
 	WString FormatCodeString(WString const &Src, astyle::ASFormatter &Formatter);
 
@@ -717,32 +648,50 @@ public:
 
 	enum { STYLE_NO_REPLACE, STYLE_CONFIRM_REPLACE, STYLE_AUTO_REPLACE };
 
-	String			find_file_search_string;
+	String find_file_search_string;
+	bool   find_file_search_in_current_package;
 
 	FindInFilesDlg ff;
-	int            iwc;
+	String         iwc;
 
 	int           doc_serial;
 	TopicCtrl     doc;
+	TopicCtrl     windoc;
 
 	int           state_icon;
 	
 	String        export_dir;
 	VectorMap<String, String> abbr;
+	
+	int           issaving;
+	int           isscanning;
+	
+	String        current_builder;
 
 // ------------------------------------
 
+	Time      config_time;
+	Time      ConfigTime();
+	void      LoadConfig();
+	void      SaveConfig();
+	void      FinishConfig();
+	void      SaveConfigOnTime();
+
 	int       GetPackageIndex();
+	void      AddPackage(const String& p);
 
 	void      BeepMuteExclamation() { if(!mute_sounds) BeepExclamation(); }
 	void      BeepMuteInformation() { if(!mute_sounds) BeepInformation(); }
 
 	void      BookKey(int key);
 	void      AddHistory();
+	int       GetHistory(int d);
+	void      History(int dir);
+	void      EditorEdit();
 	void      GotoBookmark(const Bookmark& b);
-	void      HistoryFw();
-	void      HistoryBk();
 	bool      IsHistDiff(int i);
+	
+	void      IdePaste(String& s);
 
 	bool      HasFileData(const String& file);
 	FileData& Filedata(const String& file);
@@ -754,7 +703,7 @@ public:
 	void      ToggleBottom(int i);
 	void      ShowBottom(int i);
 	void      ShowConsole()                      { ShowBottom(1); }
-	void      ShowConsole2()                     { ShowBottom(2); }
+	void      ShowConsole2()                     { ShowBottom(BFINDINFILES); }
 	void      ToggleConsole()                    { ToggleBottom(1); }
 	void      SwapBottom();
 	bool      IsBottomShown() const;
@@ -769,8 +718,8 @@ public:
 	void      ChangeFileCharset(const String& name, Package& p, byte charset);
 	void      ChangeCharset();
 	void      FlushFile();
-	void      EditFile0(const String& path, byte charset = CHARSET_DEFAULT, bool astext = false,
-	                    const String& header = Null);
+	void      EditFile0(const String& path, byte charset, int spellcheck_comments,
+	                    const String& headername = Null);
 	void      EditFile(const String& path);
 	void      AddEditFile(const String& path);
 	void      ReloadFile();
@@ -778,12 +727,21 @@ public:
 	bool      CanToggleReadOnly();
 	void      ToggleReadOnly();
 	void      PosSync();
+	String    IncludesMD5();
+	void      EditFileAssistSync();
+	
+	TimeCallback text_updated;
+	void      TriggerAssistSync();
 
+	void      AKEditor();
+	
 	void      PackageMenu(Bar& menu);
 
 	void      UscFile(const String& file);
 	void      UscProcessDir(const String& dir);
+	void      UscProcessDirDeep(const String& dir);
 	void      SyncUsc();
+	void      CodeBaseSync();
 
 	void      RefreshBrowser();
 
@@ -791,6 +749,7 @@ public:
 	void      SyncBuildMode();
 	void      SetupBuildMethods();
 	void      DropMethodList();
+	void      SetMethod(const String& m);
 	void      SelectMethod();
 	void      DropModeList();
 	void      SelectMode();
@@ -802,78 +761,102 @@ public:
 	void      LoadAbbr();
 	void      SaveAbbr();
 
-	Vector<String> SvnDirs();
-
 	void      File(Bar& menu);
 		void   EditWorkspace();
 		void   EditAnyFile();
 		bool   IsProjectFile(const String& f) const;
+		void   SaveEditorFile(Stream& out);
+		void   SaveFile0(bool always);
 		void   SaveFile(bool always = false);
 		void   DoSaveFile()    { SaveFile(); }
 		void   FileBookmark	(Bar& menu);
 		void   SwapPackagesFiles();
 		void   Times();
 		void   Statistics();
+		void   Licenses();
 		void   Exit();
 		String GetOpposite();
 		void   GoOpposite();
 		void   Print();
 		void   Diff();
+		void   GotoDiffLeft(int line, DiffDlg *df);
+		void   GotoDiffRight(int line, FileDiff *df);
 		void   Patch();
 		void   SvnHistory();
 
 	void      Edit(Bar& menu);
+		bool  IsDesignerFile(const String& path);
+		void  DoEditAsText(const String& path);
 		void  EditAsText();
+		void  EditAsHex();
 		void  EditUsingDesigner();
 		void  EditMakeTabs()     { editor.MakeTabsOrSpaces(true); }
 		void  EditMakeSpaces()   { editor.MakeTabsOrSpaces(false); }
+		void  EditMakeLineEnds() { editor.MakeLineEnds(); }
+
 		void  FindInFiles(bool replace);
 		void  FindFileName();
 		void  FindString(bool back);
 		void  ClearEditedFile();
 		void  ClearEditedAll();
-	
+		void  FindFileAll(const Vector<Tuple<int, int>>& f);
 		void  InsertColor();
 		void  InsertLay(const String& fn);
 		void  InsertIml(const String& fn, String classname);
 		void  InsertText(const String& text);
+		void  InsertCString();
+		void  InsertFilePath(bool c);
 		void  InsertMenu(Bar& bar);
+		void  InsertInclude(Bar& bar);
+		void  InsertAdvanced(Bar& bar);
 		void  EditorMenu(Bar& bar);
-
+		void  ToggleWordwrap();
+	
+	void OnlineSearchMenu(Bar& menu);
+		void OnlineSearch();
+		void OnlineSearchOnTheOfficialSite();
+	
 	void SearchMenu(Bar& bar);
 		void  EditFind()                { editor.FindReplace(find_pick_sel, find_pick_text, false); }
 		void  EditReplace()             { editor.FindReplace(find_pick_sel, find_pick_text, true); }
 		void  EditFindReplacePickText() { editor.FindReplace(true, true, false); }
-		void  EditFindNext()     { editor.Find(false); }
-		void  EditFindPrevious() { editor.Find(true); }
-		void  EditPaste()        { editor.Paste(); }
+		void  EditFindNext()            { editor.FindNext(); }
+		void  EditFindPrevious()        { editor.FindPrev(); }
+		void  EditPaste()               { editor.Paste(); }
+		bool  Next(int tab, ArrayCtrl& ctrl, int d);
 		void  FindNextError();
 		void  FindPrevError();
 	
 	void      EditSpecial(Bar& menu);
 		void  TranslateString();
-		void  SwapChars()        { editor.SwapChars(); }
-		void  CopyWord()         { editor.CopyWord(); }
+		void  SwapChars()               { editor.SwapChars(); }
+		void  CopyWord()                { editor.CopyWord(); }
+		void  DuplicateLine()           { editor.DuplicateLine(); }
 		void  AlterText(WString (*op)(const WString& in));
 		void  TextToUpper();
 		void  TextToLower();
 		void  TextToAscii();
 		void  TextInitCaps();
 		void  SwapCase();
+		void  ToCString();
+		void  ToComment();
+		void  CommentLines();
+		void  UnComment();
+		void  ReformatComment();
 
 	void      MacroMenu(Bar& menu);
 		bool  HasMacros();
-		void  EditMacroMenu(Bar& menu, const Vector<int>& items);
+		void  EditMacroMenu(Bar& menu, ValueArray items);
 		void  EditMacro(int i);
 
 	void      Project(Bar& menu);
 		void  SyncT(int kind);
 		void  ConvertST();
 		void  ExportMakefile(const String& ep);
-		void  ExportProject(const String& ep, bool all, bool gui);
-		void  SyncSvnDirs(const Vector<String>& working);
-		void  SyncSvnDir(const String& working);
-		void  SyncSvn();
+		void  ExportProject(const String& ep, bool all, bool gui, bool deletedir = true);
+		void  SyncRepoDirs(const Vector<String>& working);
+		void  SyncRepoDir(const String& working);
+		void  SyncRepo();
 
 	void      BuildMenu(Bar& menu);
 		void BuildPackageMenu(Bar& menu);
@@ -890,10 +873,14 @@ public:
 		void  ToggleStopOnErrors();
 		One<Host> CreateHostRunDir();
 		void  OpenOutputFolder();
+		void  PreprocessInternal();
 
 	void      DebugMenu(Bar& menu);
 		void  RunArgs();
+		bool  ShouldHaveConsole();
 		void  BuildAndExecute();
+		void  ExecuteBinary();
+		void  ExecuteApk();
 		void  BuildAndDebug0(const String& srcfile);
 		void  BuildAndDebug(bool runto);
 		void  BuildAndExtDebug();
@@ -908,38 +895,55 @@ public:
 		void  DebugClearBreakpoints();
 		void  OnBreakpoint(int i);
 
-		String GetLogPath();
-		void  OpenLog();
 		bool  EditorTip(CodeEditor::MouseTip& mt);
 
 	void      Setup(Bar& menu);
 		void  SetupFormat();
+		void  DoEditKeys();
 		void  ToggleVerboseBuild();
 		void  AutoSetup();
 		void  CheckUpdates(bool verbose);
 		void  CheckUpdatesManual();
 		void  SetUpdateTimer(int period);
 		void  Abbreviations();
-
+		void  DoMacroManager();
+	
+	void      SetupMobilePlatforms(Bar& bar);
+		void  SetupAndroidMobilePlatform(Bar& bar, const AndroidSDK& androidSDK);
+		void  LaunchAndroidSDKManager(const AndroidSDK& androidSDK);
+		void  LaunchAndroidAVDManager(const AndroidSDK& androidSDK);
+		void  LauchAndroidDeviceMonitor(const AndroidSDK& androidSDK);
+	
 	void      BrowseMenu(Bar& menu);
+		void  CheckCodeBase();
 		void  RescanCode();
 		void  QueryId();
-		void  About();
 		void  OpenTopic(const String& topic, const String& createafter, bool before);
 		void  OpenTopic(const String& topic);
 		void  OpenATopic();
 		void  ToggleNavigator();
 		void  SearchCode();
 		void  Goto();
-		void  GotoGlobal();
-		void  ScanFile();
+		void  NavigatorDlg();
+		void  ScanFile(bool check_includes);
 		bool  SwapSIf(const char *cref);
 		void  SwapS();
+		void  FindId(const String& id);
 		void  ContextGoto0(int pos);
 		void  ContextGoto();
+		void  GoToLine();
 		void  CtrlClick(int pos);
 		void  Qtf();
+		void  Xml();
+		void  Json();
+		void  GotoDirDiffLeft(int line, DirDiffDlg *df);
+		void  GotoDirDiffRight(int line, DirDiffDlg *df);
+		void  DoDirDiff();
+		void  AsErrors();
 
+	void      HelpMenu(Bar& menu);
+	    void  ViewIdeLogFile();
+		void  About();
 
 	void      ConsoleMenu(Bar& menu);
 		void  ConsoleCopy();
@@ -951,6 +955,12 @@ public:
 	void      SaveWorkspace();
 	String    WorkspaceFile();
 	void      SerializeWorkspace(Stream& s);
+
+	void      SerializeLastMain(Stream& s);
+	void      SaveLastMain();
+	void      LoadLastMain();
+	void      EditorMode();
+	bool      IsEditorMode() const;
 
 //	void      PrintTime(dword time);
 	void      SetIdeState(int newstate);
@@ -967,11 +977,68 @@ public:
 	void      CycleFiles();
 
 	void      Renumber();
+	
+	String    GetTargetLogPath();
+	String    GetIdeLogPath();
+	void      OpenLog(const String& logFilePath);
+	
+//	Console&  GetConsole();
 
-	Console&  GetConsole();
+	struct FindLineErrorCache {
+		VectorMap<String, String> file;
+		Vector<String>            wspc_paths;
+		String                    upp;
+		bool                      is_java;
+		bool                      init;
+		
+		void Clear()            { init = false; file.Clear(); wspc_paths.Clear(); }
+	};
 
-	bool      FindLineError(int l, Host& host);
-	bool      FindLineError(String ln, Host& host, String& file, int& lineno, int& error);
+	struct ErrorInfo {
+		String file;
+		int    lineno;
+		int    linepos;
+		int    len;
+		int    kind;
+		String message;
+		String error_pos;
+		
+		ErrorInfo() { lineno = linepos = kind = len = 0; }
+	};
+	
+	FindLineErrorCache error_cache;
+	void      ConsoleLine(const String& line, bool assist = false);
+	void      ConsoleRunEnd();
+	void      SyncErrorsMessage();
+	void      CopyError(bool all);
+	void      ErrorMenu(Bar& bar);
+	void      ShowError();
+	void      ShowFound();
+	void      CopyFound(bool all);
+	void      FFoundMenu(Bar& bar);
+	void      SelError();
+	void      ClearErrorsPane();
+	WString   FormatErrorLine(const String& text, int& linecy);
+	WString   FormatErrorLineEP(const String& text, const char *ep, int& linecy);
+	
+	struct FoundDisplay : Display {
+		virtual void Paint(Draw& w, const Rect& r, const Value& q, Color ink, Color paper, dword style) const;
+	};
+
+	struct TopAlignedDisplay : Display {
+		virtual void Paint(Draw& w, const Rect& r, const Value& q, Color ink, Color paper, dword style) const;
+	};
+
+	struct FoundFileDisplay : Display {
+		virtual void Paint(Draw& w, const Rect& r, const Value& q, Color ink, Color paper, dword style) const;
+		virtual Size GetStdSize(const Value& q) const;
+	};
+	
+	bool      FindLineError(int l);
+	void      GoToError(const ErrorInfo& f);
+	void      GoToError(ArrayCtrl& a);
+	
+	bool      FindLineError(const String& ln, FindLineErrorCache& cache, ErrorInfo& f);
 	void      FindError();
 	void	  ClearErrorEditor(String file);
 
@@ -979,17 +1046,19 @@ public:
 	void      FindFolder();
 	void      FindSetStdDir(String n);
 	void      FindStdDir();
-	void      InsertWildcard(int c);
-	void      SerializeFf(Stream& s);
+	void      InsertWildcard(const char *s);
+	void      AddFoundFile(const String& fn, int ln, const String& line, int pos, int count);
 	bool      SearchInFile(const String& fn, const String& pattern,
-		                   bool wholeword, bool ignorecase, int& n);
+		                   bool wholeword, bool ignorecase, int& n, RegExp *regexp);
+	void      SyncFindInFiles();
 	void      ConstructFindInFiles();
 	void      SerializeFindInFiles(Stream& s);
 
 	void      SetupEditor(int font, String highlight, String fn);
 	void      SetupEditor();
 
-	void      Display();
+	void      DoDisplay();
+	void      ManageDisplayVisibility();
 
 	void      SetIcon();
 	bool      IsCppBaseFile();
@@ -1006,7 +1075,8 @@ public:
 	void      ClearTab();
 	void      ClearTabs();
 	void      CloseRest(EditorTabBar *tabs);
-	void      TabsLR(int d);
+	void      TabsLR( int jd );
+	void      TabsStackLR( int jd );
 
 	void      RefreshFrame(bool auto_disasm);
 	void      RefreshLine(int frame, bool auto_disasm);
@@ -1014,7 +1084,9 @@ public:
 	void      ResolveUvsConflict();
 
 	void      SetBar();
-
+	void      SetMenuBar();
+	void      SetToolBar();
+	
 	void      UpdateFormat(CodeEditor& editor);
 	void      UpdateFormat();
 	void      ReadHlStyles(ArrayCtrl& hlstyle);
@@ -1022,9 +1094,14 @@ public:
 	bool      OpenMainPackage();
 	void      NewMainPackage();
 
-	void      JumpToDefinition(const Array<CppItem>& scope, int q);
+	bool      GotoDesignerFile(const String& path, const String& scope, const String& name, int line);
+	void      JumpToDefinition(const Array<CppItem>& n, int q, const String& scope);
+	void      GotoFileAndId(const String& path, const String& id);
 	void      SearchTopics();
 	void      ShowTopics();
+	void      ShowTopicsWin();
+
+	String    GetIncludePath();
 
 	void      TopicBack();
 
@@ -1036,6 +1113,7 @@ public:
 		void  MacroGetLength(EscEscape& e);
 		void  MacroGetLineCount(EscEscape& e);
 		void  MacroGetLinePos(EscEscape& e);
+		void  MacroGetLineLength(EscEscape& e);
 		void  MacroGetCursor(EscEscape& e);
 		void  MacroGetLine(EscEscape& e);
 		void  MacroGetColumn(EscEscape& e);
@@ -1073,9 +1151,22 @@ public:
 		void  MacroClearConsole(EscEscape& e);
 		void  MacroEditFile(EscEscape& e);
 		void  MacroSaveCurrentFile(EscEscape& e);
-		void  MacroProjectDir(EscEscape& e);
 		void  MacroFileName(EscEscape& e);
-
+		void  MacroMainPackage(EscEscape& e);
+		void  MacroActivePackage(EscEscape& e);
+		void  MacroPackageDir(EscEscape& e);
+		void  MacroAssembly(EscEscape& e);
+		void  MacroBuildMethod(EscEscape& e);
+		void  MacroBuildMode(EscEscape& e);
+		void  MacroFlags(EscEscape& e);
+		void  MacroEcho(EscEscape& e);
+		void  MacroCloseFile(EscEscape& e);
+		void  MacroPackageFiles(EscEscape& e);
+		void  MacroAllPackages(EscEscape& e);
+		void  MacroTarget(EscEscape& e);
+	
+	String GetAndroidSdkPath();
+	
 	typedef   Ide CLASSNAME;
 
 	enum {
@@ -1085,6 +1176,14 @@ public:
 
 	Ide();
 	~Ide();
+
+
+// THIS IS SANDBOX FOR DEVELOPING NEW NAVIGATOR
+//	void CodeBrowser();
 };
+
+inline void ShowConsole() { if(TheIde()) ((Ide *)TheIde())->ShowConsole(); }
+
+void InstantSetup();
 
 #endif

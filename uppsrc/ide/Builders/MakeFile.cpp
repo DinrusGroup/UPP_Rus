@@ -86,15 +86,15 @@ void CppBuilder::AddMakeFile(MakeFile& makefile, String package,
 		if(is_shared && !win32)
 			flags << " -fPIC ";
 		flags << ' ' << Gather(pkg.option, config.GetKeys());
-		makefile.config << "CFLAGS =" << flags << "\n"
-			"CXXFLAGS =" << flags << "\n"
-			"LDFLAGS = " << (HasFlag("DEBUG") ? debug_link : release_link) << " $(LINKOPTIONS)\n"
+		makefile.config << "CFLAGS =" << Merge(" ", flags, c_options) << "\n"
+			"CXXFLAGS =" << Merge(" ", flags, cpp_options) << "\n"
+			"LDFLAGS = " << Merge(" ", common_link, HasFlag("DEBUG") ? debug_link : release_link)
+			             << " $(LINKOPTIONS)\n"
 			"LIBPATH =";
 		for(int i = 0; i < libpath.GetCount(); i++)
 			makefile.config << " -L" << GetMakePath(AdjustMakePath(GetHostPathQ(libpath[i])));
 		makefile.config << "\n"
 			"AR = ar -sr\n\n";
-		makefile.install << "\t-mkdir -p $(OutDir)\n";
 		Vector<String> lib;
 		String lnk;
 		lnk << "$(LINKER)";
@@ -105,7 +105,7 @@ void CppBuilder::AddMakeFile(MakeFile& makefile, String package,
 			if(!HasFlag("GUI"))
 				makefile.linkfiles << " -mconsole";
 		}
-		lnk << " -o $(OutFile)";
+		lnk << " -o \"$(OutFile)\"";
 		if(HasFlag("DEBUG") || HasFlag("DEBUG_MINIMAL") || HasFlag("DEBUG_FULL"))
 			lnk << " -ggdb";
 		else
@@ -123,7 +123,8 @@ void CppBuilder::AddMakeFile(MakeFile& makefile, String package,
 		<< GetMakePath(AdjustMakePath(String().Cat() << package << '/' << method << '-' << Join(x, "-") << '/')) << "\n"
 		<< macros << " = " << macdef << "\n";
 
-	makefile.install << "\t-mkdir -p $(" << outdir << ")\n";
+	makefile.install << " \\\n\t$(" << outdir << ")";
+	makefile.rules << "$(" << outdir << "):\n\tmkdir -p $(" << outdir << ")\n\n";
 
 	String libdep, libfiles;
 
@@ -162,6 +163,10 @@ void CppBuilder::AddMakeFile(MakeFile& makefile, String package,
 			bool isrc = (ext == ".rc" && HasFlag("WIN32"));
 			bool iscpp = (ext == ".cpp" || ext == ".cc" || ext == ".cxx");
 			bool isicpp = (ext == ".icpp");
+			if(ext == ".brc") {
+				isc = true;
+				fn << "c";
+			}
 			if(isc || isrc || iscpp || isicpp) {
 				String outfile;
 				outfile << makefile.outdir << AdjustMakePath(GetFileTitle(fn)) << (isrc ? "_rc" : "") << objext;
@@ -217,32 +222,35 @@ void CppBuilder::AddMakeFile(MakeFile& makefile, String package,
 */
 }
 
-Point CppBuilder::ExtractVersion()
+Point CppBuilder::ExtractVersion() const
 {
 	Point v = Point(Null, Null);
-	CParser p(version);
-	while(!p.IsEof()) {
-		if(p.IsNumber()) {
-			v.x = p.ReadNumber();
-			break;
+	try {
+		CParser p(version);
+		while(!p.IsEof()) {
+			if(p.IsNumber()) {
+				v.x = p.ReadNumber();
+				break;
+			}
+			p.GetChar();
+			p.Spaces();
 		}
-		p.GetChar();
-		p.Spaces();
-	}
-	while(!p.IsEof()) {
-		if(p.IsNumber()) {
-			v.y = p.ReadNumber();
-			break;
+		while(!p.IsEof()) {
+			if(p.IsNumber()) {
+				v.y = p.ReadNumber();
+				break;
+			}
+			p.GetChar();
+			p.Spaces();
 		}
-		p.GetChar();
-		p.Spaces();
 	}
+	catch(CParser::Error) {}
 	return v;
 }
 
 void CppBuilder::ShowTime(int count, int start_time)
 {
 	if(count)
-		PutConsole(NFormat("%d файл(-ов) сконпилирован(-о) за %s %d мсек/файл",
+		PutConsole(NFormat("%d file(s) compiled in %s %d msec/file",
 			count, GetPrintTime(start_time), msecs(start_time) / count));
 }

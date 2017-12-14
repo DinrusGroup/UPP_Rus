@@ -1,4 +1,4 @@
-description "Анимированный пример \"Привет, мир!\"\377";
+description "Animated Hello world example\377";
 
 uses
 	CtrlLib;

@@ -4,9 +4,9 @@
 #include <Core/Core.h>
 
 
-NAMESPACE_UPP
+namespace Upp {
 
-enum { ESC_VOID, ESC_NUMBER, ESC_ARRAY, ESC_MAP, ESC_LAMBDA };
+enum EscTypeKind { ESC_VOID, ESC_DOUBLE, ESC_ARRAY, ESC_MAP, ESC_LAMBDA, ESC_INT64 };
 
 String EscTypeName(int sv_type);
 
@@ -18,7 +18,7 @@ struct Esc;
 class EscValue : Moveable<EscValue> {
 	struct RefCount {
 		Atomic   refcount;
-		RefCount()              { AtomicWrite(refcount, 1); }
+		RefCount()              { refcount = 1; }
 	};
 
 	int              type;
@@ -29,6 +29,7 @@ class EscValue : Moveable<EscValue> {
 
 	union {
 		double         number;
+		int64          i64;
 		EscArray      *array;
 		EscMap        *map;
 		EscLambda     *lambda;
@@ -53,11 +54,15 @@ public:
 	bool IsVoid() const                          { return type == ESC_VOID; }
 	EscValue();
 
-	bool                   IsNumber() const      { return type == ESC_NUMBER; }
-	double                 GetNumber() const     { return IsNumber() ? number : 0; }
+	bool                   IsNumber() const      { return findarg(type, ESC_DOUBLE, ESC_INT64) >= 0; }
+	double                 GetNumber() const;
+	bool                   IsInt64() const       { return type == ESC_INT64; }
+	int64                  GetInt64() const;
 	bool                   IsInt() const;
 	int                    GetInt() const;
 	EscValue(double n);
+	EscValue(int64 n);
+	EscValue(int n);
 
 	bool                    IsArray() const      { return type == ESC_ARRAY; }
 	const Vector<EscValue>& GetArray() const;
@@ -87,8 +92,8 @@ public:
 	EscLambda&                           CreateLambda();
 
 
-	void    Escape(const char *method, Callback1<EscEscape&> escape);
-	void    Escape(const char *method, EscHandle *h, Callback1<EscEscape&> escape);
+	void    Escape(const char *method, Event<EscEscape&> escape);
+	void    Escape(const char *method, EscHandle *h, Event<EscEscape&> escape);
 	bool    HasNumberField(const char *id) const;
 	int     GetFieldInt(const char *id) const;
 
@@ -132,8 +137,8 @@ struct EscHandle {
 	void       Retain()        { AtomicInc(refcount); }
 	void       Release()       { if(AtomicDec(refcount) == 0) delete this; }
 
-	EscHandle()              { AtomicWrite(refcount, 0); }
-	virtual ~EscHandle()     {}
+	EscHandle()                { refcount = 0; }
+	virtual ~EscHandle()       {}
 };
 
 class EscLambda {
@@ -142,7 +147,7 @@ class EscLambda {
 	void     Retain()        { AtomicInc(refcount); }
 	void     Release()       { if(AtomicDec(refcount) == 0) delete this; }
 
-	EscLambda()                 { AtomicWrite(refcount, 1); varargs = false; handle = NULL; }
+	EscLambda()                 { refcount = 1; varargs = false; handle = NULL; }
 	~EscLambda()                { if(handle) handle->Release(); }
 
 	friend class EscValue;
@@ -153,7 +158,7 @@ public:
 	Vector<bool>          inout;
 	String                code;
 	EscHandle            *handle;
-	Callback1<EscEscape&> escape;
+	Event<EscEscape&> escape;
 	bool                  varargs;
 	String                filename;
 	int                   line;
@@ -184,6 +189,9 @@ struct Esc : public CParser {
 		SRVal()                    { lval = NULL; }
 		SRVal(const EscValue& v)   { lval = NULL; rval = v; }
 		SRVal(double n)            { lval = NULL; rval = n; }
+		SRVal(int64 n)             { lval = NULL; rval = n; }
+		SRVal(uint64 n)            { lval = NULL; rval = (int64)n; }
+		SRVal(bool n)              { lval = NULL; rval = (int64)n; }
 	};
 
 	ArrayMap<String, EscValue>& global;
@@ -215,9 +223,9 @@ struct Esc : public CParser {
 	EscValue   GetExp();
 
 	double Number(const EscValue& a, const char *oper);
-	int    Int(const EscValue& a, const char *oper);
+	int64  Int(const EscValue& a, const char *oper);
 	double Number(const SRVal& a, const char *oper);
-	int    Int(const SRVal& a, const char *oper);
+	int64  Int(const SRVal& a, const char *oper);
 
 	EscValue   MulArray(EscValue array, EscValue times);
 
@@ -283,7 +291,14 @@ struct EscEscape {
 };
 
 void Escape(ArrayMap<String, EscValue>& globals, const char *function, void (*escape)(EscEscape& e));
-void Escape(ArrayMap<String, EscValue>& globals, const char *function, Callback1<EscEscape&> escape);
+
+inline // resolve overloading with Function...
+void Escfn(ArrayMap<String, EscValue>& globals, const char *function, void (*escape)(EscEscape& e))
+{
+	return Escape(globals, function, escape);
+}
+
+void Escape(ArrayMap<String, EscValue>& globals, const char *function, Event<EscEscape&> escape);
 
 void Scan(ArrayMap<String, EscValue>& global, const char *code, const char *filename = "");
 
@@ -310,6 +325,6 @@ bool     IsTime(const EscValue& v);
 String   Expand(const String& doc, ArrayMap<String, EscValue>& global,
                 int oplimit = 50000, String (*format)(const Value& v) = StdFormat);
 
-END_UPP_NAMESPACE
+}
 
 #endif

@@ -34,23 +34,31 @@ QtfRichObject QtfEquation(const String &str);
 
 Image NativePathIconX(const char *path, bool folder, int flags = 0);
 
+class CParserPlus : public CParser {
+public:
+	CParserPlus(const char *ptr) : CParser(ptr) {}
+	String ReadIdPlus() throw(Error);
+};
+
 class EquationDraw {
 public:
 	EquationDraw();
-	Drawing Exp(CParser& p);
+	Drawing Exp(CParserPlus& p);
 	
 	static Drawing Text(String text, bool italic = true, int offsetX=0, int offsetY=0, double betw = 1);
 	
 private:
 	String ReplaceSymbols(String var);
-	Drawing Term(CParser& p, bool noBracket = false);	
-	String TermTrig(CParser& p);
-	Drawing Mul(CParser& p);
+	Drawing Term(CParserPlus& p, bool noBracket = false);	
+	String TermTrig(CParserPlus& p);
+	Drawing Mul(CParserPlus& p);
 	
 private:
 	static Drawing Bracket(Drawing &data);
 	static Drawing Sqrt(Drawing &right);
 	static Drawing Exponent(Drawing &right);
+	static Drawing Der(Drawing &data);
+	static Drawing Abs(Drawing &data);
 	static Drawing Integral(Drawing &data, Drawing &sub, Drawing &sup);
 	static Drawing Summat(Drawing &data, Drawing &sub, Drawing &sup);
 	static Drawing Exp(Drawing &data, Drawing &exp);
@@ -80,6 +88,8 @@ bool PrintImage(const Image &img, int x = 0, int y = 0, int width = Null, int he
 void DrawRectLine(Draw& w, int x, int y, int width, int height, int lineWidth, const Color &color);
 void DrawRectLine(Draw& w, Point &pos, Size &s, int lineWidth, const Color &color);
 void DrawRectLine(Draw& w, Rect &r, int lineWidth, const Color &color);
+
+int GetEditWidth(const String str);
 
 #endif
 #endif

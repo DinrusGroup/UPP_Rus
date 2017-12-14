@@ -11,29 +11,30 @@ using namespace LayoutKeys;
 
 void LayDes::EditBar(Bar& bar)
 {
-	bool islayout = currentlayout >= 0;
+	bool islayout = !IsNull(currentlayout);
 	bool iscursor = islayout && cursor.GetCount();
-	bar.Add(iscursor, "Вырезать", CtrlImg::cut(), THISBACK(Cut))
+	bar.Add(iscursor, "Cut", CtrlImg::cut(), THISBACK(Cut))
 	   .Key(K_SHIFT_DELETE)
 	   .Key(K_CTRL_X);
-	bar.Add(iscursor, "Копировать", CtrlImg::copy(), THISBACK(Copy))
+	bar.Add(iscursor, "Copy", CtrlImg::copy(), THISBACK(Copy))
 	   .Key(K_CTRL_INSERT)
 	   .Key(K_CTRL_C);
-	bar.Add(islayout, "Вставить", CtrlImg::paste(), THISBACK(Paste))
+	bar.Add(islayout, "Paste", CtrlImg::paste(), THISBACK(Paste))
 	   .Key(K_SHIFT_INSERT)
 	   .Key(K_CTRL_V);
-	bar.Add(iscursor, "Удалить", CtrlImg::remove(), THISBACK(Delete))
+	bar.Add(iscursor, "Delete", CtrlImg::remove(), THISBACK(Delete))
 	   .Key(K_DELETE);
 	bar.Add(iscursor, AK_DUPLICATESEL, LayImg::Duplicate(), THISBACK(Duplicate));
 	bar.Add(iscursor, AK_MATRIXDUPLICATE, THISBACK(Matrix));
-	bar.Add(islayout, "Выбрать все", THISBACK(SelectAll))
+	bar.Add(islayout, "Select all", CtrlImg::select_all(), THISBACK(SelectAll))
 	   .Key(K_CTRL_A);
 	bar.Add(islayout, AK_VISGEN, LayImg::Members(), THISBACK(VisGen));
+	bar.Add(islayout, AK_FINDSOURCE, IdeCommonImg::Cpp(), THISBACK(GotoUsing));
 	bar.Separator();
-	bar.Add(islayout && CurrentLayout().IsUndo(), "Откат", CtrlImg::undo(), THISBACK(Undo))
+	bar.Add(islayout && CurrentLayout().IsUndo(), "Undo", CtrlImg::undo(), THISBACK(Undo))
 	   .Key(K_ALT_BACKSPACE)
 	   .Key(K_CTRL_Z);
-	bar.Add(islayout && CurrentLayout().IsRedo(), "Накат", CtrlImg::redo(), THISBACK(Redo))
+	bar.Add(islayout && CurrentLayout().IsRedo(), "Redo", CtrlImg::redo(), THISBACK(Redo))
 	   .Key(K_SHIFT|K_ALT_BACKSPACE)
 	   .Key(K_SHIFT_CTRL_Z);
 	bar.MenuSeparator();
@@ -45,14 +46,15 @@ void LayDes::EditBar(Bar& bar)
 
 void LayDes::MoveBar(Bar& bar)
 {
-	bool iscursor = currentlayout >= 0 && cursor.GetCount();
+	bool iscursor = !IsNull(currentlayout) && cursor.GetCount();
 	bar.Add(iscursor, AK_MOVEUP, LayImg::MoveUp(), THISBACK(MoveUp));
 	bar.Add(iscursor, AK_MOVEDOWN, LayImg::MoveDown(), THISBACK(MoveDown));
+	bar.Add(cursor.GetCount() >= 2, AK_SORTITEMS, LayImg::SortItems(), THISBACK(SortItems));
 }
 
 void LayDes::AlignBar(Bar& bar)
 {
-	bool islayout = currentlayout >= 0;
+	bool islayout = !IsNull(currentlayout);
 	bool iscursor = islayout && cursor.GetCount();
 	bool group = islayout && cursor.GetCount() > 1;
 	bar.Add(iscursor, AK_HCENTERLAY, LayImg::HorzCenter(), THISBACK1(Align, A_HORZCENTER));
@@ -70,7 +72,7 @@ void LayDes::AlignBar(Bar& bar)
 
 void LayDes::SizeBar(Bar& bar)
 {
-	bool islayout = currentlayout >= 0;
+	bool islayout = !IsNull(currentlayout);
 	bool iscursor = islayout && cursor.GetCount();
 	bool group = islayout && cursor.GetCount() > 1;
 	bar.Add(group, AK_SAMEWIDTH, LayImg::SameWidth(), THISBACK1(Align, A_SAMEWIDTH));
@@ -83,11 +85,11 @@ void LayDes::SizeBar(Bar& bar)
 
 void LayDes::SpringBar(Bar& bar)
 {
-	bool islayout = currentlayout >= 0;
+	bool islayout = !IsNull(currentlayout);
 	bool iscursor = islayout && cursor.GetCount();
 	int va = -1;
 	int ha = -1;
-	if(currentlayout >= 0 && cursor.GetCount()) {
+	if(!IsNull(currentlayout) && cursor.GetCount()) {
 		LayoutData& l = CurrentLayout();
 		Ctrl::LogPos p = l.item[cursor.Top()].pos;
 		ha = p.x.GetAlign();
@@ -157,15 +159,39 @@ void LayDes::Settings()
 	SyncItems();
 }
 
+void LayDes::GotoUsing()
+{
+	if(IsNull(currentlayout))
+		return;
+	
+	String lid = "With" + CurrentLayout().name;
+	const Workspace& wspc = GetIdeWorkspace();
+	for(int i = 0; i < wspc.GetCount(); i++) { // find lowest file time
+		const Package& pk = wspc.GetPackage(i);
+		String n = wspc[i];
+		for(int i = 0; i < pk.GetCount(); i++) {
+			String path = SourcePath(n, pk.file[i]);
+			if(IsCPPFile(path) || IsHFile(path)) {
+				const PPFile& f = GetPPFile(NormalizeSourcePath(path));
+				if(FindIndex(f.keywords, lid) >= 0) {
+					IdeGotoFileAndId(path, lid);
+					return;
+				}
+			}
+		}
+	}
+	Exclamation("No code found using this layout.");
+}
+
 void LayDes::OptionBar(Bar& bar)
 {
-	bar.Add("Использовать сетку", LayImg::Grid(), THISBACK(ToggleGrid))
+	bar.Add("Use grid", LayImg::Grid(), THISBACK(ToggleGrid))
 	   .Check(usegrid);
-	bar.Add("Игнорировать мин. размер", LayImg::MinSize(), THISBACK(ToggleMinSize))
+	bar.Add("Ignore min size", LayImg::MinSize(), THISBACK(ToggleMinSize))
 	   .Check(ignoreminsize);
 	bar.Add("Resize with springs", LayImg::SizeSpring(), THISBACK(ToggleSizeSpring))
 	   .Check(sizespring);
-	bar.Add("Настройки..", THISBACK(Settings));
+	bar.Add("Settings..", THISBACK(Settings));
 }
 
 void LayDes::MainToolBar(Bar& bar)
@@ -187,24 +213,24 @@ void LayDes::MainToolBar(Bar& bar)
 
 void LayDes::ItemBar(Bar& bar)
 {
-	bar.Add("Положение", THISBACK(MoveBar));
-	bar.Add("Разметка", THISBACK(AlignBar));
-	bar.Add("Размер", THISBACK(SizeBar));
+	bar.Add("Position", THISBACK(MoveBar));
+	bar.Add("Alignment", THISBACK(AlignBar));
+	bar.Add("Size", THISBACK(SizeBar));
 	bar.Add("Springs", THISBACK(SpringBar));
 }
 
 void LayDes::MainMenuBar(Bar& bar)
 {
-	bar.Add("Правка", THISBACK(EditBar));
-	bar.Add("Пункт", THISBACK(ItemBar));
-	bar.Add("Опции", THISBACK(OptionBar));
+	bar.Add("Edit", THISBACK(EditBar));
+	bar.Add("Item", THISBACK(ItemBar));
+	bar.Add("Options", THISBACK(OptionBar));
 }
 
 void LayDes::EditMenu(Bar& bar)
 {
 	EditBar(bar);
 	bar.Separator();
-	bar.Add("Пункт", THISBACK(ItemBar));
+	bar.Add("Item", THISBACK(ItemBar));
 	bar.Separator();
 	OptionBar(bar);
 }
@@ -245,11 +271,18 @@ int VariableFilter(int c)
 	return iscid(c) || c == '.' || c == '[' || c == ']' ? c : 0;
 }
 
+bool LayDes::HotKey(dword key)
+{
+	return MenuBar::Scan(list.WhenBar, key) ||
+	       MenuBar::Scan(item.WhenBar, key) ||
+	       StaticRect::HotKey(key);
+}
+
 LayDes::LayDes()
 {
 	charset = CHARSET_UTF8;
 
-	currentlayout = -1;
+	currentlayout = Null;
 	draghandle = -1;
 
 	usegrid = true;
@@ -264,7 +297,10 @@ LayDes::LayDes()
 	km.d = this;
 	km.Add(lsplit.SizePos());
 	lsplit.Horz(rsplit, *this).SetPos(2000);
-	rsplit.Vert(layoutlist, isplit);
+	rsplit.Vert(layouts, isplit);
+	int cy = EditString::GetStdHeight();
+	layouts.Add(search.HSizePos().TopPos(0, cy));
+	layouts.Add(list.HSizePos().VSizePos(cy, 0));
 	rsplit.SetPos(1000);
 	isplit.Vert(item, property);
 	twsplit.Height(EditField::GetStdHeight() + 4);
@@ -280,11 +316,14 @@ LayDes::LayDes()
 	type.SetFilter(TypeFilter);
 	variable.SetFilter(VariableFilter);
 
-	item.AddColumn("Тип", 20).Margin(0);
-	item.AddColumn("Перем / надп", 10).Margin(0);
+	item.AddColumn("Type", 20).Margin(0);
+	item.AddColumn("Var / lbl", 10).Margin(0);
 	item.WhenLeftClick = THISBACK(ItemClick);
 	item.NoWantFocus();
 	item.WhenBar = THISBACK(MoveBar);
+
+	item.WhenDrag = THISBACK(Drag);
+	item.WhenDropInsert = THISBACK(DnDInsert);
 
 	SetFrame(toolbar);
 	AddFrame(InsetFrame());
@@ -292,12 +331,20 @@ LayDes::LayDes()
 
 	sb.WhenScroll = THISBACK(Scroll);
 
-	layoutlist.NoHeader().NoGrid();
-	layoutlist.AddColumn();
-	layoutlist.WhenCursor = THISBACK(LayoutCursor);
-	layoutlist.WhenBar = THISBACK(LayoutMenu);
-	layoutlist.WhenLeftDouble = THISBACK(RenameLayout);
-	layoutlist.NoWantFocus();
+	list.NoHeader().NoGrid();
+	list.AddKey();
+	list.AddColumn();
+	list.WhenCursor = THISBACK(LayoutCursor);
+	list.WhenBar = THISBACK(LayoutMenu);
+	list.WhenLeftDouble = THISBACK(RenameLayout);
+	list.NoWantFocus();
+	
+	list.WhenDrag = THISBACK(DragLayout);
+	list.WhenDropInsert = THISBACK(DnDInsertLayout);
+	
+	search.NullText("Search (Ctrl+F)");
+	search <<= THISBACK(Search);
+	search.SetFilter(CharFilterToUpper);
 
 	NoWantFocus();
 	item.NoWantFocus();
@@ -306,7 +353,7 @@ LayDes::LayDes()
 
 	SyncUsc();
 
-	CtrlLayoutOKCancel(matrix, "ДУбликат матрицы");
+	CtrlLayoutOKCancel(matrix, "Matrix duplicate");
 	matrix.nx.MinMax(1, 32);
 	matrix.nx <<= 2;
 	matrix.dx.MinMax(1, 32);
@@ -316,7 +363,7 @@ LayDes::LayDes()
 	matrix.dy.MinMax(1, 32);
 	matrix.dy <<= 0;
 
-	CtrlLayoutOKCancel(setting, "Настройки");
+	CtrlLayoutOKCancel(setting, "Settings");
 	setting.gridx.MinMax(1, 32);
 	setting.gridx <<= 4;
 	setting.gridy.MinMax(1, 32);
@@ -334,7 +381,7 @@ LayDesigner *CreateLayDesigner(const char *filename, byte charset, const char *c
 }
 
 void LayUscClean();
-bool LayUscParse(CParser& p) throw(CParser::Error);
+bool LayUscParse(CParser& p);
 void SerializeLayEditPos(Stream& s);
 
 bool IsLayFile(const char *path)
@@ -343,6 +390,7 @@ bool IsLayFile(const char *path)
 }
 
 struct LayDesModule : public IdeModule {
+	virtual String       GetID() { return "LayDesModule"; }
 	virtual void CleanUsc() {
 		LayUscClean();
 	}
@@ -357,7 +405,7 @@ struct LayDesModule : public IdeModule {
 			LayDesigner *d = CreateLayDesigner(path, cs, "laydes-ctrl");
 			return d;
 		}
-		return false;
+		return NULL;
 	}
 	virtual void Serialize(Stream& s) {
 		int version = 0;

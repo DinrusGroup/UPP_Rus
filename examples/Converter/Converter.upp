@@ -1,4 +1,4 @@
-description "Преобразователь для метрических единиц и единиц США (метры / футы и т.д.)\377";
+description "Converts metric units and U.S. units (meters / feets etc..)";
 
 uses
 	CtrlLib;

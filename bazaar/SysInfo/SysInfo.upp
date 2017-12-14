@@ -4,18 +4,29 @@ uses
 	Core,
 	Functions4U;
 
-library(WIN32) "psapi gdi32 vfw32 oleaut32 wbemuuid iphlpapi PowrProf";
+library(WIN32) "ws2_32 psapi gdi32 vfw32 oleaut32 iphlpapi PowrProf netapi32 wbemuuid";
 
-library(!WIN32) "Xtst X11 ";
+library(POSIX | LINUX | FREEBSD) X11;
+
+library(POSIX | NO_XTEST) ;
+
+library(POSIX) Xtst;
 
 options(MSC) "/D PSAPI_VERSION=1";
 
 file
-	SysInfo.cpp,
 	SysInfo.h,
+	SysInfo_in.h,
+	SysInfo.cpp,
+	OS.cpp,
 	srcdoc.tpp,
-	srcimp.tpp,
+	ScreenGrab.cpp,
+	MouseKey.cpp,
+	CPUSpeed.cpp,
+	Battery.cpp,
+	srcdoc.tpp,
 	src.tpp,
+	srcimp.tpp,
 	SysInfo.t,
-	License.txt;
+	Copying;
 

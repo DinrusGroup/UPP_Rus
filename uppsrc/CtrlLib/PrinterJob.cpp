@@ -13,7 +13,7 @@
 
 #endif
 
-NAMESPACE_UPP
+namespace Upp {
 
 #ifdef GUI_WIN
 
@@ -49,7 +49,7 @@ PrinterJob::~PrinterJob()
 
 bool PrinterJob::Execute0(bool dodlg)
 {
-	pdlg = new Win32PrintDlg_;
+	pdlg.Create<Win32PrintDlg_>();
 	PRINTDLG& dlg = *pdlg;
 	dlg.Flags = PD_DISABLEPRINTTOFILE|PD_NOSELECTION|PD_HIDEPRINTTOFILE|PD_RETURNDEFAULT;
 	dlg.nFromPage = current;
@@ -58,7 +58,7 @@ bool PrinterJob::Execute0(bool dodlg)
 	dlg.nMaxPage = to;
 	if(from != to)
 		dlg.Flags |= PD_ALLPAGES;
-	dlg.hwndOwner = GetActiveWindow();
+	dlg.hwndOwner = 0;
 	dlg.Flags |= PD_RETURNDEFAULT;
 	dlg.nCopies = 1;
 	if(!PrintDlg(&dlg)) return false;
@@ -67,31 +67,46 @@ bool PrinterJob::Execute0(bool dodlg)
 		pDevMode->dmOrientation = landscape ? DMORIENT_LANDSCAPE : DMORIENT_PORTRAIT;
 		::GlobalUnlock(dlg.hDevMode);
 	}
-	HDC hdc;
+	int copies = 1;
 	if(dodlg) {
-		dlg.Flags = PD_DISABLEPRINTTOFILE|PD_NOSELECTION|PD_HIDEPRINTTOFILE|PD_RETURNDC;
+		dlg.Flags = PD_DISABLEPRINTTOFILE|PD_NOSELECTION|PD_HIDEPRINTTOFILE;
 		Vector< Ptr<Ctrl> > disabled = DisableCtrls(Ctrl::GetTopCtrls());
 		bool b = PrintDlg(&dlg);
 		EnableCtrls(disabled);
 		if(!b) return false;
-		hdc = dlg.hDC;
+		copies = dlg.nCopies;
+		dlg.nCopies = 1; // because of buggy drivers for certain printers, we need to workaround copies problem
+		if(dlg.hDevMode) {
+			DEVMODE *pDevMode = (DEVMODE*)::GlobalLock(dlg.hDevMode);
+			if(pDevMode->dmFields & DM_COPIES)
+				copies = max((WORD)pDevMode->dmCopies, (WORD)copies);
+			pDevMode->dmCopies = 1; // always set number of copies to 1 and deal with it by sending multiple pages to printer
+			::GlobalUnlock(dlg.hDevMode);
+		}
 	}
-	else {
+	HDC hdc = NULL;
+	if(dlg.hDevNames) {
 		DEVNAMES *p = (DEVNAMES *)::GlobalLock(dlg.hDevNames);
 		const char *driver = (const char *)p + p->wDriverOffset;
 		const char *device = (const char *)p + p->wDeviceOffset;
-		if(dlg.hDevMode) {
+		if(dlg.hDevMode && dlg.hDevNames) {
 			DEVMODE *pDevMode = (DEVMODE*)::GlobalLock(dlg.hDevMode);
 			hdc = CreateDC(driver, device, NULL, pDevMode);
 			::GlobalUnlock(dlg.hDevMode);
 		}
 		else
 			hdc = CreateDC(driver, device, NULL, NULL);
+		::GlobalUnlock(dlg.hDevNames);
 	}
-	if(dlg.hDevMode)
+	if(dlg.hDevMode) {
 		::GlobalFree(dlg.hDevMode);
-	if(dlg.hDevNames)
+		dlg.hDevMode = NULL;
+	}
+	if(dlg.hDevNames) {
 		::GlobalFree(dlg.hDevNames);
+		dlg.hDevNames = NULL;
+	}
+		
 	if(hdc) {
 		draw = new PrintDraw(hdc, Nvl(name, Ctrl::GetAppName()));
 		page.Clear();
@@ -99,10 +114,9 @@ bool PrinterJob::Execute0(bool dodlg)
 			dlg.nFromPage = dlg.nMinPage;
 			dlg.nToPage = dlg.nMaxPage;
 		}
-		for(int c = 0; c < ((dlg.Flags & PD_COLLATE) ? dlg.nCopies : 1); c++)
+		for(int n = 0; n < copies; n++)
 			for(int i = dlg.nFromPage - 1; i <= dlg.nToPage - 1; i++)
-				for(int c = 0; c < ((dlg.Flags & PD_COLLATE) ? 1 : dlg.nCopies); c++)
-					page.Add(i);
+				page.Add(i);
 		return true;
 	}
 	return false;
@@ -140,112 +154,13 @@ PrinterJob& PrinterJob::CurrentPage(int i)
 
 #endif
 
-#ifdef GUI_X11
+#ifdef PLATFORM_X11
 
-String System(const char *cmd, const String& in)
-{
-	String ofn = GetTempFileName();
-	String ifn = GetTempFileName();
-	SaveFile(ifn, in);
-	String c = cmd;
-	c << " >" << ofn;
-	if(in.GetCount())
-		c << " <" << ifn;
-	system(c);
-	String q = LoadFile(ofn);
-	FileDelete(ofn);
-	FileDelete(ifn);
-	return q;
-}
-
-String System(const char *cmd)
-{
-	return System(cmd, Null);
-}
-
-struct PrinterDlg : WithPrinterLayout<TopWindow> {
-	void FillOpt(const String& s, const char *id, DropList& dl);
-	void SyncPrinterOptions();
-
-	typedef PrinterDlg CLASSNAME;
-
-	PrinterDlg();
-};
-
-void PrinterDlg::FillOpt(const String& s, const char *id, DropList& dl)
-{
-	int a = s.Find('/');
-	int b = s.Find(':');
-	if(a > 0 && b > a) {
-		String opt = ToLower(s.Mid(0, a));
-		if(opt == id) {
-			Vector<String> v = Split(~s + b + 1, ' ');
-			dl.Enable();
-			for(int i = 0; i < v.GetCount(); i++) {
-				String o = v[i];
-				if(o[0] == '*') {
-					o = o.Mid(1);
-					dl <<= o;
-				}
-				dl.Add(o);
-			}
-		}
-	}
-}
-
-void PrinterDlg::SyncPrinterOptions()
-{
-	Vector<String> l = Split(System("lpoptions -l -d " + String(~printer)), '\n');
-	paper.Disable();
-	paper.Clear();
-	slot.Disable();
-	slot.Clear();
-	for(int i = 0; i < l.GetCount(); i++) {
-		FillOpt(l[i], "pagesize", paper);
-		FillOpt(l[i], "inputslot", slot);
-	}
-}
-
-PrinterDlg::PrinterDlg()
-{
-	CtrlLayoutOKCancel(*this, "Print");
-	printer <<= THISBACK(SyncPrinterOptions);
-	npage.Add(1);
-	npage.Add(2);
-	npage.Add(4);
-	npage.Add(6);
-	npage.Add(9);
-	npage.Add(16);
-	npage <<= 1;
-	copies <<= 1;
-	landscape <<= 0;
-	range <<= 0;
-	Vector<String> l = Split(System("lpstat -a"), '\n');
-	for(int i = 0; i < l.GetCount(); i++) {
-		Vector<String> w = Split(l[i], ' ');
-		if(w.GetCount())
-			printer.Add(w[0]);
-	}
-	String h = System("lpstat -d");
-	int q = h.Find(':');
-	if(q >= 0) {
-		String p = h.Mid(q + 1);
-		if(printer.HasKey(p)) {
-			printer <<= p;
-			SyncPrinterOptions();
-			return;
-		}
-	}
-	if(printer.GetCount()) {
-		printer.SetIndex(0);
-		SyncPrinterOptions();
-	}
-}
-
-
-struct {
+struct PageSizeName {
 	const char *name;
 	int   cx, cy;
+	
+	Size  GetDots() const { return Size(6000 * cx / 254, 6000 * cy / 254); }
 }
 static const PageName2Size[] = {
 	{ "A0", 841, 1189 },
@@ -280,10 +195,148 @@ static const PageName2Size[] = {
 	{ "Tabloid", 279, 432 }
 };
 
-
-Size PrinterJob::GetDefaultPageSize()
+const PageSizeName *FindPageSize(const String& name)
 {
-	static const char PageSize[] = "Размер Страницы:";
+	for(int i = 0; i < __countof(PageName2Size); i++)
+		if(PageName2Size[i].name == name)
+			return &PageName2Size[i];
+	return NULL;
+}
+
+String System(const char *cmd, const String& in)
+{
+	String ofn = GetTempFileName();
+	String ifn = GetTempFileName();
+	SaveFile(ifn, in);
+	String c = cmd;
+	c << " >" << ofn;
+	if(in.GetCount())
+		c << " <" << ifn;
+	String q;
+	if(system(c) >= 0)
+		q = LoadFile(ofn);
+	FileDelete(ofn);
+	FileDelete(ifn);
+	return q;
+}
+
+String System(const char *cmd)
+{
+	return System(cmd, Null);
+}
+
+class PrinterDlg : public WithPrinterLayout<TopWindow> {
+	typedef PrinterDlg CLASSNAME;
+	
+public:
+	void FillOpt(const String& s, const char *id, DropList& dl, bool pgsz);
+	void SyncPrinterOptions();
+
+	PrinterDlg();
+	bool IsCanceled();
+
+private:
+	void StandardizePrinterName(String& printerName);
+	void OnOK();
+	
+private:
+	bool canceled;
+};
+
+void PrinterDlg::FillOpt(const String& s, const char *id, DropList& dl, bool pgsz)
+{
+	int a = s.Find('/');
+	int b = s.Find(':');
+	if(a > 0 && b > a) {
+		String opt = ToLower(s.Mid(0, a));
+		if(opt == id) {
+			Vector<String> v = Split(~s + b + 1, ' ');
+			dl.Enable();
+			for(int i = 0; i < v.GetCount(); i++) {
+				String o = v[i];
+				if(o[0] == '*') {
+					o = o.Mid(1);
+					dl <<= o;
+				}
+				if(!pgsz || FindPageSize(o))
+					dl.Add(o);
+			}
+		}
+	}
+}
+
+void PrinterDlg::SyncPrinterOptions()
+{
+	Vector<String> l = Split(System("lpoptions -d " + String(~printer) + " -l"), '\n');
+	paper.Disable();
+	paper.Clear();
+	slot.Disable();
+	slot.Clear();
+	for(int i = 0; i < l.GetCount(); i++) {
+		FillOpt(l[i], "pagesize", paper, true);
+		FillOpt(l[i], "inputslot", slot, false);
+	}
+}
+
+PrinterDlg::PrinterDlg() : canceled(true)
+{
+	CtrlLayoutOKCancel(*this, "Print");
+	printer <<= THISBACK(SyncPrinterOptions);
+	ok <<= THISBACK(OnOK);
+	npage.Add(1);
+	npage.Add(2);
+	npage.Add(4);
+	npage.Add(6);
+	npage.Add(9);
+	npage.Add(16);
+	npage <<= 1;
+	copies <<= 1;
+	landscape <<= 0;
+	range <<= 0;
+	Vector<String> l = Split(System("lpstat -a"), '\n');
+	for(int i = 0; i < l.GetCount(); i++) {
+		Vector<String> w = Split(l[i], ' ');
+		if(w.GetCount())
+			printer.Add(w[0]);
+	}
+	String h = System("lpstat -d");
+	int q = h.Find(':');
+	if(q >= 0) {
+		String p = h.Mid(q + 1);
+		StandardizePrinterName(p);
+		if(printer.HasKey(p)) {
+			printer <<= p;
+			SyncPrinterOptions();
+			return;
+		}
+	}
+	if(printer.GetCount()) {
+		printer.SetIndex(0);
+		SyncPrinterOptions();
+	}
+}
+
+bool PrinterDlg::IsCanceled()
+{
+	return canceled;
+}
+
+void PrinterDlg::StandardizePrinterName(String& printerName)
+{
+	printerName.Replace(" ", "");
+	printerName.Replace("\r", "");
+	printerName.Replace("\n", "");
+}
+
+void PrinterDlg::OnOK()
+{
+	canceled = false;
+	Close();
+}
+
+Size PrinterJob::GetDefaultPageSize(String *name)
+{
+	static const char PageSize[] = "Page Size:";
 	Size sz(6000 * 210 / 254, 6000 * 297 / 254);
 
 	//default printer properties
@@ -302,13 +355,13 @@ Size PrinterJob::GetDefaultPageSize()
 			if (len < 0) len = dpp[i].GetLength();
 			len -= pos;
 			//page name
-			String pn = dpp[i].Mid(pos, len);
-			for (int p = 0; p < __countof(PageName2Size); p++){
-				if (pn == PageName2Size[p].name){
-					sz.cx = 6000 * PageName2Size[p].cx / 254;
-					sz.cy = 6000 * PageName2Size[p].cy / 254;
-					return sz;
-				}
+			String nm = dpp[i].Mid(pos, len);
+			if(name)
+				*name = nm;
+			const PageSizeName *p = FindPageSize(nm);
+			if(p) {
+				sz = p->GetDots();
+				return sz;
 			}
 		}
 	}
@@ -320,28 +373,39 @@ PrinterJob::PrinterJob(const char *_name)
 {
 	name = _name;
 	landscape = false;
-	from = to = 1;
-	current = 1;
+	from = to = 0;
+	current = 0;
 	pgsz = GetDefaultPageSize();
+	dlgSuccess = false;
 }
 
 PrinterJob::~PrinterJob()
 {
 }
 
-bool PrinterJob::Execute0(bool dodlg)
+bool PrinterJob::Execute0()
 {
 	PrinterDlg dlg;
 	dlg.from <<= from + 1;
 	dlg.to <<= to + 1;
 	dlg.from.Min(from + 1).Max(to + 1);
 	dlg.to.Min(from + 1).Max(to + 1);
-	if(dodlg)
-		if(dlg.Run() != IDOK)
-			return false;
+	dlg.from.Enable(from != to);
+	dlg.to.Enable(from != to);
+	dlg.range.EnableCase(1, from != to);
+	dlg.range.EnableCase(2, from != to);
+	String h;
+	GetDefaultPageSize(&h);
+	h.IsEmpty() ? dlg.paper <<= "A4" : dlg.paper <<= h;
+	
+	dlg.Run();
+	if(dlg.IsCanceled())
+		return false;
+	
 	options.Clear();
-	options << " -d " << ~dlg.printer;
-	options << " -o media=" << ~dlg.paper << "," << ~dlg.slot;
+	options << "-d " << ~dlg.printer;
+	options << " -o media=";
+	dlg.paper.GetIndex() < 0 ? options << ~dlg.slot : options << ~dlg.paper << "," << ~dlg.slot;
 	if(dlg.landscape)
 		options << " -o landscape";
 	options << " -o number-up=" << ~dlg.npage;
@@ -363,34 +427,41 @@ bool PrinterJob::Execute0(bool dodlg)
 		break;
 	}
 	pgsz = Size(5100, 6600);
-	for(int i = 0; i < __countof(PageName2Size); i++)
-		if((String)~dlg.paper == PageName2Size[i].name) {
-			pgsz.cx = 6000 * PageName2Size[i].cx / 254;
-			pgsz.cy = 6000 * PageName2Size[i].cy / 254;
-		}
+
+	const PageSizeName *p = FindPageSize(~dlg.paper);
+	if(p)
+		pgsz = p->GetDots();
+
 	return true;
 }
 
 bool PrinterJob::Execute()
 {
-	return Execute0(true);
+	dlgSuccess = Execute0();
+	return dlgSuccess;
 }
 
 struct PrinterDraw : PdfDraw {
 	String options;
-
-	PrinterDraw(Size sz) : PdfDraw(sz) {}
+	bool canceled;
+	
+	PrinterDraw(Size sz) : PdfDraw(sz), canceled(true) {}
 	~PrinterDraw() {
-		System("lp " + options + " -", Finish());
+		if(!canceled && !IsEmpty()) {
+			System("lp " + options, Finish());
+		}
 	}
 };
 
 Draw& PrinterJob::GetDraw()
 {
-	PrinterDraw *pd = new PrinterDraw(pgsz);
-	pd->options = options;
-	draw = pd;
-	return *pd;
+	if(!draw) {
+		PrinterDraw *pd = new PrinterDraw(pgsz);
+		pd->canceled = !dlgSuccess;
+		pd->options = options;
+		draw = pd;
+	}
+	return *draw;
 }
 
 PrinterJob& PrinterJob::MinMaxPage(int minpage, int maxpage)
@@ -408,4 +479,4 @@ PrinterJob& PrinterJob::CurrentPage(int i)
 
 #endif
 
-END_UPP_NAMESPACE
+}

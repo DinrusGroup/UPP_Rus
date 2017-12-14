@@ -1,6 +1,6 @@
 #include "Draw.h"
 
-#if defined(_DEBUG) && 1
+#if 0
 
 _DBG_
 #include <plugin/png/png.h>
@@ -18,7 +18,7 @@ inline void LOGPNG(const char *name, const Image& m)
 
 #endif
 
-NAMESPACE_UPP
+namespace Upp {
 
 #define LTIMING(x) //  RTIMING(x)
 
@@ -56,7 +56,7 @@ void  ChDraw(Draw& w, int x, int y, int cx, int cy, const Image& img, const Rect
 {
 	LTIMING("ChDraw");
 	if(cx > 0 && cy > 0) {
-		#ifdef flagWINGL
+		#if defined(flagWINGL) || defined(flagLINUXGL)
 		w.DrawImage(x, y, cx, cy, img, src);
 		#else
 		ChImageMaker m;
@@ -183,6 +183,7 @@ Value StdChLookFn(Draw& w, const Rect& r, const Value& v, int op)
 	}
 	if(IsType<Image>(v)) {
 		Image img = v;
+		img = img;
 		Size isz = img.GetSize();
 		Size sz = r.GetSize();
 		Point p = img.GetHotSpot();
@@ -253,7 +254,11 @@ Value StdChLookFn(Draw& w, const Rect& r, const Value& v, int op)
 		}
 		if(op == LOOK_PAINT || op == LOOK_PAINTEDGE) {
 			LTIMING("ChPaint Image");
+			#if defined(flagWINGL) || defined(flagLINUXGL)
+			w.Offset(r.TopLeft());
+			#else
 			w.Clipoff(r);
+			#endif
 			Rect sr(p, p2);
 			Size sz2(isz.cx - sr.right, isz.cy - sr.bottom);
 			Rect r = RectC(p.x, p.y, sz.cx - sr.left - sz2.cx, sz.cy - sr.top - sz2.cy);
@@ -274,15 +279,17 @@ Value StdChLookFn(Draw& w, const Rect& r, const Value& v, int op)
 				ChDraw(w, r.right, p.y, sz2.cx, r.Height(), img,
 				       RectC(sr.right, p.y, sz2.cx, sr.Height()));
 				if(op == LOOK_PAINT) {
-					if(IsNull(r) || IsNull(sr))
+					if(IsNull(r) || IsNull(sr)) {
+						w.End();
 						return 1;
+					}
 					if(tile) {
 						LTIMING("Ch-Tiles");
 						LTIMING("Ch-Tiles");
 						Size sz;
 						sz.cx = (tile & 1 ? sr : r).GetWidth();
 						sz.cy = (tile & 2 ? sr : r).GetHeight();
-						#ifdef flagWINGL
+						#if defined(flagWINGL) || defined(flagLINUXGL)
 						DrawTiles(w, r, img, sz, sr);
 						#else
 						img = Rescale(img, sz, sr);
@@ -610,4 +617,4 @@ void ColoredOverride(Iml& target, Iml& source)
 	Override(target, source, true);
 }
 
-END_UPP_NAMESPACE
+}

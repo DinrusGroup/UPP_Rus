@@ -1,4 +1,5 @@
 Image GetDriveImage(char drive_style);
+Image GetFileIcon(const char *path, bool dir, bool force = false);
 
 void DrawFileName(Draw& w, int x, int y, int wcx, int cy, const WString& mname, bool isdir, Font font,
                   Color ink, Color extink, const WString& desc = Null, Font descfont = Null,
@@ -52,6 +53,7 @@ private:
 	bool           renaming;
 	bool           justname;
 	bool           accelkey;
+	bool           selectdir;
 
 	void        UpdateSelect();
 	void        Update();
@@ -60,6 +62,9 @@ private:
 
 	struct FileOrder;
 
+	using ColumnList::GetStdSize;
+	using ColumnList::Paint;
+
 protected:
 	enum {
 		TIMEID_STARTEDIT = ColumnList::TIMEID_COUNT,
@@ -67,7 +72,7 @@ protected:
 	};
 
 public:
-	Callback2<const String&, const String&> WhenRename;
+	Event<const String&, const String&> WhenRename;
 
 	void        StartEdit();
 	void        EndEdit();
@@ -107,6 +112,7 @@ public:
 	FileList&   Renaming(bool b = true)              { renaming = b; return *this; }
 	FileList&   JustName(bool b = true)              { justname = b; Refresh(); return *this; }
 	FileList&   AccelKey(bool b = true)              { accelkey = b; return *this; }
+	FileList&   SelectDir(bool b = true)             { selectdir = b; return *this; }
 
 	typedef FileList CLASSNAME;
 
@@ -115,36 +121,43 @@ public:
 };
 
 bool Load(FileList& list, const String& dir, const char *patterns, bool dirs = false,
-          Callback3<bool, const String&, Image&> WhenIcon = CNULL,
+          Event<bool, const String&, Image&> WhenIcon = Null,
           FileSystemInfo& filesystem = StdFileSystemInfo(), const String& search = String(),
           bool hidden = true, bool hiddenfiles = true, bool lazyicons = false);
 void SortByName(FileList& list);
 void SortByExt(FileList& list);
 
-class LazyFileIcons {
+#ifdef GUI_WIN
+// Helper class for lazy (using aux thread) evaluation of .exe icons in Win32
+class LazyExeFileIcons {
 	TimeCallback tm;
 	String       dir;
 	FileList    *list;
 	int          pos;
-	bool         quick;
-	int          ptime;
-	int          start;
 	Vector<int>  ndx;
-	Callback3<bool, const String&, Image&> WhenIcon;
+	Event<bool, const String&, Image&> WhenIcon;
 
-	void Do();
-	void Restart(int delay)                 { tm.KillSet(delay, callback(this, &LazyFileIcons::Do)); }
+	Mutex  mutex;
+
+	void   Do();
+	void   Restart(int delay)                 { tm.KillSet(delay, callback(this, &LazyExeFileIcons::Do)); }
+	String Path();
+	void   Done(Image img);
 
 public:
 	void ReOrder();
-	void Start(FileList& list_, const String& dir_, Callback3<bool, const String&, Image&> WhenIcon_);
+	void Start(FileList& list_, const String& dir_, Event<bool, const String&, Image&> WhenIcon_);
 };
+#endif
 
 String DirectoryUp(String& dir, bool basedir = false);
+
+String FormatFileSize(int64 n);
 
 class FileSel : public WithFileSelectorLayout<TopWindow> {
 public:
 	virtual bool Key(dword key, int count);
+	virtual void Activate();
 
 private:
 	SizeGrip    sizegrip;
@@ -170,11 +183,14 @@ protected:
 	Array<NetNode> netnode;
 #endif
 
+#ifdef GUI_WIN
+	LazyExeFileIcons  lazyicons;
+#endif
+
 	DisplayCtrl    preview_display;
 	Ctrl          *preview;
 	FileList       list;
 	ArrayCtrl      places;
-	LazyFileIcons  lazyicons;
 
 	enum {
 		OPEN, SAVEAS, SELECTDIR
@@ -186,6 +202,23 @@ protected:
 	bool        rdonly;
 	bool        bidname;
 	bool        appmodal;
+	bool        loaded;
+
+#ifdef _MULTITHREADED
+	static StaticMutex li_mutex;
+	static void      (*li_current)(const String& path, Image& result);
+	static String      li_path;
+	static Image       li_result;
+	static bool        li_running;
+	static int         li_pos;
+	TimeCallback       li_tm;
+	
+	static void LIThread();
+	String      LIPath();
+	void        StartLI();
+	void        DoLI();
+	void        ScheduleLI()                                 { li_tm.KillSet(0, THISBACK(DoLI)); }
+#endif
 
 	void        LoadNet();
 	void        SelectNet();
@@ -198,6 +231,7 @@ protected:
 	void        Plus();
 	void        Minus();
 	void        Toggle();
+	void        Reload();
 	void        PlusMinus(const char *title, bool sel);
 	void        Update();
 	void        FileUpdate();
@@ -216,15 +250,18 @@ protected:
 	void        InitSplitter();
 	String      GetMask();
 	void        GoToPlace();
-	void        AddPlaceRaw(const String& path, const Image& m, const String& name);
-
+	void        AddPlaceRaw(const String& path, const Image& m, const String& name, const char* group = NULL, int row = -1);
+	void        AddSystemPlaces(int row = -1);
 
 	using       WithFileSelectorLayout<TopWindow>::Title;
 
 	typedef FileSel CLASSNAME;
-public:
 
-	Callback3<bool, const String&, Image&> WhenIcon;
+public:
+	Event<bool, const String&, Image&> WhenIcon;
+#ifdef _MULTITHREADED
+	void (*WhenIconLazy)(const String& path, Image& result);
+#endif
 
 	void        Serialize(Stream& s);
 
@@ -277,9 +314,9 @@ public:
 	FileSel& Preview(Ctrl& ctrl);
 	FileSel& Preview(const Display& d);
 	FileSel& ClearPlaces();
-	FileSel& AddPlace(const String& path, const Image& m, const String& name);
-	FileSel& AddPlace(const String& path, const String& name);
-	FileSel& AddPlace(const String& path);
+	FileSel& AddPlace(const String& path, const Image& m, const String& name, const char* group = NULL, int row = -1);
+	FileSel& AddPlace(const String& path, const String& name, const char* group = NULL, int row = -1);
+	FileSel& AddPlace(const String& path, const char* group = NULL, int row = -1);
 	FileSel& AddPlaceSeparator();
 	FileSel& AddStandardPlaces();
 

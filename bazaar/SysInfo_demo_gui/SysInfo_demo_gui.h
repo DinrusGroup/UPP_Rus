@@ -36,6 +36,9 @@ struct WindowsList_ : WithWindowsList<StaticRect> {
 	}
 	void Fill();
 	void ButUpdate_Push();
+	void ButTopmost_Push();
+	void MenuCallback(Bar &bar);
+	void CbCopy();
 };
 struct ProcessList : WithProcessList<StaticRect> {
 
@@ -71,8 +74,10 @@ struct MouseKeyboard : WithMouseKeyboard<StaticRect> {
 	}
 	void Fill();
 	void OnButLock();
+#ifndef flagNO_XTEST
 	void OnButKey();
 	void OnButMouse();
+#endif
 	void OnTimer();
 	void OnRemoveAccents();
 };

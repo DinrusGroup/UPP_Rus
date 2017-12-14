@@ -1,18 +1,22 @@
 #include "Painter.h"
 
-#define LLOG(x) // DLOG(x)
+#define LLOG(x)   // DLOG(x)
 
-NAMESPACE_UPP
+namespace Upp {
 
-void Stroker::Init(double width, double miterlimit, double tolerance, int _linecap, int _linejoin)
+void Stroker::Init(double width, double miterlimit, double tolerance, int _linecap, int _linejoin, const Rect& preclip_)
 {
 	linecap = _linecap;
 	linejoin = _linejoin;
+	preclip = preclip_;
 	w2 = width / 2;
 	qmiter = miterlimit * w2;
+	if(!IsNull(preclip))
+		tw = 4 * max(qmiter, w2); // preclipping width
 	qmiter *= qmiter;
 	fid = acos(1 - tolerance / w2);
 	p0 = p1 = p2 = Null;
+	lines = 0;
 }
 
 void Stroker::Move(const Pointf& p)
@@ -35,9 +39,18 @@ void Stroker::Round(const Pointf& p, const Pointf& v1, const Pointf& v2, double 
 	}
 }
 
+inline bool Stroker::PreClipped(Pointf p2, Pointf p3)
+{
+	return p2.x + tw < preclip.left && p3.x + tw < preclip.left ||
+	       p2.x - tw > preclip.right && p3.x - tw > preclip.right ||
+           p2.y + tw < preclip.top && p3.y + tw < preclip.top ||
+	       p2.y - tw > preclip.bottom && p3.y - tw > preclip.bottom;
+}
+
 void Stroker::Line(const Pointf& p3)
 {
 	LLOG("Stroker::Line " << p3);
+	lines++;
 	if(IsNull(p1)) {
 		Move(p3);
 		return;
@@ -114,6 +127,7 @@ void Stroker::Line(const Pointf& p3)
 		PutLine(b1 + v1);
 		PutLine(b1);
 	}
+
 	p1 = p2;
 	v1 = v2;
 	o1 = o2;
@@ -140,6 +154,12 @@ void Stroker::Finish()
 {
 	if(IsNull(p1) || IsNull(p2) || IsNull(p0))
 		return;
+	LLOG("-- Finish " << p1 << " " << p2 << ", lines " << lines);
+	if(lines == 1 && !IsNull(preclip) && PreClipped(p1, p2)) {
+		LLOG("FINISH PRECLIPPED " << p1 << " - " << p2);
+		lines = 0;
+		return;
+	}
 	if(p2 == p0)
 		Line(p0 + v0);
 	else {
@@ -151,6 +171,8 @@ void Stroker::Finish()
 		Cap(p2, -v1, -o1, a1 + v1, b1 + v1);
 	}
 	p0 = p1 = p2 = Null;
+	lines = 0;
+	LLOG("* done");
 }
 
 void Stroker::End()
@@ -159,4 +181,4 @@ void Stroker::End()
 	PutEnd();
 }
 
-END_UPP_NAMESPACE
+}

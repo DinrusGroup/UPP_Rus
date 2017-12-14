@@ -27,11 +27,15 @@ inline bool operator==(const Ctrl::LogPos& x, const Value& v)   { return RichVal
 inline bool operator!=(const Value& v, const Ctrl::LogPos& x)   { return RichValue<Ctrl::LogPos>::Extract(v) != x; }
 inline bool operator!=(const Ctrl::LogPos& x, const Value& v)   { return RichValue<Ctrl::LogPos>::Extract(v) != x; }
 
+inline int  SgnCompare(const Ctrl::LogPos&, const Ctrl::LogPos&)  { return 0; }
+
+template<> int  PolyCompare(const Ctrl::LogPos&, const Value&) { return 0; }
+
 template<> String AsString(const Ctrl::LogPos& pos);
 
 template<> Stream& operator%(Stream& s, Ctrl::LogPos& pos);
-template<> void Xmlize(XmlIO xml, Ctrl::LogPos& pos);
-
+template<> void Xmlize(XmlIO& xml, Ctrl::LogPos& pos);
+template<> void Jsonize(JsonIO& jio, Ctrl::LogPos& pos);
 
 END_UPP_NAMESPACE
 

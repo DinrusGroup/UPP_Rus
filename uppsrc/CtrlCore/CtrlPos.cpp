@@ -1,6 +1,6 @@
 #include "CtrlCore.h"
 
-NAMESPACE_UPP
+namespace Upp {
 
 #define LLOG(x)    // DLOG(x)
 #define LTIMING(x) // RTIMING(x)
@@ -133,38 +133,14 @@ Size Ctrl::GetStdSize() const
 
 Size Ctrl::GetMaxSize() const
 {
-	return GetVirtualWorkArea().Size();
+	return GetVirtualScreenArea().Size();
 }
 
-#ifdef flagWINGL
 void Ctrl::SyncLayout(int force)
 {
 	GuiLock __;
-	Rect view = GetRect().Size();
-	overpaint = OverPaint();
-	
-	for(int i = 0; i < frame.GetCount(); i++) {
-		Frame& f = frame[i];
-		f.frame->FrameLayout(view);
-		if(view != f.view) {
-			f.view = view;
-		}
-		int q = f.frame->OverPaint();
-		if(q > overpaint) overpaint = q;
-	}
-	
-	for(Ctrl *q = GetFirstChild(); q; q = q->next) {
-		q->rect = q->CalcRect(rect, view);
-		q->SyncLayout();
-	}
-
-	State(LAYOUTPOS);
-	Layout();
-}
-#else
-void Ctrl::SyncLayout(int force)
-{
-	GuiLock __;
+	if(destroying)
+		return;
 	LLOG("SyncLayout " << Name() << " size: " << GetSize());
 	bool refresh = false;
 	Rect oview = GetView();
@@ -195,7 +171,6 @@ void Ctrl::SyncLayout(int force)
 	if(refresh)
 		RefreshFrame();
 }
-#endif
 
 int Ctrl::FindMoveCtrl(const VectorMap<Ctrl *, MoveCtrl>& m, Ctrl *x)
 {
@@ -209,59 +184,36 @@ Ctrl::MoveCtrl *Ctrl::FindMoveCtrlPtr(VectorMap<Ctrl *, MoveCtrl>& m, Ctrl *x)
 	return q >= 0 ? &m[q] : NULL;
 }
 
-#ifdef flagWINGL
 void Ctrl::SetPos0(LogPos p, bool _inframe)
 {
 	GuiLock __;
 	if(p == pos && inframe == _inframe) return;
 	if(parent) {
-		Rect from = GetRect().Size();
-		Top *top = GetTopRect(from, true)->top;
-		if(top) {
-			LTIMING("SetPos0 MoveCtrl");
-			pos = p;
-			inframe = _inframe;
-			Rect to = GetRect().Size();
-			UpdateRect0(false);
-			StateH(POSITION);
-			return;
-		}
-		RefreshFrame();
-	}
-	pos = p;
-	inframe = _inframe;
-	UpdateRect0(true);
-	StateH(POSITION);
-}
-#else
-void Ctrl::SetPos0(LogPos p, bool _inframe)
-{
-	GuiLock __;
-	if(p == pos && inframe == _inframe) return;
-	if(parent) {
-		Rect from = GetRect().Size();
-		Top *top = GetTopRect(from, true)->top;
-		if(top) {
-			LTIMING("SetPos0 MoveCtrl");
-			pos = p;
-			inframe = _inframe;
-			Rect to = GetRect().Size();
-			UpdateRect0();
-			GetTopRect(to, true);
-			MoveCtrl *s = FindMoveCtrlPtr(top->scroll_move, this);
-			if(s && s->from == from && s->to == to) {
-				s->ctrl = NULL;
-				LLOG("SetPos Matched " << from << " -> " << to);
+		if(!globalbackbuffer) {
+			Rect from = GetRect().Size();
+			Top *top = GetTopRect(from, true)->top;
+			if(top) {
+				LTIMING("SetPos0 MoveCtrl");
+				pos = p;
+				inframe = _inframe;
+				Rect to = GetRect().Size();
+				UpdateRect0();
+				GetTopRect(to, true);
+				MoveCtrl *s = FindMoveCtrlPtr(top->scroll_move, this);
+				if(s && s->from == from && s->to == to) {
+					s->ctrl = NULL;
+					LLOG("SetPos Matched " << from << " -> " << to);
+				}
+				else {
+					MoveCtrl& m = top->move.Add(this);
+					m.ctrl = this;
+					m.from = from;
+					m.to = to;
+					LLOG("SetPos Add " << UPP::Name(this) << from << " -> " << to);
+				}
+				StateH(POSITION);
+				return;
 			}
-			else {
-				MoveCtrl& m = top->move.Add(this);
-				m.ctrl = this;
-				m.from = from;
-				m.to = to;
-				LLOG("SetPos Add " << UPP::Name(this) << from << " -> " << to);
-			}
-			StateH(POSITION);
-			return;
 		}
 		RefreshFrame();
 	}
@@ -270,7 +222,6 @@ void Ctrl::SetPos0(LogPos p, bool _inframe)
 	UpdateRect();
 	StateH(POSITION);
 }
-#endif
 
 void Ctrl::UpdateRect0(bool sync)
 {
@@ -279,8 +230,11 @@ void Ctrl::UpdateRect0(bool sync)
 	if(parent)
 		rect = CalcRect(parent->GetRect(), parent->GetView());
 	else {
-		Rect r = GetWorkArea();
-		rect = CalcRect(r, r);
+		static Rect pwa;
+		ONCELOCK {
+			pwa = GetPrimaryWorkArea();
+		}
+		rect = CalcRect(pwa, pwa);
 	}
 	LLOG("UpdateRect0 " << Name() << " to " << rect);
 	LTIMING("UpdateRect0 SyncLayout");
@@ -389,10 +343,8 @@ Ctrl& Ctrl::SetFrame(int i, CtrlFrame& fr) {
 	frame[i].frame->FrameRemove();
 	frame[i].frame = &fr;
 	fr.FrameAdd(*this);
-	#ifndef flagWINGL
 	SyncLayout();	
 	RefreshFrame();
-	#endif
 	return *this;
 }
 
@@ -401,10 +353,8 @@ Ctrl& Ctrl::AddFrame(CtrlFrame& fr) {
 	LLOG("AddFrame " << typeid(fr).name());
 	frame.Add().frame = &fr;
 	fr.FrameAdd(*this);
-	#ifndef flagWINGL
 	SyncLayout();
 	RefreshFrame();
-	#endif
 	return *this;
 }
 
@@ -414,10 +364,8 @@ void Ctrl::ClearFrames() {
 		frame[i].frame->FrameRemove();
 	frame.Clear();
 	frame.Add().frame = &NullFrame();
-	#ifndef flagWINGL
 	RefreshFrame();
 	SyncLayout();
-	#endif
 }
 
 void Ctrl::RemoveFrame(int i) {
@@ -425,18 +373,17 @@ void Ctrl::RemoveFrame(int i) {
 	int n = frame.GetCount();
 	Mitor<Frame> m;
 	if(n > 1)
-		for(int q = 0; q < n; q++)
+		for(int q = 0; q < n; q++) {
 			if(q != i)
 				m.Add().frame = frame[q].frame;
 			else
 				frame[q].frame->FrameRemove();
-	frame = m;
+		}
+	frame = pick(m);
 	if(frame.GetCount() == 0)
 		frame.Add().frame = &NullFrame();
-	#ifndef flagWINGL
 	RefreshFrame();
 	SyncLayout();
-	#endif
 }
 
 int  Ctrl::FindFrame(CtrlFrame& frm)
@@ -469,12 +416,10 @@ void Ctrl::InsertFrame(int i, CtrlFrame& fr)
 		}
 	if(i == n)
 		m.Add().frame = &fr;
-	frame = m;
+	frame = pick(m);
 	fr.FrameAdd(*this);
-	#ifndef flagWINGL	
 	SyncLayout();
 	RefreshFrame();
-	#endif
 }
 
 Ctrl& Ctrl::LeftPos(int a, int size) {
@@ -545,4 +490,16 @@ Ctrl& Ctrl::VCenterPosZ(int size, int delta) {
 	return VCenterPos(VertLayoutZoom(size), VertLayoutZoom(delta));
 }
 
-END_UPP_NAMESPACE
+Rect Ctrl::GetWorkArea(Point pt)
+{
+	GuiLock __;
+	static Array<Rect> rc;
+	if (rc.IsEmpty())
+		GetWorkArea(rc);
+	for(int i = 0; i < rc.GetCount(); i++)
+		if(rc[i].Contains(pt))
+			return rc[i];
+	return GetPrimaryWorkArea();
+}
+
+}

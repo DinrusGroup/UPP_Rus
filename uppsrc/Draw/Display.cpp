@@ -1,6 +1,6 @@
 #include "Draw.h"
 
-NAMESPACE_UPP
+namespace Upp {
 
 #define IMAGECLASS DrawImg
 #define IMAGEFILE <Draw/DrawImg.iml>
@@ -8,44 +8,72 @@ NAMESPACE_UPP
 
 #define LLOG(x) // RLOG(x)
 
+AttrText& AttrText::Set(const Value& v)
+{
+	value = v;
+	text = AsString(v).ToWString();
+	return *this;
+}
+
 AttrText::operator Value() const
 {
-	return RawToValue(*this);
+	return RichToValue(*this);
 }
 
 AttrText::AttrText(const Value& v)
 {
-	*this = ValueTo<AttrText>(v);
+	if(v.Is<AttrText>())
+		*this = ValueTo<AttrText>(v);
+	else {
+		Init();
+		Set(v);
+	}
+}
+
+void AttrText::Serialize(Stream& s)
+{
+	int version = 0;
+	s / version
+	  % text % font % ink % normalink % paper % normalpaper % align % img % imgspc;
+}
+
+void AttrText::Jsonize(JsonIO& jio)
+{
+	jio
+		("text", text)
+		("value", value)
+		("font", font)
+		("ink", ink)
+		("normalink", normalink)
+		("paper", paper)
+		("normalpaper", normalpaper)
+		("align", align)
+		("img", img)
+		("imgspc", imgspc)
+	;
+}
+
+bool AttrText::operator==(const AttrText& f) const
+{
+	return text == f.text && value == f.value && font == f.font && ink == f.ink &&
+	       normalink == f.normalink && paper == f.paper && normalpaper == f.normalpaper &&
+	       align == f.align && img == f.img && imgspc == f.imgspc;
+}
+
+void AttrText::Xmlize(XmlIO& xio)
+{
+	XmlizeByJsonize(xio, *this);
 }
 
 void AttrText::Init()
 {
 	ink = Null;
 	normalink = Null;
+	normalpaper = Null;
 	paper = Null;
 	font = StdFont();
 	align = Null;
 	imgspc = 0;
-}
-
-AttrText::AttrText(const char *text) : text(text)
-{
-	Init();
-}
-
-AttrText::AttrText(const wchar *text) : text(text)
-{
-	Init();
-}
-
-AttrText::AttrText(const WString& text) : text(text)
-{
-	Init();
-}
-
-AttrText::AttrText(const String& text) : text(text.ToWString())
-{
-	Init();
 }
 
 class StdDisplayClass : public Display
@@ -68,6 +96,8 @@ void Display::PaintBackground(Draw& w, const Rect& r, const Value& q,
 		const AttrText& t = ValueTo<AttrText>(q);
 		if(!IsNull(t.paper))
 			paper = t.paper;
+		if(!IsNull(t.normalpaper) && !(style & (CURSOR|SELECT|READONLY)))
+			paper = t.normalpaper;
 	}
 	w.DrawRect(r, paper);
 }
@@ -84,7 +114,7 @@ Size Display::RatioSize(const Value& q, int cx, int cy) const {
 
 Size Display::GetStdSize(const Value& q) const
 {
-	return Size(1, 1);
+	return Single<StdDisplayClass>().GetStdSize(q);
 }
 
 void StdDisplayClass::Paint0(Draw& w, const Rect& r, const Value& q,
@@ -105,6 +135,8 @@ void StdDisplayClass::Paint0(Draw& w, const Rect& r, const Value& q,
 			ink = t.ink;
 		if(!IsNull(t.normalink) && !(s & (CURSOR|SELECT|READONLY)))
 			ink = t.normalink;
+		if(!IsNull(t.normalpaper) && !(s & (CURSOR|SELECT|READONLY)))
+			paper = t.normalpaper;
 		if(!IsNull(t.align))
 			a = t.align;
 		if(!IsNull(t.img)) {
@@ -121,7 +153,7 @@ void StdDisplayClass::Paint0(Draw& w, const Rect& r, const Value& q,
 	if(a == ALIGN_CENTER)
 		x += (width - tsz.cx) / 2;
 	int tcy = GetTLTextHeight(txt, font);
-	int tt = r.top + max((r.Height() - tcy) / 2, 0);
+	int tt = r.top + (tcy < 4 * r.GetHeight() / 3 ?  (r.Height() - tcy) / 2 : 0); // allow negative tt if only slightly bigger
 	if(tsz.cx > width) {
 		Size isz = DrawImg::threedots().GetSize();
 		int wd = width - isz.cx;
@@ -172,8 +204,8 @@ const Display& StdDisplay()
 	return Single<StdDisplayClass>();
 }
 
-const Display& GLOBAL_VP_INIT(StdDisplayClass, StdCenterDisplay, (ALIGN_CENTER))
-const Display& GLOBAL_VP_INIT(StdDisplayClass, StdRightDisplay, (ALIGN_RIGHT))
+const Display& StdCenterDisplay() { static StdDisplayClass h(ALIGN_CENTER); return h; }
+const Display& StdRightDisplay() { static StdDisplayClass h(ALIGN_RIGHT); return h; }
 
 #ifdef flagSO
 ColorDisplayNull::ColorDisplayNull(String nulltext) : nulltext(nulltext) {}
@@ -376,4 +408,4 @@ PaintRect::PaintRect(const Display& _display, const Value& _val) {
 	value = _val;
 }
 
-END_UPP_NAMESPACE
+}

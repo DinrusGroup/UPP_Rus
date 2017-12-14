@@ -1,6 +1,6 @@
 #include "RichText.h"
 
-NAMESPACE_UPP
+namespace Upp {
 
 extern Color (*QTFColor[])();
 extern int   QTFFontHeight[];
@@ -24,7 +24,7 @@ String QtfFormat(Color c)
 
 void LngFmt(String& fmt, dword l, dword lang)
 {
-	if(lang != (dword)l)
+	if(lang != (dword)l) {
 		if(l == 0)
 			fmt << "%-";
 		else
@@ -32,6 +32,7 @@ void LngFmt(String& fmt, dword l, dword lang)
 			fmt << "%%";
 		else
 			fmt << "%" << LNGAsText(l);
+	}
 }
 
 void CharFmt(String& fmt, const RichPara::CharFormat& a, const RichPara::CharFormat& b)
@@ -97,6 +98,7 @@ void QTFEncodeParaFormat(String& qtf, const RichPara::Format& format, const Rich
 	FmtNumber(qtf, 'H', style.ruler, format.ruler);
 	if(style.rulerink != format.rulerink)
 		qtf << "h" << QtfFormat(format.rulerink);
+	FmtNumber(qtf, 'L', style.rulerstyle, format.rulerstyle);
 	FmtNumber(qtf, 'b', style.before, format.before);
 	FmtNumber(qtf, 'a', style.after, format.after);
 	if(style.newpage != format.newpage)
@@ -127,6 +129,9 @@ void QTFEncodeParaFormat(String& qtf, const RichPara::Format& format, const Rich
 	}
 	if(!IsEmpty(format.label))
 		qtf << ':' << DeQtf(format.label) << ':';
+	if(style.newhdrftr != format.newhdrftr)
+		qtf << "tP" << format.header_qtf << "^^" << format.footer_qtf << "^^";
+
 	if(NumberingDiffers(style, format)) {
 		if(format.before_number != style.before_number) {
 			qtf << "n";
@@ -226,7 +231,6 @@ void QTFEncodePara(String& qtf, const RichPara& p, const RichPara::Format& style
 			String data = object.Write();
 			const char *q = data.Begin();
 			const char *slim = data.End();
-			int n = 0;
 			qtf.Reserve(8 * data.GetLength() / 7);
 			if(object.IsText()) {
 				qtf << "`";
@@ -241,6 +245,9 @@ void QTFEncodePara(String& qtf, const RichPara& p, const RichPara::Format& style
 			else {
 				if(crlf)
 					qtf << "\r\n";
+#if 1
+				qtf << '(' << Base64Encode(q, slim) << ')';
+#else
 				while(q < slim - 7) {
 					byte data[8];
 					data[0] = ((q[0] & 0x80) >> 7) |
@@ -277,6 +284,7 @@ void QTFEncodePara(String& qtf, const RichPara& p, const RichPara::Format& style
 						qtf << "\r\n";
 					q += 7;
 				}
+#endif
 			}
 			if(crlf)
 				qtf << "\r\n";
@@ -300,7 +308,7 @@ void QTFEncodePara(String& qtf, const RichPara& p, const RichPara::Format& style
 						qtf.Cat(':');
 					else {
 						qtf.Cat('`');
-					   	qtf.Cat(c);
+						qtf.Cat(c);
 						d += 2;
 					}
 					if(crlf && d > 60 && c == ' ') {
@@ -368,15 +376,15 @@ void QTFEncodeTxt(String& qtf, const RichTxt& text, const RichStyles& styles, co
 			qtf << ' ';
 
 			const RichTable& t = text.GetTable(i);
-			int nx = t.format.column.GetCount();
-			int ny = t.cell.GetCount();
+			const RichTable::Format& f = t.GetFormat();
+			int nx = f.column.GetCount();
+			int ny = t.GetRows();
 			qtf << "{{";
 			for(int i = 0; i < nx; i++) {
 				if(i)
 					qtf << ':';
-				qtf << t.format.column[i];
+				qtf << f.column[i];
 			}
-			const RichTable::Format& f = t.format;
 			const RichTable::Format& d = Single<RichTable::Format>();
 			FmtNumber(qtf, '<', d.lm, f.lm);
 			FmtNumber(qtf, '>', d.rm, f.rm);
@@ -384,7 +392,11 @@ void QTFEncodeTxt(String& qtf, const RichTxt& text, const RichStyles& styles, co
 			FmtNumber(qtf, 'A', d.after, f.after);
 			FmtNumber(qtf, 'f', d.frame, f.frame);
 			if(f.keep)
-				qtf << "K";
+				qtf << 'K';
+			if(f.newpage)
+				qtf << 'P';
+			if(f.newhdrftr)
+				qtf << 'T' << f.header_qtf << "^^" << f.footer_qtf << "^^";
 			if(f.framecolor != d.framecolor)
 				qtf << 'F' << QtfFormat(f.framecolor);
 			FmtNumber(qtf, 'g', d.grid, f.grid);
@@ -393,7 +405,7 @@ void QTFEncodeTxt(String& qtf, const RichTxt& text, const RichStyles& styles, co
 			FmtNumber(qtf, 'h', d.header, f.header);
 			RichCell::Format cf = Single<RichCell::Format>();
 			for(int i = 0; i < ny; i++) {
-				const Array<RichCell>& r = t.cell[i];
+				const Array<RichCell>& r = t[i];
 				for(int j = 0; j < r.GetCount(); j++) {
 					const RichCell& c = r[j];
 					if(i || j) {
@@ -424,6 +436,8 @@ void QTFEncodeTxt(String& qtf, const RichTxt& text, const RichStyles& styles, co
 						qtf << '|' << c.vspan;
 					if(f.keep)
 						qtf << "k";
+					if(f.round)
+						qtf << "o";
 					qtf << ' ';
 					QTFEncodeTxt(qtf, c.text, styles, defstyle, options, sm, charset, lang);
 				}
@@ -474,6 +488,14 @@ String   AsQTF(const RichText& text, byte charset, dword options)
 //		for(i = 0; i < text.GetPartCount(); i++)
 //			sm.FindAdd(text.GetParaStyle(i));
 
+	String hdr = text.GetHeaderQtf();
+	if(hdr.GetCount())
+		qtf << "^H" << hdr << "^^\r\n";
+
+	String ftr = text.GetFooterQtf();
+	if(ftr.GetCount())
+		qtf << "^F" << ftr << "^^\r\n";
+
 	if(!(options & QTF_NOSTYLES))
 		for(i = 0; i < sm.GetCount(); i++) {
 			Uuid id = sm[i];
@@ -497,7 +519,7 @@ String   AsQTF(const RichText& text, byte charset, dword options)
 				RichPara p = text.Get(i);
 				lngc.GetAdd(p.format.language, 0)++;
 			}
-		dword lang = lngc.GetCount() ? lngc.GetKey(MaxIndex(lngc.GetValues())) : 0;
+		dword lang = lngc.GetCount() ? lngc.GetKey(FindMax(lngc.GetValues())) : 0;
 		qtf << "[";
 		if(!(options & QTF_NOCHARSET)) {
 			qtf << "{";
@@ -522,13 +544,14 @@ String   AsQTF(const RichText& text, byte charset, dword options)
 		defstyle.format.Height(100);
 
 		QTFEncodeTxt(qtf, text, text.GetStyles(), defstyle, options, sm, charset, lang);
+
+		qtf << "]";
 	}
 	return qtf;
 }
 
 String DeQtf(const char *s) {
-	String r;
-	r.Reserve(256);
+	StringBuffer r;
 	for(; *s; s++) {
 		if(*s == '\n')
 			r.Cat('&');
@@ -542,8 +565,7 @@ String DeQtf(const char *s) {
 }
 
 String DeQtfLf(const char *s) {
-	String r;
-	r.Reserve(256);
+	StringBuffer r;
 	while(*s) {
 		if((byte)*s > ' ' && !IsDigit(*s) && !IsAlpha(*s) && (byte)*s < 128)
 			r.Cat('`');
@@ -576,4 +598,4 @@ String AsQTF(const RichObject& obj)
 	return AsQTF(AsRichText(obj), CHARSET_UTF8, QTF_NOSTYLES|QTF_BODY);
 }
 
-END_UPP_NAMESPACE
+}

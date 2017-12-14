@@ -1,6 +1,6 @@
 #include "CtrlLib.h"
 
-NAMESPACE_UPP
+namespace Upp {
 
 void CtrlsImageLook(Value *look, int i, int n)
 {
@@ -100,12 +100,12 @@ int  ChooseAccessKey(const char *text, dword used)
 			return MAKELONG(ac, s - text + 1);
 	}
 	for(const char *s = text; *s; s++) {
-		byte ac = ToUpper(*s);
+		dword ac = ToUpper(*s);
 		if(ac < 128 && ac >= 'A' && ac <= 'Z' && ac != 'I' && ac != 'L' && (Ctrl::AccessKeyBit(ac) & used) == 0)
 			return ac;
 	}
 	for(const char *s = text; *s; s++) {
-		byte ac = ToUpper(*s);
+		dword ac = ToUpper(*s);
 		if(ac < 128 && ac >= 'A' && ac <= 'Z' && (Ctrl::AccessKeyBit(ac) & used) == 0)
 			return ac;
 	}
@@ -123,6 +123,7 @@ DrawLabel::DrawLabel()
 	accesskey = 0;
 	accesspos = -1;
 	font = StdFont();
+	nowrap = false;
 }
 
 Size DrawLabel::GetSize(int txtcx) const
@@ -133,7 +134,8 @@ Size DrawLabel::GetSize(int txtcx) const
 Size DrawLabel::GetSize(int txtcx, Size sz1, int lspc, Size sz2, int rspc) const
 {
 	Size isz(0, 0);
-	Size txtsz = *text ? GetSmartTextSize(text, font, txtcx) : paintrect.GetStdSize();
+	Size txtsz = *text ? GetSmartTextSize(text, font, nowrap ? INT_MAX/2 : txtcx)
+	                   : paintrect.GetStdSize();
 
 	if(!IsNull(lspc)) {
 		isz.cx = lspc;
@@ -195,7 +197,7 @@ Size DrawLabel::Paint(Ctrl *ctrl, Draw& w, const Rect& r, bool visibleaccesskey)
 	Size sz1 = limg.GetSize();
 	Size sz2 = rimg.GetSize();
 	int txtcx = r.GetWidth() - sz1.cx - Nvl(lspc, 0) - sz2.cx - Nvl(rspc, 0);
-	Size txtsz = *text ? GetSmartTextSize(text, font, txtcx) : paintrect.GetStdSize();
+	Size txtsz = *text ? GetSmartTextSize(text, font, nowrap ? INT_MAX/2 : txtcx) : paintrect.GetStdSize();
 	if(txtsz.cx) {
 		if(!rimg_never_hide && txtsz.cx + sz1.cx + sz2.cx + Nvl(lspc, 0) + Nvl(rspc, 0) > r.GetWidth()) {
 			sz2.cx = 0;
@@ -207,7 +209,7 @@ Size DrawLabel::Paint(Ctrl *ctrl, Draw& w, const Rect& r, bool visibleaccesskey)
 		}
 	}
 	Size isz = GetSize(txtcx, sz1, lspc, sz2, rspc);
-	Point p, ip;
+	Point p = r.TopLeft(), ip;
 	if(align == ALIGN_LEFT)
 		p.x = r.left;
 	else
@@ -237,25 +239,26 @@ Size DrawLabel::Paint(Ctrl *ctrl, Draw& w, const Rect& r, bool visibleaccesskey)
 	}
 	int iy = push + (r.top + r.bottom - sz1.cy) / 2;
 
-	if(sz1.cx)
+	if(sz1.cx) {
 		if(IsNull(lcolor))
 			w.DrawImage(ix, iy, DisabledImage(limg, disabled));
 		else
 			w.DrawImage(ix, iy, limg, lcolor);
-
+	}
 	iy = push + (r.top + r.bottom - sz2.cy) / 2;
 	ix = (IsNull(rspc) ? r.right - sz2.cx : p.x + txtsz.cx + rspc) + push;
-	if(sz2.cx)
+	if(sz2.cx) {
 		if(IsNull(rcolor))
 			w.DrawImage(ix, iy, DisabledImage(rimg, disabled));
 		else
 			w.DrawImage(ix, iy, rimg, rcolor);
+	}
 	paintrect.Paint(w, p.x + push, p.y + push, txtsz.cx, isz.cy, color, Null);
 	if(*text) {
-		if(disabled)
-			DrawSmartText(w, p.x + push + 1, p.y + push + (isz.cy - txtsz.cy) / 2 + 1,
-			              txtsz.cx, text, font, SColorPaper);
-		DrawSmartText(w, p.x + push, p.y + push, txtcx,
+		if(disabled && *text != '\1')
+			DrawSmartText(w, p.x + push + 1, p.y + push + 1,
+			              nowrap ? INT_MAX/2 : txtcx, text, font, SColorPaper);
+		DrawSmartText(w, p.x + push, p.y + push, nowrap ? INT_MAX/2 : txtcx,
 		              text, font, color, visibleaccesskey ? accesskey : 0);
 		if(focus)
 			DrawFocus(w, p.x - 2, p.y, txtsz.cx + 5, isz.cy);
@@ -313,6 +316,15 @@ LabelBase& LabelBase::SetText(const char *text) {
 LabelBase& LabelBase::SetFont(Font font) {
 	if(lbl.font != font) {
 		lbl.font = font;
+		LabelUpdate();
+	}
+	return *this;
+}
+
+LabelBase& LabelBase::NoWrap(bool b)
+{
+	if(lbl.nowrap != b) {
+		lbl.nowrap = b;
 		LabelUpdate();
 	}
 	return *this;
@@ -439,156 +451,4 @@ Point GetDragScroll(Ctrl *ctrl, Point p, int max)
 	return GetDragScroll(ctrl, p, Size(max, max));
 }
 
-Point DisplayPopup::Op(Point p)
-{
-	return p + GetScreenView().TopLeft() - ctrl->GetScreenView().TopLeft();
 }
-
-void DisplayPopup::LeftDown(Point p, dword flags)
-{
-	ctrl->LeftDown(Op(p), flags);
-}
-
-void DisplayPopup::LeftDrag(Point p, dword flags)
-{
-	Cancel();
-	ctrl->LeftDrag(Op(p), flags);
-}
-
-void DisplayPopup::LeftDouble(Point p, dword flags)
-{
-	ctrl->LeftDouble(Op(p), flags);
-}
-
-void DisplayPopup::RightDown(Point p, dword flags)
-{
-	ctrl->RightDown(Op(p), flags);
-}
-
-void DisplayPopup::LeftUp(Point p, dword flags)
-{
-	ctrl->LeftUp(Op(p), flags);
-}
-
-void DisplayPopup::MouseWheel(Point p, int zdelta, dword flags)
-{
-	ctrl->MouseWheel(Op(p), zdelta, flags);
-}
-
-void DisplayPopup::MouseLeave()
-{
-	Cancel();
-}
-
-void DisplayPopup::MouseMove(Point p, dword flags)
-{
-	p += GetScreenView().TopLeft();
-	if(!slim.Contains(p))
-		MouseLeave();
-}
-
-void DisplayPopup::Paint(Draw& w)
-{
-	Rect r = GetSize();
-	w.DrawRect(r, SColorPaper);
-	if(display) {
-		display->PaintBackground(w, r, value, ink, paper, style);
-		r.left += margin;
-		display->Paint(w, r, value, ink, paper, style);
-	}
-}
-
-DisplayPopup::DisplayPopup()
-{
-	SetFrame(BlackFrame());
-	display = NULL;
-	paper = ink = Null;
-	style = 0;
-	item = slim = Null;
-	margin = 0;
-	ONCELOCK {
-		InstallStateHook(StateHook);
-	}
-	LinkBefore(all);
-}
-
-DisplayPopup::~DisplayPopup()
-{
-	Unlink();
-}
-
-void DisplayPopup::Sync()
-{
-	if(display && ctrl && !ctrl->IsDragAndDropTarget() && !IsDragAndDropTarget()) {
-		Ctrl *top = ctrl->GetTopCtrl();
-		if(top && top->HasFocusDeep()) {
-			Size sz = display->GetStdSize(value);
-			if(sz.cx + 2 * margin > item.GetWidth() || sz.cy > item.GetHeight()) {
-				slim = item + ctrl->GetScreenView().TopLeft();
-				if(slim.Contains(GetMousePos())) {
-					Rect wa = GetWorkArea();
-					Rect r = item;
-					r.right = max(r.right, r.left + sz.cx + 2 * margin);
-					r.bottom = max(r.bottom, r.top + sz.cy);
-					r.Inflate(1, 1);
-					r.Offset(ctrl->GetScreenView().TopLeft());
-					SetRect(r);
-					if(!IsOpen())
-						Ctrl::PopUp(ctrl, true, false, false);
-					Refresh();
-					return;
-				}
-			}
-		}
-	}
-	if(IsOpen())
-		Close();
-}
-
-Link<DisplayPopup> DisplayPopup::all[1];
-
-bool DisplayPopup::StateHook(Ctrl *, int reason)
-{
-	if(reason == FOCUS)
-		for(DisplayPopup *p = all->Link<DisplayPopup>::GetNext(); p != all; p = p->Link<DisplayPopup>::GetNext())
-			p->Sync();
-	return false;
-}
-
-void DisplayPopup::Cancel()
-{
-	display = NULL;
-	Sync();
-}
-
-bool DisplayPopup::IsOpen()
-{
-	return Ctrl::IsOpen();
-}
-
-bool DisplayPopup::HasMouse()
-{
-	return Ctrl::HasMouse() || ctrl && ctrl->HasMouse();
-}
-
-void DisplayPopup::Set(Ctrl *_ctrl, const Rect& _item,
-                       const Value& _value, const Display *_display,
-                       Color _ink, Color _paper, dword _style, int _margin)
-{
-	if(item != _item || ctrl != _ctrl || value != _value || display != _display || ink != _ink ||
-	   paper != _paper || style != _style) {
-		item = _item;
-		ctrl = _ctrl;
-		value = _value;
-		display = _display;
-		ink = _ink;
-		paper = _paper;
-		style = _style;
-		margin = _margin;
-		Sync();
-	}
-	else
-		Refresh();
-}
-
-END_UPP_NAMESPACE

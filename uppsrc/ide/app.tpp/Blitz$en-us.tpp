@@ -1,4 +1,4 @@
-topic "What is BLITZ";
+topic "What is BLITZ and how are precompiled headers supported";
 [2 $$0,0#00000000000000000000000000000000:Default]
 [l288;i1120;a17;O9;~~~.1408;2 $$1,0#10431211400427159095818037425705:param]
 [a83;*R6 $$2,5#31310162474203024125188417583966:caption]
@@ -6,10 +6,10 @@ topic "What is BLITZ";
 [i288;O9;C2 $$4,6#40027414424643823182269349404212:item]
 [b42;a42;2 $$5,5#45413000475342174754091244180557:text]
 [l288;b17;a17;2 $$6,6#27521748481378242620020725143825:desc]
-[l321;tC@5;1 $$7,7#20902679421464641399138805415013:code]
+[l321;C@5;1 $$7,7#20902679421464641399138805415013:code]
 [b2503;2 $$8,0#65142375456100023862071332075487:separator]
 [*@(0.0.255)2 $$9,0#83433469410354161042741608181528:base]
-[tC2 $$10,0#37138531426314131251341829483380:class]
+[C2 $$10,0#37138531426314131251341829483380:class]
 [l288;a17;*1 $$11,11#70004532496200323422659154056402:requirement]
 [i417;b42;a42;O9;~~~.416;2 $$12,12#10566046415157235020018451313112:tparam]
 [b167;C2 $$13,13#92430459443460461911108080531343:item1]
@@ -17,16 +17,17 @@ topic "What is BLITZ";
 [*@2$(0.128.128)2 $$15,15#34511555403152284025741354420178:NewsDate]
 [l321;*C$7;2 $$16,16#03451589433145915344929335295360:result]
 [l321;b83;a83;*C$7;2 $$17,17#07531550463529505371228428965313:result`-line]
-[l160;*tC+117 $$18,5#88603949442205825958800053222425:package`-title]
+[l160;*C+117 $$18,5#88603949442205825958800053222425:package`-title]
 [2 $$19,0#53580023442335529039900623488521:gap]
-[tC2 $$20,20#70211524482531209251820423858195:class`-nested]
+[C2 $$20,20#70211524482531209251820423858195:class`-nested]
 [b50;2 $$21,21#03324558446220344731010354752573:Par]
 [{_}%EN-US 
-[s2; About BLITZ&]
-[s0; Blitz is advanced compilation technique based on [^http`:`/`/en`.wikipedia`.org`/wiki`/Single`_Compilation`_Unit^ S
+[s2; About BLITZ and precompiled headers&]
+[s0; [* Blitz] is advanced compilation technique based on [^http`:`/`/en`.wikipedia`.org`/wiki`/Single`_Compilation`_Unit^ S
 CU] approach, intended to speedup debug mode rebuilds of large 
 applications. In fact, BLITZ is what allows U`+`+ to keep libraries 
-in sources form. You can consider BLITZ as automated form SCU.&]
+in sources form. You can consider BLITZ as an automated form 
+SCU.&]
 [s0; &]
 [s0; Blitz processes packages (not the whole program) `- each package 
 can have a single [/ blitz`-block] (blitz block  is SCU).&]
@@ -36,12 +37,22 @@ can have a single [/ blitz`-block] (blitz block  is SCU).&]
 &]
 [s0; &]
 [s0; Alternatively, you can force inclusion by&]
-[s0; &]
+[s7; &]
 [s7; #pragma BLITZ`_APPROVE&]
+[s7; &]
+[s0; or&]
+[s7; &]
+[s7; //#BLITZ`_APPROVE&]
+[s7; &]
 [s0; &]
-[s0; (also works for header) or exlusion by&]
+[s0; (also works for header) or exclusion by&]
 [s0; &]
 [s7; #pragma BLITZ`_PROHIBIT.&]
+[s7; &]
+[s0; or&]
+[s7; &]
+[s7; //#BLITZ`_PROHIBIT&]
+[s7; &]
 [s0; &]
 [s0; In addition only files older than one hour qualify for [/ blitz`-block]. 
 This simple heuristics excludes file that are being worked on 
@@ -82,6 +93,45 @@ compile without BLITZ):&]
 `_`_LINE`_`_))&]
 [s7; #else&]
 [s7; #define STATIC`_ID            MK`_`_s`_(`_`_LINE`_`_)&]
-[s0; [tC@5;1 -|#endif]]}}&]
+[s0; [C@5;1 -|#endif]]}}&]
 [s0; &]
-[s0; ]
+[s0; [*^http`:`/`/en`.wikipedia`.org`/wiki`/Precompiled`_header^ Precompiled 
+headers] is a compiler technique trying to solve the very same 
+problem. In general, we have found BLITZ faster than any precompiled 
+header use, however BLITZ tends to have one disadvantage: by combining 
+all files into single object file, linker has less opportunity 
+to remove unused code. This leads to (sometimes significantly) 
+larger executable binaries. For this reason, we do not recommend 
+(and have off by default) BLITZ for release builds and if possible, 
+we use precompiled headers for release builds.&]
+[s0; &]
+[s0; Precompiled headers have a set of its own problems. Notably, 
+Microsoft C`+`+ precompiled headers are hard to use with multiple 
+processes building the code (Hydra) in debug mode. Also, precompiled 
+headers in general are very bulky files, easily surpassing 100MB, 
+which is a problem as we need to have single precompiled header 
+per package.&]
+[s0; &]
+[s0; For these reasons precompiled headers support works like this:&]
+[s0; &]
+[s0;i150;O2; Precompiled headers are activated only in release mode 
+without blitz.&]
+[s0;i150;O2; You have to set `"Precompile header`" flag on header 
+files candidates for precompilation. Only single candidate per 
+package is allowed. Note that not all headers can be with this 
+system. Header has to have include guards and it must be possible 
+for all files in the package to include it first before all other 
+headers.&]
+[s0;i150;O2; Build method has to have `"Allow precompiled headers`" 
+set.&]
+[s0;i150;O2; When package is build, it first checks whether using 
+precompiled header is possible (as per rules above). Then it 
+checks how many files are to be rebuild. If there are 3 or more 
+files to build, U`+`+ precompiles the header and uses it to build 
+the package. When the package is built, U`+`+ deletes the header 
+to conserve the space.&]
+[s0; &]
+[s0; U`+`+ supports precompiled headers for MSC, GCC and CLANG. However, 
+practical benchmarks show that with CLANG using precompiled headers 
+actually leads to worse compilation times.&]
+[s0; ]]

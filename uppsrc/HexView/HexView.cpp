@@ -1,8 +1,6 @@
 #include "HexView.h"
 
-NAMESPACE_UPP
-
-#ifdef PLATFORM_WIN32
+namespace Upp {
 
 inline int FormatHexDigit(int c) {
 	return c < 10 ? c + '0' : c - 10 + 'a';
@@ -130,7 +128,7 @@ void HexViewInfo::Paint(Draw& w)
 void HexViewInfo::SetMode(int _mode)
 {
 	mode = _mode;
-	Height(mode * GetTextSize("X", Courier(12)).cy + 3);
+	Height(mode * GetTextSize("X", CourierZ(12)).cy + 3);
 	Show(mode);
 }
 
@@ -139,12 +137,12 @@ HexViewInfo::HexViewInfo()
 	SetMode(0);
 	AddFrame(TopSeparatorFrame());
 	AddFrame(RightSeparatorFrame());
-	font = Courier(12);
+	font = CourierZ(12);
 }
 
 int HexView::Byte(int64 adr)
 {
-	return IsBadReadPtr((byte *)(uintptr_t)adr, 1) ? -1 : *(byte *)(unsigned)adr;
+	return 0;
 }
 
 void HexView::Paint(Draw& w)
@@ -216,7 +214,7 @@ void HexView::SetSb()
 	sbm = 0;
 	while((total >> sbm) > (1 << 30))
 		sbm++;
-	sb.SetTotal(int(total >> sbm) / columns + 1);
+	sb.SetTotal(int(total >> sbm) / columns + 2);
 	sb.SetPage(int(rows >> sbm));
 	sb.Set(int(sc >> sbm) / columns + 1);
 }
@@ -235,6 +233,8 @@ void HexView::SetTotal(int64 _total)
 	total = _total;
 	Layout();
 	SetSb();
+	Refresh();
+	RefreshInfo();
 }
 
 void HexView::SetSc(int64 address)
@@ -246,12 +246,19 @@ void HexView::SetSc(int64 address)
 
 void HexView::Scroll()
 {
-	int64 q = (int)sb << sbm;
+	int64 q = (int64)(int)sb << sbm;
 	if(q == 0)
 		sc = 0;
 	else
 		sc = (q - 1) * columns + sc % columns;
 	Refresh();
+}
+
+void HexView::RefreshInfo()
+{
+	info.SetPos(cursor, IsLongMode());
+	for(int i = 0; i < 80; i++)
+		info.Set(i, Byte(cursor + i));
 }
 
 void HexView::SetCursor(int64 _cursor)
@@ -275,9 +282,7 @@ void HexView::SetCursor(int64 _cursor)
 		sc = 0;
 	SetSb();
 	Refresh();
-	info.SetPos(cursor, IsLongMode());
-	for(int i = 0; i < 80; i++)
-		info.Set(i, Byte(cursor + i));
+	RefreshInfo();
 }
 
 void HexView::LeftDown(Point p, dword)
@@ -385,7 +390,7 @@ void HexView::StdGoto(const String& s)
 			return;
 		}
 	}
-	Exclamation("Неправильное положение!");
+	Exclamation("Invalid position!");
 }
 
 void HexView::Goto()
@@ -396,7 +401,7 @@ void HexView::Goto()
 
 void HexView::ColumnsMenu(Bar& bar)
 {
-	bar.Add("Авто", THISBACK1(SetColumns, 0))
+	bar.Add("Auto", THISBACK1(SetColumns, 0))
 	   .Radio(fixed == 0);
 	bar.Add("8", THISBACK1(SetColumns, 8))
 	   .Radio(fixed == 8);
@@ -413,11 +418,11 @@ void HexView::SetInfo(int m)
 
 void HexView::InfoMenu(Bar& bar)
 {
-	bar.Add("Нет", THISBACK1(SetInfo, 0))
+	bar.Add("None", THISBACK1(SetInfo, 0))
 	   .Check(info.GetMode() == 0);
-	bar.Add("Стандартное", THISBACK1(SetInfo, 1))
+	bar.Add("Standard", THISBACK1(SetInfo, 1))
 	   .Check(info.GetMode() == 1);
-	bar.Add("Расширенное", THISBACK1(SetInfo, 2))
+	bar.Add("Extended", THISBACK1(SetInfo, 2))
 	   .Check(info.GetMode() == 2);
 }
 
@@ -430,11 +435,11 @@ void HexView::CharsetMenu(Bar& bar)
 
 void HexView::StdMenu(Bar& bar)
 {
-	bar.Add("Перейти..", THISBACK(Goto))
+	bar.Add("Go to..", THISBACK(Goto))
 	   .Key(K_CTRL_G);
-	bar.Add("Колонки", THISBACK(ColumnsMenu));
-	bar.Add("Гарнитура", THISBACK(CharsetMenu));
-	bar.Add("Инфо о положении", THISBACK(InfoMenu));
+	bar.Add("Columns", THISBACK(ColumnsMenu));
+	bar.Add("Charset", THISBACK(CharsetMenu));
+	bar.Add("Position info", THISBACK(InfoMenu));
 }
 
 void HexView::RightDown(Point p, dword w)
@@ -468,7 +473,7 @@ void  HexView::SerializeSettings(Stream& s)
 
 HexView::HexView()
 {
-	SetFont(Courier(12));
+	SetFont(CourierZ(12));
 	BackPaint();
 	charset = CHARSET_WIN1252;
 	sb <<= THISBACK(Scroll);
@@ -482,10 +487,8 @@ HexView::HexView()
 	AddFrame(info);
 	info.SetMode(1);
 	WhenBar = THISBACK(StdMenu);
-	CtrlLayoutOKCancel(go, "Перейти");
+	CtrlLayoutOKCancel(go, "Go to");
 	WhenGoto = THISBACK(StdGoto);
 }
 
-#endif
-
-END_UPP_NAMESPACE
+}

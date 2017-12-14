@@ -4,6 +4,7 @@ public:
 	virtual void  Paint(Draw& draw);
 	virtual Image CursorImage(Point p, dword keyflags);
 	virtual void  LeftDown(Point p, dword keyflags);
+	virtual void  LeftDouble(Point p, dword keyflags);
 	virtual void  LeftDrag(Point p, dword keyflags);
 	virtual void  MouseMove(Point p, dword keyflags);
 	virtual void  MouseLeave();
@@ -43,8 +44,10 @@ public:
 		friend class HeaderCtrl;
 
 	public:
-		Callback        WhenAction;
-		Callback1<Bar&> WhenBar;
+		Event<>         WhenLeftClick;
+		Event<>         WhenLeftDouble;
+		Event<>         WhenAction;
+		Event<Bar&> WhenBar;
 
 		Column&  Min(int _min)                     { min = _min; return *this; }
 		Column&  Max(int _max)                     { max = _max; return *this; }
@@ -53,11 +56,16 @@ public:
 		Column&  Tip(const char *s)                { tip = s; return *this; }
 		Column&  SetPaper(Color c)                 { paper = c; return *this; }
 		Column&  SetRatio(double ratio);
-		Column&  SetMargin(int m);
+		Column&  SetMargin(int m)      ;
+
+		void     Show(bool b = true);
+		void     Hide()                            { Show(false); }
 
 		int      GetMargin() const                 { return margin + 2; }
 		Color    GetPaper() const                  { return paper; }
 		int      GetIndex() const                  { return index; }
+		bool     IsVisible() const                 { return visible; }
+		double   GetRatio() const                  { return ratio; }
 
 		Column();
 	};
@@ -96,6 +104,7 @@ protected:
 	void   WScroll();
 	void   Scroll();
 	void   ScrollVisibility();
+	void   DoSbTotal();
 	void   SbTotal();
 	void   SetTabWidth0(int i, int cx);
 	int    SumMin(int from);
@@ -107,9 +116,9 @@ protected:
 	Vector<int> GetVisibleCi(int from);
 
 public:
-	Callback      WhenLayout;
-	Callback      WhenScroll;
-	Callback      WhenScrollVisibility;
+	Event<>       WhenLayout;
+	Event<>       WhenScroll;
+	Event<>       WhenScrollVisibility;
 
 	Rect          GetTabRect(int i);
 

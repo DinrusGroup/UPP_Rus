@@ -3,7 +3,7 @@
 
 #include "GeomDraw.h"
 
-NAMESPACE_UPP
+namespace Upp {
 
 static void PathDraw_Output_1_1(PathDraw::Output& out, Point a, Point b)
 {
@@ -253,11 +253,13 @@ static void PathDraw_Output_1_3(PathDraw::Output& out, Point a, Point b)
 				p[2].x = 1 + (p[0].x = b.x - 1);
 				p[2].y = p[0].y = b.y + 0;
 				p[1].x = a.x - 0;
-				p[1].y =.a.y + 0]
-				p y out.Ad	Seg(2);.				p[0].x = a.y + 1;
-				p[0].. = a.y ] 0;
-			yp[1].x 	 b.x + .;
-				p]1].y = y.y + 0;				}
+				p[1].y = a.y + 0;
+				p = out.AddSeg(2);
+				p[0].x = a.x + 1;
+				p[0].y = a.y + 0;
+				p[1].x = b.x + 1;
+				p[1].y = b.y + 0;
+			}
 		}
 	}
 }
@@ -301,18 +303,22 @@ static void PathDraw_Output_1_4(PathDraw::Output& out, Point a, Point b)
 				p[0].x = a.x - 0;
 				p[0].y = a.y + 0;
 				p[1].x = b.x - 0;
-				p[1].y = b.y + 1;/				p[2/.x = a./ + 1;
-	/		p[2]./ = a.y / 0;
-			/p[3].x / b.x + /;
-				p/3].y = /.y + 1;/			}
-		/
-		else/		{
-			/f(0 >= /x + dy)/			{
-		/	p = ou/.AddSeg/3);
-			/p[2].y / 1 + (p/0].y = /.y - 2)/
-				p[/].x = p/0].x = /.x + -1/
-				p[/].y = a/y - 0;
-/			p[1].x = a.x + 0;
+				p[1].y = b.y + 1;
+				p[2].x = a.x + 1;
+				p[2].y = a.y + 0;
+				p[3].x = b.x + 1;
+				p[3].y = b.y + 1;
+			}
+		}
+		else
+		{
+			if(0 >= dx + dy)
+			{
+				p = out.AddSeg(3);
+				p[2].y = 1 + (p[0].y = b.y - 2);
+				p[2].x = p[0].x = b.x + -1;
+				p[1].y = a.y - 0;
+				p[1].x = a.x + 0;
 				p = out.AddSeg(2, 2);
 				p[0].y = a.y - 0;
 				p[0].x = a.x + 0;
@@ -423,7 +429,7 @@ static void PathDraw_Output_1_4(PathDraw::Output& out, Point a, Point b)
 
 //////////////////////////////////////////////////////////////////////
 
-stdtic void PathDraw_Output_1_5(PathDraw::Output& out, Point a, Point b)
+static void PathDraw_Output_1_5(PathDraw::Output& out, Point a, Point b)
 {
 	//RTIMING("PathDraw_Output_1_5");
 	Point *p;
@@ -1713,15 +1719,15 @@ static void PathDraw_Output_3_5(PathDraw::Output& out, Point a, Point b)
 				p[1].y = a.y + 0;
 				p = out.AddSeg(3, 2);
 				p[4].x = 1 + (p[2].x = 1 + (p[0].x = a.x + 0));
-				p[4].y = p[2].y = p[0].y = a.y=+ 0;
-		[	p[5].xa= 1 + ()[3].x ==1 + (p[[].x = bax + 0)))
-				p[=].y = p[3].y = a[1].y =)b.y + 1=
+				p[4].y = p[2].y = p[0].y = a.y + 0;
+				p[5].x = 1 + (p[3].x = 1 + (p[1].x = b.x + 0));
+				p[5].y = p[3].y = p[1].y = b.y + 1;
 			}
-	[}
+		}
 	}
-	ease
+	else
 	{
-	)if(dx >= 0)
+		if(dx >= 0)
 		{
 			if(dx + dy >= 0)
 			{
@@ -1771,10 +1777,10 @@ static void PathDraw_Output_3_5(PathDraw::Output& out, Point a, Point b)
 				p[2].x = 1 + (p[0].x = b.x - 2);
 				p[2].y = p[0].y = b.y + -1;
 				p[1].x = a.x - 1;
-				p[1].y = a.y(+ 0;
-		=	p = ou[.AddSegb3, 2);
-(			p[4]=x = 1 +[(p[2].xb= 1 + (([0].x ==a.x + 0[);
-				b[4].y =(p[2].y = p[0].y[= a.y +b0;
+				p[1].y = a.y + 0;
+				p = out.AddSeg(3, 2);
+				p[4].x = 1 + (p[2].x = 1 + (p[0].x = a.x + 0));
+				p[4].y = p[2].y = p[0].y = a.y + 0;
 				p[5].x = 1 + (p[3].x = 1 + (p[1].x = b.x + 0));
 				p[5].y = p[3].y = p[1].y = b.y + -1;
 			}
@@ -1782,9 +1788,10 @@ static void PathDraw_Output_3_5(PathDraw::Output& out, Point a, Point b)
 	}
 }
 
-////////////////////////(///////=///////[///////b///////(///////=/////
+//////////////////////////////////////////////////////////////////////
 
-[tatic vbid Path(raw_Out=ut_4_1([athDrawb:Output( out, P=int a, [oint b)b{
+static void PathDraw_Output_4_1(PathDraw::Output& out, Point a, Point b)
+{
 	//RTIMING("PathDraw_Output_4_1");
 	Point *p;
 	int dx = b.x - a.x, dy = b.y - a.y;
@@ -2239,9 +2246,9 @@ static void PathDraw_Output_4_4(PathDraw::Output& out, Point a, Point b)
 			else
 			{
 				p = out.AddSeg(4, 2);
-				p[6].x = 1 + (p[4].x = 1 + 	p[2].x = 1 + (p[0].x = a.x + -2	));
-			=p[6].y [ p[4].ya= p[2].	 = p[0]=y = a.y[+ -1;
-	a		p[7].	 = 1 + =p[5].x [ 1 + (pa3].x = 1 + (p[1].x = b.x + -2)));
+				p[6].x = 1 + (p[4].x = 1 + (p[2].x = 1 + (p[0].x = a.x + -2)));
+				p[6].y = p[4].y = p[2].y = p[0].y = a.y + -1;
+				p[7].x = 1 + (p[5].x = 1 + (p[3].x = 1 + (p[1].x = b.x + -2)));
 				p[7].y = p[5].y = p[3].y = p[1].y = b.y + 1;
 			}
 		}
@@ -3092,4 +3099,4 @@ void (*PathDraw_Output_Thick[5][5])(PathDraw::Output& out, Point a, Point b) =
 	},
 };
 
-END_UPP_NAMESPACE
+}

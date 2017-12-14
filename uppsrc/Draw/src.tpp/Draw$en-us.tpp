@@ -154,6 +154,25 @@ screen output in Ctrl`::Paint, [%-*@3 color] can be assigned special
 value InvertColor() causing invertion of all pixels in target 
 area.&]
 [s3;%% &]
+[s4; &]
+[s5;:Draw`:`:SysDrawImageOp`(int`,int`,const Image`&`,Color`): [@(0.0.255) virtual] 
+[@(0.0.255) void]_[* SysDrawImageOp]([@(0.0.255) int]_[*@3 x], [@(0.0.255) int]_[*@3 y], 
+[@(0.0.255) const]_[_^Image^ Image][@(0.0.255) `&]_[*@3 img], [_^Color^ Color]_[*@3 color])&]
+[s2;%% Low`-level draw of Image. It depends on second variant of 
+SysDrawImageOp to support [%-*@3 src] parameter using Offset and 
+Clip.&]
+[s3;%% &]
+[s4; &]
+[s5;:Draw`:`:SysDrawImageOp`(int`,int`,const Image`&`,const Rect`&`,Color`): [@(0.0.255) v
+irtual] [@(0.0.255) void]_[* SysDrawImageOp]([@(0.0.255) int]_[*@3 x], 
+[@(0.0.255) int]_[*@3 y], [@(0.0.255) const]_[_^Image^ Image][@(0.0.255) `&]_[*@3 img], 
+[@(0.0.255) const]_[_^Rect^ Rect][@(0.0.255) `&]_[*@3 src], [_^Color^ Color]_[*@3 color])&]
+[s2;%% Low(er)`-level draw of Image, called by DrawImageOp. Draw 
+derived class can either override this method and depend on DrawImageOp 
+to do rescaling and printer banding or override DrawImageOp directly. 
+Default implementation uses Offset and Clip to provide support 
+for [%-*@3 src] parameter.&]
+[s3;%% &]
 [s4;%% &]
 [s5;:Draw`:`:DrawImageOp`(int`,int`,int`,int`,const Image`&`,const Rect`&`,Color`): [@(0.0.255) v
 irtual] [@(0.0.255) void]_[* DrawImageOp]([@(0.0.255) int]_[*@3 x], [@(0.0.255) int]_[*@3 y],
@@ -164,7 +183,9 @@ irtual] [@(0.0.255) void]_[* DrawImageOp]([@(0.0.255) int]_[*@3 x], [@(0.0.255) 
 at [%-*@3 x], [%-*@3 y] rescaling it to [%-*@3 cx], [%-*@3 cy] (if they 
 are equal to original Image size, no rescaling is performed). 
 If [%-*@3 color] is not null, only alpha information of Image is 
-used and color pixels are painted using [%-*@3 color].&]
+used and color pixels are painted using [%-*@3 color]. Default 
+implementation performs rescaling operation in software, including 
+banding support for printer, then calls SysDrawImageOp.&]
 [s3;%% &]
 [s4;%% &]
 [s5;:Draw`:`:DrawDataOp`(int`,int`,int`,int`,const String`&`,const char`*`): [@(0.0.255) v
@@ -325,6 +346,13 @@ mode.&]
 ]()_[@(0.0.255) const]&]
 [s2;%% Returns the number of elements in clip`&offset stack. Mostly 
 used for diagnostic purposes.&]
+[s3;%% &]
+[s4; &]
+[s5;:Upp`:`:Draw`:`:Escape`(const Upp`:`:String`&`): [@(0.0.255) virtual 
+void]_[* Escape]([@(0.0.255) const]_[_^Upp`:`:String^ String][@(0.0.255) `&]_[*@3 data])&]
+[s2;%% Passes additional information to Draw target instance. For 
+example, PdfDraw understands `"url:http://link.html`" escapes to 
+define text hyperlinks. Frontend to EscapeOp.&]
 [s3;%% &]
 [s4;%% &]
 [s5;:Draw`:`:GetPixelsPerInch`(`)const: [_^Size^ Size]_[* GetPixelsPerInch]()_[@(0.0.255) c
@@ -682,17 +710,28 @@ wDrawing]([@(0.0.255) int]_[*@3 x], [@(0.0.255) int]_[*@3 y], [@(0.0.255) int]_[
 respectively [%-*@3 x],[%-*@3 y],[%-*@3 cx],[%-*@3 cy]. Frontend to DrawDrawing 
 op.&]
 [s3;%% &]
+[s4; &]
+[s5;:Draw`:`:DrawDrawing`(int`,int`,const Drawing`&`): [@(0.0.255) void]_[* DrawDrawing](
+[@(0.0.255) int]_[*@3 x], [@(0.0.255) int]_[*@3 y], [@(0.0.255) const]_[_^Drawing^ Drawing][@(0.0.255) `&
+]_[*@3 iw])&]
+[s2;%% Draws [^Drawing^ Drawing] [%-*@3 iw] at [%-*@3 x],[%-*@3 y], using 
+its original size. Frontend to DrawDrawing op.&]
+[s3;%% &]
 [s4;%% &]
-[s5;:Draw`:`:DrawPainting`(const Rect`&`,const Painting`&`): [@(0.0.255) void]_[* DrawPai
-nting]([@(0.0.255) const]_[_^Rect^ Rect][@(0.0.255) `&]_[*@3 r], [@(0.0.255) const]_[_^Painting^ P
+[s5;:Draw`:`:DrawPainting`(int`,int`,const Painting`&`): [@(0.0.255) void]_[* DrawPaintin
+g]([@(0.0.255) const]_[_^Rect^ Rect][@(0.0.255) `&]_[*@3 r], [@(0.0.255) const]_[_^Painting^ P
 ainting][@(0.0.255) `&]_[*@3 iw])&]
 [s5;:Draw`:`:DrawPainting`(int`,int`,int`,int`,const Painting`&`): [@(0.0.255) void]_[* D
 rawPainting]([@(0.0.255) int]_[*@3 x], [@(0.0.255) int]_[*@3 y], [@(0.0.255) int]_[*@3 cx], 
 [@(0.0.255) int]_[*@3 cy], [@(0.0.255) const]_[_^Painting^ Painting][@(0.0.255) `&]_[*@3 iw])
 &]
+[s5;:Draw`:`:DrawPainting`(int`,int`,const Painting`&`): [@(0.0.255) void]_[* DrawPaintin
+g]([@(0.0.255) int]_[*@3 x], [@(0.0.255) int]_[*@3 y], [@(0.0.255) const]_[_^Painting^ Painti
+ng][@(0.0.255) `&]_[*@3 iw])&]
 [s2;%% Draws [^Painting^ Painting] [%-*@3 iw] scaled to rectangle [%-*@3 r] 
 respectively [%-*@3 x],[%-*@3 y],[%-*@3 cx],[%-*@3 cy]. Painter package 
-has to be included in the project for this to work. Frontend 
+has to be included in the project for this to work. Variant without 
+[%-*@3 cx],[%-*@3 cy] paints Painting in its original size. Frontend 
 to DrawPaintingOp.&]
 [s3;%% &]
 [s4;%% &]
@@ -758,7 +797,10 @@ array), otherwise advancements from font metrics are used. For
 8`-bit texts ([%-*@3 text] is [^String^ String] or [@(0.0.255) const 
 char `*]), if [%-*@3 charset] is present, text is converted from 
 this charset before printing, if no [%-*@3 charset] is specified, 
-default charset is used. Implemented using DrawTextOp.&]
+default charset is used. DrawText also performs missing glyph 
+replacement and composition. If Draw`::GetInfo() returns DRAWTEXTLINES, 
+DrawText uses DrawLine to provide support for Undeline and Strikeout 
+Font styles. DrawText calls DrawTextOp for low`-level glyph rendering.&]
 [s3;%% &]
 [s4;%% &]
 [s5;:Draw`:`:SinCos`(int`,double`&`,double`&`): [@(0.0.255) static] 
@@ -767,4 +809,4 @@ default charset is used. Implemented using DrawTextOp.&]
 [s2;%% This simple utility function computes sin(angle) and cos(angle), 
 where the full angle (2[%- π) ]is 3600.&]
 [s3; &]
-[s0; ]
+[s0; ]]

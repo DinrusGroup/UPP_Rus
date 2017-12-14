@@ -1,6 +1,6 @@
 #include "Draw.h"
 
-NAMESPACE_UPP
+namespace Upp {
 
 #define LTIMING(x) // TIMING(x)
 
@@ -113,10 +113,10 @@ void AddRefreshRect(Vector<Rect>& invalid, const Rect& _r)
 	for(int i = 0; i < inv.GetCount(); i++) {
 		bool ch = false;
 		Vector<Rect> rs1 = Subtract(rs, inv[i], ch);
-		if(ch) rs = rs1;
+		if(ch) rs = pick(rs1);
 	}
-	inv.AppendPick(rs);
-	invalid = inv;
+	inv.AppendPick(pick(rs));
+	invalid = pick(inv);
 }
 
 void DrawFatFrame(Draw& w, int x, int y, int cx, int cy, Color color, int n) {
@@ -329,7 +329,7 @@ void DrawRect(Draw& w, const Rect& rect, const Image& img, bool ralgn)
 	DrawRect(w, rect.left, rect.top, rect.Width(), rect.Height(), img, ralgn);
 }
 
-#ifdef flagWINGL
+#if defined(flagWINGL) || defined(flagLINUXGL)
 void DrawTiles(Draw& w, int x, int y, int cx, int cy, const Image& img, const Size& isz, const Rect& src) {
 	w.Clip(x, y, cx, cy);
 	Size sz = isz;
@@ -568,6 +568,12 @@ Image RenderGlyph(int cx, int x, Font font, int chr, int py, int pcy)
 {
 	if(render_glyph)
 		return (*render_glyph)(cx, x, font, chr, py, pcy);
+	if(ImageAnyDraw::IsAvailable()) {
+		ImageAnyDraw iw(cx, pcy);
+		iw.DrawRect(0, 0, cx, pcy, White);
+		iw.DrawText(x, -py, WString(chr, 1), font, Black);
+		return iw;
+	}
 	return Null;
 }
 
@@ -576,4 +582,4 @@ void SetRenderGlyph(Image (*f)(int cx, int x, Font font, int chr, int py, int pc
 	render_glyph = f;
 }
 
-END_UPP_NAMESPACE
+}

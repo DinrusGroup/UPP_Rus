@@ -1,8 +1,9 @@
 #include "RichEdit.h"
 
-NAMESPACE_UPP
+namespace Upp {
 
 
+void RichEdit::PasteFilter(RichText& txt, const String&) { Filter(txt); }
 void RichEdit::Filter(RichText& txt) {}
 
 void BegSelFixRaw(RichText& text)
@@ -45,14 +46,15 @@ RichEdit::UndoRec * RichEdit::UndoBegSelUnFix::GetRedo(const RichText& txt)
 	return new RichEdit::UndoBegSelFix;
 }
 
-bool RichEdit::BegSelTabFix()
+bool RichEdit::BegSelTabFix(int& count)
 {
-	if(begtabsel) {
+	if(begtabsel) { // If selection starts with first table which is the first element in the text
 		int c = cursor;
 		AddUndo(new UndoBegSelFix);
-		BegSelFixRaw(text);
+		BegSelFixRaw(text); // adds an empty paragraph at the start
 		Move(0);
-		Move(c + 1, true);
+		Move(c + 1, true); // and changes the selection
+		count++;
 		begtabsel = false;
 		return true;
 	}
@@ -60,7 +62,7 @@ bool RichEdit::BegSelTabFix()
 }
 
 void RichEdit::BegSelTabFixEnd(bool fix)
-{
+{ // removes empty paragraph added by BegSelTabFix
 	if(fix && GetLength() > 0) {
 		int c = cursor;
 		AddUndo(new UndoBegSelUnFix);
@@ -121,7 +123,7 @@ void RichEdit::SaveFormat()
 		pos = cursor;
 		count = 0;
 	}
-	bool b = BegSelTabFix();
+	bool b = BegSelTabFix(count);
 	SaveFormat(pos, count);
 	BegSelTabFixEnd(b);
 }
@@ -137,7 +139,7 @@ void RichEdit::ModifyFormat(int pos, const RichText::FormatInfo& fi, int count)
 {
 	if(IsReadOnly())
 		return;
-	bool b = BegSelTabFix();
+	bool b = BegSelTabFix(count);
 	Limit(pos, count);
 	SaveFormat(pos, count);
 	text.ApplyFormatInfo(pos, fi, count);
@@ -256,16 +258,22 @@ RichText RichEdit::GetSelection(int maxcount) const
 	if(tablesel) {
 		RichTable tab = text.CopyTable(tablesel, cells);
 		clip.SetStyles(text.GetStyles());
-		clip.CatPick(tab);
+		clip.CatPick(pick(tab));
 	}
 	else {
 		if(begtabsel) {
+			int pos = 0;
 			RichPos p = text.GetRichPos(0, 1);
 			if(p.table) {
-				RichTable tab = text.CopyTable(p.table);
 				clip.SetStyles(text.GetStyles());
-				clip.CatPick(tab);
-				clip.CatPick(text.Copy(p.tablen + 1, minmax(abs(cursor - p.tablen - 1), 0, maxcount)));
+				do {
+					RichTable tab = text.CopyTable(p.table);
+					clip.CatPick(pick(tab));
+					pos += p.tablen + 1;
+					p = text.GetRichPos(pos, 1);
+				}
+				while(p.table);
+				clip.CatPick(text.Copy(pos, minmax(abs(cursor - pos), 0, maxcount)));
 			}
 		}
 		else
@@ -401,36 +409,6 @@ RichObject RichEdit::GetObject() const
 	return text.GetRichPos(objectpos).object;
 }
 
-void RichEdit::LoadImage()
-{
-	FileSel fsel;
-	fsel.AllFilesType();
-	if(fsel.ExecuteOpen(t_("Open image from file"))) {
-		FileIn fi;
-		if(!fi.Open(~fsel)) {
-			Exclamation(NFormat(t_("Error opening file [* \1%s\1]."), ~fsel));
-			return;
-		}
-		Image img = StreamRaster::LoadAny(fi);
-		if(IsNull(img)) {
-			Exclamation(NFormat(t_("Unsupported image format in file [* \1%s\1]."), ~fsel));
-			return;
-		}
-		Size dots = img.GetDots();
-		if(dots.cx <= 0 || dots.cy <= 0)
-			dots = img.GetSize() * 6;
-		RichObject object = CreatePNGObject(img, dots, Size(Null));
-		RichText::FormatInfo finfo = GetFormatInfo();
-		RemoveSelection();
-		RichPara p;
-		p.Cat(object, finfo);
-		RichText clip;
-		clip.Cat(p);
-		Insert(GetCursor(), clip, false);
-		Finish();
-	}
-}
-
 void RichEdit::Select(int pos, int count)
 {
 	found = false;
@@ -460,18 +438,18 @@ void RichEdit::InsertLine()
 	}
 	anchor = cursor = cursor + 1;
 	begtabsel = false;
-	formatinfo.newpage = false;
+	formatinfo.newpage = formatinfo.newhdrftr = false;
 	if(st) {
 		Uuid next = text.GetStyle(b.styleid).next;
 		if(next != formatinfo.styleid) {
 			formatinfo.label.Clear();
 			formatinfo.styleid = next;
-			ApplyFormat(0, RichText::STYLE|RichText::NEWPAGE|RichText::LABEL);
+			ApplyFormat(0, RichText::STYLE|RichText::NEWPAGE|RichText::LABEL|RichText::NEWHDRFTR);
 			return;
 		}
 	}
-	ApplyFormat(0, RichText::NEWPAGE|RichText::LABEL);
+	ApplyFormat(0, RichText::NEWPAGE|RichText::LABEL|RichText::NEWHDRFTR);
 	objectpos = -1;
 }
 
-END_UPP_NAMESPACE
+}

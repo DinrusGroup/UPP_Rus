@@ -18,7 +18,7 @@
 #undef Font
 #undef Display
 
-NAMESPACE_UPP
+namespace Upp {
 
 #define LLOG(x)     //LOG(x)
 #define LTIMING(x)  //TIMING(x)
@@ -46,7 +46,6 @@ dword   (*Xgetpixel)(int r, int g, int b);
 EXITBLOCK
 {
 	if(Xdisplay) {
-// No CloseDisplay for now...
 		XCloseDisplay(Xdisplay);
 		LLOG("Xdisplay closed");
 		Xdisplay = NULL;
@@ -201,7 +200,7 @@ void InitX11Draw(XDisplay *display)
 			for(int g = 0; g < 24; g++)
 				for(int b = 0; b < 12; b++) {
 					int mind = INT_MAX;
-					int mini;
+					int mini = 0;
 					for(int i = 0; i < colorcount; i++) {
 						int d = ssq(r * 255 / 11 - (cs[i].red >> 8)) +
 						        ssq(g * 255 / 23 - (cs[i].green >> 8)) +
@@ -216,8 +215,6 @@ void InitX11Draw(XDisplay *display)
 		Xgetpixel = GetPseudoColorPixel;
 	}
 //	XFree(v);
-
-	Font::SetStdFont(ScreenSans(12));
 }
 
 void InitX11Draw(const char *dispname)
@@ -454,11 +451,6 @@ bool ScreenInPaletteMode()
 	return Xpalette;
 }
 
-Size GetScreenSize()
-{
-	return Size(Xwidth, Xheight);
 }
-
-END_UPP_NAMESPACE
 
 #endif

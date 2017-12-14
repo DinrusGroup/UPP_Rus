@@ -2,7 +2,7 @@
 
 SysConsole::SysConsole()
 {
-	CtrlLayoutExit(*this, "Системная Консоль");
+	CtrlLayoutExit(*this, "System Console");
 	list.NoHeader().NoGrid().NoCursor().AddColumn();
 	font = Courier(Ctrl::VertLayoutZoom(12));
 	list.SetLineCy(font.Info().GetHeight());
@@ -57,7 +57,7 @@ int SysConsole::CheckSystem(const char *s)
 	int exitcode = System(s);
 	if(exitcode) {
 		if(exitcode < 0)
-			AddResult("Ошибка при запуске " + String(s));
+			AddResult("Error running " + String(s));
 		else
 			AddResult("exitcode = " + FormatInt(exitcode));
 	}

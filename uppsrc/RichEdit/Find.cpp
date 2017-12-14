@@ -1,17 +1,17 @@
 #include <RichEdit/RichEdit.h>
 
-NAMESPACE_UPP
+namespace Upp {
 
 void RichEdit::FindReplaceAddHistory() {
-	if(!String(findreplace.find).IsEmpty())
+	if(!String(~findreplace.find).IsEmpty())
 		findreplace.find.AddHistory();
-	if(!String(findreplace.replace).IsEmpty())
+	if(!String(~findreplace.replace).IsEmpty())
 		findreplace.replace.AddHistory();
 }
 
 void RichEdit::CloseFindReplace()
 {
-	if(findreplace.IsOpen())
+	if(!persistent_findreplace && findreplace.IsOpen())
 		findreplace.Close();
 }
 
@@ -178,7 +178,7 @@ void RichEdit::OpenFindReplace()
 			findreplace.amend.Show();
 			findreplace.ok.SetLabel(t_("Find"));
 			findreplace.Title(t_("Find / Replace"));
-			findreplace.cancel <<= THISBACK(CloseFindReplace);
+			findreplace.cancel <<= callback(&findreplace, &TopWindow::Close);
 			findreplace.ok <<= THISBACK(Find);
 		}
 		else {
@@ -188,4 +188,4 @@ void RichEdit::OpenFindReplace()
 	}
 }
 
-END_UPP_NAMESPACE
+}

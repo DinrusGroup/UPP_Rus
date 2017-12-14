@@ -6,7 +6,7 @@ struct EnumProperty : public EditorProperty<DropList> {
 	virtual void     Read(CParser& p)          { SetData(ReadPropertyParam(p)); }
 
 	EnumProperty(VectorMap<String, String>& e) {
-		Add(editor.HSizePos(100, 2).TopPos(2));
+		Add(editor.HSizePosZ(100, 2).TopPos(2));
 		for(int i = 0; i < e.GetCount(); i++)
 			editor.Add(e.GetKey(i), e[i]);
 		SetData(defval = e.GetKey(0));
@@ -146,7 +146,7 @@ void LayoutItem::ReadProperties(CParser& p, bool addunknown)
 		else {
 			String name = p.ReadId();
 			int q = FindProperty(name);
-			if(q < 0)
+			if(q < 0) {
 				if(addunknown) {
 					q = property.GetCount();
 					ItemProperty& new_prop = property.Add(new RawProperty);
@@ -158,6 +158,7 @@ void LayoutItem::ReadProperties(CParser& p, bool addunknown)
 					ReadPropertyParam(p);
 					p.PassChar(')');
 				}
+			}
 			if(q >= 0) {
 				ItemProperty& ip = property[q];
 				ip.SetCharset(charset);
@@ -178,7 +179,7 @@ int  LayoutItem::FindProperty(const String& s) const
 	return -1;
 }
 
-String LayoutItem::SaveProperties() const
+String LayoutItem::SaveProperties(int y) const
 {
 	String out;
 	Vector<int> o = GetSortOrder(property, FieldRelation(&ItemProperty::level, StdLess<int>()));
@@ -194,7 +195,7 @@ String LayoutItem::SaveProperties() const
 	case Ctrl::CENTER: out << Format(".HCenterPosZ(%d, %d)", pos.x.GetB(), pos.x.GetA()); break;
 	}
 	switch(pos.y.GetAlign()) {
-	case Ctrl::TOP:    out << Format(".TopPosZ(%d, %d)", pos.y.GetA(), pos.y.GetB()); break;
+	case Ctrl::TOP:    out << Format(".TopPosZ(%d, %d)", pos.y.GetA() - y, pos.y.GetB()); break;
 	case Ctrl::BOTTOM: out << Format(".BottomPosZ(%d, %d)", pos.y.GetA(), pos.y.GetB()); break;
 	case Ctrl::SIZE:   out << Format(".VSizePosZ(%d, %d)", pos.y.GetA(), pos.y.GetB()); break;
 	case Ctrl::CENTER: out << Format(".VCenterPosZ(%d, %d)", pos.y.GetB(), pos.y.GetA()); break;
@@ -203,7 +204,7 @@ String LayoutItem::SaveProperties() const
 	return out;
 }
 
-String LayoutItem::Save(int i) const
+String LayoutItem::Save(int i, int y) const
 {
 	String out;
 	if(type.IsEmpty())
@@ -211,7 +212,7 @@ String LayoutItem::Save(int i) const
 	else
 		out << "\tITEM(" << type << ", ";
 	String var = variable.IsEmpty() ? Format("dv___%d", i) : variable;
-	out << var << ", " << SaveProperties() << ")\r\n";
+	out << var << ", " << SaveProperties(y) << ")\r\n";
 	return out;
 }
 
@@ -221,9 +222,9 @@ void LayoutItem::UnknownPaint(Draw& w)
 	int q = FindProperty("SetLabel");
 	if(q >= 0 && IsString(~property[q]))
 		DrawSmartText(w, 0, 0, csize.cx, ToUtf8((WString)~property[q]));
-	Size tsz = GetTextSize(type, Arial(11));
+	Size tsz = GetTextSize(type, LayFont());
 	w.DrawRect(csize.cx - tsz.cx, csize.cy - tsz.cy, tsz.cx, tsz.cy, SColorShadow);
-	w.DrawText(csize.cx - tsz.cx, csize.cy - tsz.cy, type, Arial(11), SColorLight);
+	w.DrawText(csize.cx - tsz.cx, csize.cy - tsz.cy, type, LayFont(), SColorLight);
 }
 
 void LayoutItem::CreateMethods(EscValue& ctrl, const String& type, bool copy) const
@@ -260,7 +261,7 @@ EscValue LayoutItem::CreateEsc() const
 	for(int q = 0; q < property.GetCount(); q++) {
 		EscValue w;
 		const Value& v = ~property[q];
-		if(IsType<Font>(v)) {
+		if(v.Is<Font>()) {
 			Font fnt = v;
 			if(fnt.GetHeight())
 				fnt.Height(Ctrl::VertLayoutZoom(fnt.GetHeight()));
@@ -270,7 +271,7 @@ EscValue LayoutItem::CreateEsc() const
 			w = (WString)v;
 		if(IsNumber(v))
 			w = (double)v;
-		if(IsType<Color>(v))
+		if(v.Is<Color>())
 			w = EscColor(v);
 		ctrl.MapSet(property[q].name, w);
 	}
@@ -295,7 +296,8 @@ EscValue LayoutItem::ExecuteMethod(const char *method, Vector<EscValue>& arg) co
 EscValue LayoutItem::ExecuteMethod(const char *method) const
 {
 	Vector<EscValue> arg;
-	return ExecuteMethod(method, arg);
+	EscValue h = ExecuteMethod(method, arg);
+	return h;
 }
 
 Size LayoutItem::GetMinSize()
@@ -341,7 +343,7 @@ void LayoutItem::Paint(Draw& w, Size sz, bool sample)
 				PutConsole(e);
 				DrawingDraw edw;
 				edw.DrawRect(0, 0, csize.cx, csize.cy, Red);
-				edw.DrawText(2, 2, e, Arial(11).Bold(), Yellow);
+				edw.DrawText(2, 2, e, LayFont().Bold(), Yellow);
 				cache = edw;
 			}
 		}
@@ -361,7 +363,7 @@ Image GetTypeIcon(const String& type, int cx, int cy, int i, Color bg)
 		p.iconsize[i] = Size(cx, cy);
 		LayoutItem m;
 		m.Create(type);
-		Size stdsize = m.GetStdSize();
+		Size stdsize = Zsz(m.GetStdSize());
 		if(stdsize.cx == 0 || stdsize.cy == 0)
 			return Null;
 

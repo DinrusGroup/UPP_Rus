@@ -1,6 +1,6 @@
 #include "CtrlLib.h"
 
-NAMESPACE_UPP
+namespace Upp {
 
 CH_VALUE(ViewEdge, CtrlsImg::VE());
 
@@ -141,6 +141,8 @@ CH_STYLE(EditField, Style, StyleDefault)
 	textdisabled = SColorDisabled();
 	selected = SColorHighlight();
 	selectedtext = SColorHighlightText();
+	selected0 = SColorDkShadow();
+	selectedtext0 = SColorHighlightText();
 	for(int i = 0; i < 4; i++)
 		edge[i] = CtrlsImg::EFE();
 	activeedge = false;
@@ -188,13 +190,12 @@ void EditField::CancelMode()
 
 int EditField::GetTextCx(const wchar *txt, int n, bool password, Font fnt) const
 {
-	FontInfo fi = fnt.Info();
 	if(password)
-		return n * fi['*'];
+		return n * font['*'];
 	const wchar *s = txt;
 	int x = 0;
 	while(n--)
-		x += fi[*s++];
+		x += GetCharWidth(*s++);
 	return x;
 }
 
@@ -207,7 +208,7 @@ int  EditField::GetViewHeight(Font font)
 {
 	Size sz(0, 0);
 	EditFieldFrame().FrameAddSize(sz);
-	return font.Info().GetHeight() + (sz.cy <= 2 ? 4 : sz.cy <= 4 ? 2 : 0);
+	return font.GetCy() + (sz.cy <= 2 ? 4 : sz.cy <= 4 ? 2 : 0);
 }
 
 int  EditField::GetStdHeight(Font font)
@@ -219,7 +220,7 @@ int  EditField::GetStdHeight(Font font)
 
 Size EditField::GetMinSize() const
 {
-	return AddFrameSize(10, font.Info().GetHeight() + 4);
+	return AddFrameSize(10, font.GetCy() + (no_internal_margin ? 0 : 4));
 }
 
 int  EditField::GetCursor(int posx)
@@ -227,16 +228,15 @@ int  EditField::GetCursor(int posx)
 	posx -= 2;
 	if(posx <= 0) return 0;
 
-	FontInfo fi = font.Info();
 	int count = text.GetLength();
 	if(password)
-		return min((posx + fi['*'] / 2) / fi['*'], count);
+		return min((posx + font['*'] / 2) / font['*'], count);
 
 	int x = 0;
 	const wchar *s = text;
 	int i = 0;
 	while(i < count) {
-		int witdh = fi[*s];
+		int witdh = GetCharWidth(*s);
 		if(posx < x + witdh / 2)
 			break;
 		x += witdh;
@@ -252,15 +252,17 @@ Image EditField::CursorImage(Point, dword)
 
 int  EditField::GetTy() const
 {
-	return (GetSize().cy + 1 - font.Info().GetHeight()) / 2;
+	return (GetSize().cy + 1 - font.GetCy()) / 2;
 }
 
 void EditField::HighlightText(Vector<Highlight>& hl)
 {
+	WhenHighlight(hl);
 }
 
 void EditField::Paints(Draw& w, int& x, int fcy, const wchar *&txt,
-					   Color ink, Color paper, int n, bool password, Font fnt)
+					   Color ink, Color paper, int n, bool password, Font fnt, Color underline,
+					   bool showspaces)
 {
 	if(n < 0) return;
 	int cx = GetTextCx(txt, n, password, font);
@@ -270,8 +272,31 @@ void EditField::Paints(Draw& w, int& x, int fcy, const wchar *&txt,
 		h.Cat('*', n);
 		w.DrawText(x, 0, ~h, fnt, ink, n);
 	}
-	else
-		w.DrawText(x, 0, txt, fnt, ink, n);
+	else {
+		const wchar *txts = txt;
+		Buffer<wchar> h;
+		const wchar *e = txt + n;
+		for(const wchar *q = txt; q < e; q++)
+			if(*q < 32) {
+				h.Alloc(n);
+				wchar *t = ~h;
+				for(const wchar *q = txt; q < e; q++)
+					*t++ = *q < 32 ? LowChar(*q) : *q;
+				txts = ~h;
+			}
+		if(!IsNull(underline))
+			w.DrawRect(x, fnt.GetAscent() + 1, cx, 1, underline);
+		w.DrawText(x, 0, txts, fnt, ink, n);
+		if(showspaces) {
+			int xx = x;
+			Size sz = GetTextSize(" ", fnt) / 2;
+			for(const wchar *q = txts; q < e; q++) {
+				if(*q == ' ')
+					w.DrawRect(xx + sz.cx, sz.cy, 2, 2, Blend(SColorHighlight(), SColorPaper()));
+				xx += fnt[*q];
+			}
+		}
+	}
 	txt += n;
 	x += cx;
 }
@@ -283,18 +308,21 @@ void EditField::Paint(Draw& w)
 	Color paper = enabled && !IsReadOnly() ? (HasFocus() ? style->focus : style->paper) : style->disabled;
 	if(nobg)
 		paper = Null;
-	Color ink = enabled ? style->text : style->textdisabled;
+	Color ink = enabled ? Nvl(textcolor, style->text) : style->textdisabled;
 	if(enabled && (convert && convert->Scan(text).IsError() || errorbg))
 		paper = style->invalid;
-	int fcy = font.Info().GetHeight();
+	int fcy = font.GetCy();
 	int yy = GetTy();
-	w.DrawRect(0, 0, 2, sz.cy, paper);
-	w.DrawRect(0, 0, sz.cx, yy, paper);
-	w.DrawRect(0, yy + fcy, sz.cx, sz.cy - yy - fcy, paper);
-	w.DrawRect(sz.cx - 2, 0, 2, sz.cy, paper);
-	w.Clipoff(2, yy, sz.cx - 4, fcy);
+	if(!no_internal_margin) {
+		w.DrawRect(0, 0, 2, sz.cy, paper);
+		w.DrawRect(0, 0, sz.cx, yy, paper);
+		w.DrawRect(0, yy + fcy, sz.cx, sz.cy - yy - fcy, paper);
+		w.DrawRect(sz.cx - 2, 0, 2, sz.cy, paper);
+		w.Clipoff(2, yy, sz.cx - 4, fcy);
+	}
 	int x = -sc;
 	bool ar = alignright && !HasFocus();
+	w.DrawRect(0, 0, sz.cx, fcy, paper);
 	if(IsNull(text) && (!IsNull(nulltext) || !IsNull(nullicon))) {
 		const wchar *txt = nulltext;
 		if(!IsNull(nullicon)) {
@@ -303,7 +331,7 @@ void EditField::Paint(Draw& w)
 			w.DrawImage(x, (fcy - nullicon.GetHeight()) / 2, nullicon);
 			x += icx + 4;
 		}
-		Paints(w, x, fcy, txt, nullink, paper, nulltext.GetLength(), false, nullfont);
+		Paints(w, x, fcy, txt, nullink, paper, nulltext.GetLength(), false, nullfont, Null, false);
 	}
 	else {
 		const wchar *txt = text;
@@ -317,6 +345,7 @@ void EditField::Paint(Draw& w)
 		for(int i = 0; i < len; i++) {
 			hl[i].ink = ink;
 			hl[i].paper = paper;
+			hl[i].underline = Null;
 		}
 		HighlightText(hl);
 		len = hl.GetCount();
@@ -324,29 +353,19 @@ void EditField::Paint(Draw& w)
 		if(GetSelection(l, h)) {
 			h = min(h, len);
 			for(int i = l; i < h; i++) {
-				hl[i].ink = enabled ? style->selectedtext : paper;
-				hl[i].paper = enabled ? style->selected : ink;
+				hl[i].ink = enabled ? HasFocus() ? style->selectedtext : style->selectedtext0 : paper;
+				hl[i].paper = enabled ? HasFocus() ? style->selected : style->selected0 : ink;
 			}
 		}
 		int b = 0;
 		for(int i = 0; i <= len; i++)
 			if((i == len || hl[i] != hl[b]) && b < len) {
-				Paints(w, x, fcy, txt, hl[b].ink, hl[b].paper, i - b, password, font);
+				Paints(w, x, fcy, txt, hl[b].ink, hl[b].paper, i - b, password, font, hl[b].underline, showspaces);
 				b = i;
 			}
-/*		if(GetSelection(l, h)) {
-			Paints(w, x, fcy, txt, ink, paper, l, password, font);
-			Paints(w, x, fcy, txt, enabled ? style->selectedtext : paper,
-			                       enabled ? style->selected : ink, h - l, password, font);
-			Paints(w, x, fcy, txt, ink, paper, text.GetLength() - h, password, font);
-		}
-		else
-			Paints(w, x, fcy, txt, ink, paper, text.GetLength(), password, font);
-*/
 	}
-	if(!ar)
-		w.DrawRect(x, 0, 9999, fcy, paper);
-	w.End();
+	if(!no_internal_margin)
+		w.End();
 	DrawTiles(w, dropcaret, CtrlImg::checkers());
 }
 
@@ -374,14 +393,13 @@ bool EditField::IsSelection() const
 
 Rect EditField::GetCaretRect(int pos) const
 {
-	FontInfo fi = font.Info();
-	return RectC(GetCaret(pos) - sc + 2 - fi.GetRightSpace('o') + fi.GetLeftSpace('o'), GetTy(),
-	             1, min(GetSize().cy - 2 * GetTy(), fi.GetHeight()));
+	return RectC(GetCaret(pos) - sc + 2 * !no_internal_margin
+	               - font.GetRightSpace('o') + font.GetLeftSpace('o'), GetTy(),
+	             1, min(GetSize().cy - 2 * GetTy(), font.GetCy()));
 }
 
 void EditField::SyncCaret()
 {
-	FontInfo fi = font.Info();
 	Rect r = GetCaretRect(cursor);
 	SetCaret(r.left, r.top, r.GetWidth(), r.GetHeight());
 }
@@ -407,7 +425,7 @@ void EditField::Finish(bool refresh)
 	sz.cx -= 2;
 	if(sz.cx <= 0) return;
 	int x = GetCaret(cursor);
-	int wx = x + font.Info().GetRightSpace('o');
+	int wx = x + font.GetRightSpace('o');
 	if(wx > sz.cx + sc - 1) {
 		sc = wx - sz.cx + 1;
 		Refresh();
@@ -428,6 +446,14 @@ void EditField::Layout()
 	Finish();
 }
 
+void EditField::SelSource()
+{
+	if(GetSelection(fsell, fselh))
+		SetSelectionSource(ClipFmtsText());
+	else
+		fsell = fselh = -1;
+}
+
 void EditField::GotFocus()
 {
 	if(autoformat && IsEditable() && !IsNull(text) && inactive_convert) {
@@ -437,17 +463,18 @@ void EditField::GotFocus()
 			if(s != text) text = s;
 		}
 	}
-	if(!keep_selection) {
+	if(!keep_selection && !IsSelection()) {
 		anchor = 0;
 		cursor = text.GetLength();
 	}
+	SelSource();
 	Finish();
 	SyncEdge();
 }
 
 void EditField::LostFocus()
 {
-	if(autoformat && IsEditable() && !IsNull(text)) {
+	if(autoformat && IsEditable() && !IsNull(text) && !IsDragAndDropSource()) {
 		Value v = convert->Scan(text);
 		if(!v.IsError()) {
 			const Convert * cv = inactive_convert ? inactive_convert : convert;
@@ -550,8 +577,7 @@ void EditField::Move(int newpos, bool select)
 		anchor = -1;
 	cursor = newpos;
 	Finish(refresh);
-	if(select)
-		SetSelectionSource(ClipFmtsText());
+	SelSource();
 }
 
 void EditField::SetSelection(int l, int h)
@@ -564,6 +590,7 @@ void EditField::SetSelection(int l, int h)
 		cursor = l;
 		anchor = -1;
 	}
+	SelSource();
 	Finish();
 }
 
@@ -573,6 +600,7 @@ void EditField::CancelSelection()
 	if(GetSelection(l, h)) {
 		cursor = l;
 		anchor = -1;
+		fsell = fselh = -1;
 		sc = 0;
 		Finish();
 	}
@@ -611,15 +639,17 @@ int EditField::Insert(int pos, const WString& itext)
 	const wchar *s = itext;
 	for(;;) {
 		wchar chr = *s++;
-		if(chr == '\t')
-			ins.Cat(WString(' ', 4));
-		else
+		int count = 1;
+		if(chr == '\t') {
+			count = 4;
+			chr = ' ';
+		}
 		if(chr >= ' ') {
 			chr = (*filter)(chr);
 			if(chr) {
 				chr = convert->Filter(chr);
 				if(chr && (charset == CHARSET_UNICODE || FromUnicode(chr, charset, 0)))
-					ins.Cat(chr);
+					ins.Cat(chr, count);
 			}
 		}
 		else
@@ -668,9 +698,11 @@ void EditField::DragAndDrop(Point p, PasteClip& d)
 	if(AcceptText(d)) {
 		SaveUndo();
 		int sell, selh;
+		WString txt = GetWString(d);
 		if(GetSelection(sell, selh)) {
 			if(c >= sell && c < selh) {
-				RemoveSelection();
+				if(!IsReadOnly())
+					RemoveSelection();
 				if(IsDragAndDropSource())
 					d.SetAction(DND_COPY);
 				c = sell;
@@ -679,11 +711,12 @@ void EditField::DragAndDrop(Point p, PasteClip& d)
 			if(d.GetAction() == DND_MOVE && IsDragAndDropSource()) {
 				if(c > sell)
 					c -= selh - sell;
-				RemoveSelection();
+				if(!IsReadOnly())
+					RemoveSelection();
 				d.SetAction(DND_COPY);
 			}
 		}
-		int count = Insert(c, GetWString(d));
+		int count = Insert(c, txt);
 		SetFocus();
 		SetSelection(c, c + count);
 		Action();
@@ -692,10 +725,9 @@ void EditField::DragAndDrop(Point p, PasteClip& d)
 	if(!d.IsAccepted()) return;
 	Rect dc(0, 0, 0, 0);
 	if(c >= 0) {
-		FontInfo fi = font.Info();
 		int x = GetCaret(c);
-		dc = RectC(x - sc + 2 - fi.GetRightSpace('o'), GetTy(),
-		           1, min(GetSize().cy - 2 * GetTy(), fi.GetHeight()));
+		dc = RectC(x - sc + 2 - font.GetRightSpace('o'), GetTy(),
+		           1, min(GetSize().cy - 2 * GetTy(), font.GetCy()));
 	}
 	if(dc != dropcaret) {
 		Refresh(dropcaret);
@@ -744,7 +776,9 @@ void EditField::LeftDrag(Point p, dword flags)
 		iw.Alpha().DrawText(0, 0, sel, StdFont(), White);
 		VectorMap<String, ClipData> data;
 		Append(data, sel);
-		if(DoDragAndDrop(data, iw) == DND_MOVE) {
+		bool oks = keep_selection;
+		keep_selection = true;
+		if(DoDragAndDrop(data, iw) == DND_MOVE && !IsReadOnly()) {
 			CancelSelection();
 			SaveUndo();
 			Remove(sell, selh - sell);
@@ -752,14 +786,15 @@ void EditField::LeftDrag(Point p, dword flags)
 			Finish();
 			Action();
 		}
+		keep_selection = oks;
 	}
 }
 
 String EditField::GetSelectionData(const String& fmt) const
 {
-	int sell, selh;
-	if(GetSelection(sell, selh))
-		return GetTextClip(text.Mid(sell, selh - sell), fmt);
+	if(password) return String();
+	if(fsell >= 0 && fselh >= 0 && fsell <= text.GetCount() && fselh <= text.GetCount())
+		return GetTextClip(text.Mid(fsell, fselh - fsell), fmt);
 	return String();
 }
 
@@ -785,11 +820,17 @@ void EditField::Cut()
 	Finish();
 }
 
+void EditField::StdPasteFilter(WString&)
+{
+}
+
 void EditField::Paste()
 {
 	if(!IsEditable())
 		return;
-	Insert(ReadClipboardUnicodeText());
+	WString w = ReadClipboardUnicodeText();
+	WhenPasteFilter(w);
+	Insert(w);
 	Action();
 	Finish();
 }
@@ -811,33 +852,35 @@ void EditField::SelectAll()
 }
 
 void EditField::StdBar(Bar& menu) {
-	menu.Add(t_("Отменить"), THISBACK(Undo))
+	menu.Add(IsEditable(), t_("Undo"), THISBACK(Undo))
 		.Key(K_ALT_BACKSPACE)
 		.Key(K_CTRL_Z);
 	menu.Separator();
-	menu.Add(IsEditable() && IsSelection(), t_("Вырезать"), CtrlImg::cut(), THISBACK(Cut))
+	menu.Add(IsEditable() && IsSelection(), t_("Cut"), CtrlImg::cut(), THISBACK(Cut))
 		.Key(K_SHIFT_DELETE)
 		.Key(K_CTRL_X);
-	menu.Add(IsSelection(), t_("Копировать"), CtrlImg::copy(), THISBACK(Copy))
+	menu.Add(IsSelection(), t_("Copy"), CtrlImg::copy(), THISBACK(Copy))
 		.Key(K_CTRL_INSERT)
 		.Key(K_CTRL_C);
-	menu.Add(IsEditable() && IsClipboardAvailableText(), t_("Вставить"), CtrlImg::paste(), THISBACK(Paste))
+	menu.Add(IsEditable() && IsClipboardAvailableText(), t_("Paste"), CtrlImg::paste(), THISBACK(Paste))
 		.Key(K_SHIFT_INSERT)
 		.Key(K_CTRL_V);
-	menu.Add(IsEditable(), t_("Стереть"), CtrlImg::remove(), THISBACK(Erase))
+	menu.Add(IsEditable(), t_("Erase"), CtrlImg::remove(), THISBACK(Erase))
 		.Key(K_DELETE);
 	menu.Separator();
-	menu.Add(GetLength(), t_("Выбрать все"), THISBACK(SelectAll))
+	menu.Add(GetLength(), t_("Select all"), CtrlImg::select_all(), THISBACK(SelectAll))
 		.Key(K_CTRL_A);
 }
-
 
 void EditField::RightDown(Point p, dword keyflags)
 {
 	keep_selection = true;
+	Ptr<EditField> self = this;
 	MenuBar::Execute(WhenBar);
-	SetFocus();
-	keep_selection = false;
+	if(self) { // protect from destruction when in menu modal loop
+		SetFocus();
+		keep_selection = false;
+	}
 }
 
 bool EditField::Key(dword key, int rep)
@@ -1001,12 +1044,23 @@ void EditField::Reset()
 	SetStyle(StyleDefault());
 	SetFrame(edge);
 	font = StdFont();
+	textcolor = Null;
+	showspaces = false;
+	no_internal_margin = false;
+	fsell = fselh = -1;
 }
 
 EditField& EditField::SetFont(Font _font)
 {
 	font = _font;
 	Finish(true);
+	return *this;
+}
+
+EditField& EditField::SetColor(Color c)
+{
+	textcolor = c;
+	Refresh();
 	return *this;
 }
 
@@ -1046,201 +1100,4 @@ EditField::EditField()
 
 EditField::~EditField() {}
 
-void EditIntSpin::Inc()
-{
-	if(IsReadOnly()) return;
-	int i = GetData();
-	if(IsNull(i)) {
-		if(IsNull(GetMin()) || GetMin() == INT_MIN) return;
-		SetData(GetMin());
-	}
-	else
-	if(!IsNull(GetMax()) && i < GetMax())
-		SetData(min(i + inc, GetMax()));
-	else
-		return;
-	SetFocus();
-	SetSelection();
-	UpdateAction();
 }
-
-void EditIntSpin::Dec()
-{
-	if(IsReadOnly()) return;
-	int i = GetData();
-	if(IsNull(i)) {
-		if(IsNull(GetMax()) || GetMax() == INT_MAX) return;
-		SetData(GetMax());
-	}
-	else
-	if(!IsNull(GetMin()) && i > GetMin())
-		SetData(max(i - inc, GetMin()));
-	else
-		return;
-	SetFocus();
-	SetSelection();
-	UpdateAction();
-}
-
-void EditIntSpin::Init()
-{
-	sb.inc.WhenAction = sb.inc.WhenRepeat = THISBACK(Inc);
-	sb.dec.WhenAction = sb.dec.WhenRepeat = THISBACK(Dec);
-	AddFrame(sb);
-}
-
-EditIntSpin::EditIntSpin(int inc) : inc(inc) { Init(); }
-EditIntSpin::EditIntSpin(int min, int max, int inc) : EditInt(min, max), inc(inc) { Init(); }
-
-EditIntSpin::~EditIntSpin() {}
-
-bool EditIntSpin::Key(dword key, int repcnt)
-{
-	if(key == K_UP)   { Inc(); return true; }
-	if(key == K_DOWN) { Dec(); return true; }
-	return EditInt::Key(key, repcnt);
-}
-
-void EditIntSpin::MouseWheel(Point, int zdelta, dword)
-{
-	if(zdelta < 0)
-		Dec();
-	else
-		Inc();
-}
-
-void EditInt64Spin::Inc()
-{
-	if(IsReadOnly()) return;
-	int i = GetData();
-	if(IsNull(i)) {
-		if(IsNull(GetMin()) || GetMin() == INT64_MIN) return;
-		SetData(GetMin());
-	}
-	else
-	if(!IsNull(GetMax()) && i < GetMax())
-		SetData(min(i + inc, GetMax()));
-	else
-		return;
-	SetFocus();
-	SetSelection();
-	UpdateAction();
-}
-
-void EditInt64Spin::Dec()
-{
-	if(IsReadOnly()) return;
-	int i = GetData();
-	if(IsNull(i)) {
-		if(IsNull(GetMax()) || GetMax() == INT_MAX) return;
-		SetData(GetMax());
-	}
-	else
-	if(!IsNull(GetMin()) && i > GetMin())
-		SetData(max(i - inc, GetMin()));
-	else
-		return;
-	SetFocus();
-	SetSelection();
-	UpdateAction();
-}
-
-void EditInt64Spin::Init()
-{
-	sb.inc.WhenAction = sb.inc.WhenRepeat = THISBACK(Inc);
-	sb.dec.WhenAction = sb.dec.WhenRepeat = THISBACK(Dec);
-	AddFrame(sb);
-}
-
-EditInt64Spin::EditInt64Spin(int64 inc) : inc(inc) { Init(); }
-EditInt64Spin::EditInt64Spin(int64 min, int64 max, int64 inc) : EditInt64(min, max), inc(inc) { Init(); }
-
-EditInt64Spin::~EditInt64Spin() {}
-
-bool EditInt64Spin::Key(dword key, int repcnt)
-{
-	if(key == K_UP)   { Inc(); return true; }
-	if(key == K_DOWN) { Dec(); return true; }
-	return EditInt64::Key(key, repcnt);
-}
-
-void EditInt64Spin::MouseWheel(Point, int zdelta, dword)
-{
-	if(zdelta < 0)
-		Dec();
-	else
-		Inc();
-}
-
-EditDoubleSpin::EditDoubleSpin(double inc) : inc(inc) { Init(); }
-EditDoubleSpin::EditDoubleSpin(double min, double max, double inc) : EditDouble(min, max), inc(inc) { Init(); }
-
-EditDoubleSpin::~EditDoubleSpin() {}
-
-void EditDoubleSpin::Init()
-{
-	AddFrame(sb);
-	sb.inc.WhenRepeat = sb.inc.WhenAction = THISBACK(Inc);
-	sb.dec.WhenRepeat = sb.dec.WhenAction = THISBACK(Dec);
-}
-
-void EditDoubleSpin::Inc()
-{
-	if(IsReadOnly())
-	{
-		BeepExclamation();
-		return;
-	}
-	double d = GetData();
-	if(!IsNull(d))
-	{
-		d = (floor(d / inc + 1e-3) + 1) * inc;
-		if(IsNull(GetMax()) || d <= GetMax())
-		{
-			SetData(d);
-			Action();
-		}
-	}
-	else if(minval != DOUBLE_NULL_LIM)
-		SetData(minval);
-	SetFocus();
-}
-
-void EditDoubleSpin::Dec()
-{
-	if(IsReadOnly())
-	{
-		BeepExclamation();
-		return;
-	}
-	double d = GetData();
-	if(!IsNull(d))
-	{
-		d = (ceil(d / inc - 1e-3) - 1) * inc;
-		if(IsNull(GetMin()) || d >= GetMin())
-		{
-			SetData(d);
-			Action();
-		}
-	}
-	else if(maxval != -DOUBLE_NULL_LIM)
-		SetData(maxval);
-	SetFocus();
-}
-
-bool EditDoubleSpin::Key(dword key, int repcnt)
-{
-	if(key == K_UP)   { Inc(); return true; }
-	if(key == K_DOWN) { Dec(); return true; }
-	return EditDouble::Key(key, repcnt);
-}
-
-void EditDoubleSpin::MouseWheel(Point, int zdelta, dword)
-{
-	if(zdelta < 0)
-		Dec();
-	else
-		Inc();
-}
-
-END_UPP_NAMESPACE

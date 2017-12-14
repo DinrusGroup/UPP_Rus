@@ -4,7 +4,7 @@
 #include <CtrlCore/CtrlCore.h>
 #include <Ole/Ole.h>
 
-NAMESPACE_UPP
+namespace Upp {
 
 #define OCXLOG RLOG    // redefine to RLOG if you want logs in retail versions
 
@@ -107,7 +107,6 @@ BOOL WINAPI DllMain(HINSTANCE hinstDll, DWORD fdwReason, LPVOID lpReserved) \
 { \
 	if(fdwReason == DLL_PROCESS_ATTACH) { \
 		AppSetHandle(hinstDll); \
-		SetVppLogName(ForceExt(GetExeFilePath(), ".log")); \
 	} \
 	RLOG("DllMain(" << FormatIntHex(hinstDll) << ", reason = " << (int)fdwReason << ")"); \
 	if(fdwReason == DLL_PROCESS_ATTACH) { \
@@ -825,6 +824,6 @@ private:
 	VectorMap<Guid, IConnectionPoint *> point_map;
 };
 
-END_UPP_NAMESPACE
+}
 
 #endif

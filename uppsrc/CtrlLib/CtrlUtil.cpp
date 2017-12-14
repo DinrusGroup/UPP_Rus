@@ -1,6 +1,6 @@
 #include "CtrlLib.h"
 
-NAMESPACE_UPP
+namespace Upp {
 
 #define LLOG(x) // RLOG(x)
 
@@ -36,10 +36,12 @@ void Animate(Ctrl& c, const Rect& target, int type)
 				if(r.bottom < target.bottom)
 				   r.bottom += ((target.bottom - r.bottom) * t) / anitime;
 				if(r.GetWidth() > target.GetWidth())
-				   r.right = (r.left + ((r.GetWidth() - target.GetWidth()) * t) / anitime);
+				   r.right = r.left + target.GetWidth();
 				if(r.GetHeight() > target.GetHeight())
-				   r.bottom = (r.top + ((r.GetHeight() - target.GetHeight()) * t) / anitime);
+				   r.bottom = r.top + target.GetHeight();
 				c.SetRect(r);
+				if(r == target)
+					break;
 			}
 			else
 			if(type == GUIEFFECT_FADE)
@@ -64,9 +66,9 @@ void Animate(Ctrl& c, int x, int y, int cx, int cy, int type)
 bool CtrlLibDisplayError(const Value& e) {
 	if(!e.IsError())
 		return false;
-	String s = ValueTo<String>(e);
+	String s = GetErrorText(e);
 	if(s.IsEmpty())
-		s = t_("Неверные данные.");
+		s = t_("Invalid data.");
 	Exclamation(s);
 	return true;
 }
@@ -132,52 +134,142 @@ void DelayCallback::Invoke() {
 	SetTimeCallback(delay, target, this);
 }
 
-bool EditText(String& s, const char *title, const char *label, int (*f)(int), int maxlen)
+void sSyncLabel(Label *lbl, const char *label, EditString *text)
+{
+	lbl->SetLabel(String().Cat() << label << " (" << text->GetLength() << "/" << text->GetMaxLength() << ")");
+}
+
+bool EditText(String& s, const char *title, const char *label, int (*f)(int), int maxlen, bool notnull)
 {
 	WithEditStringLayout<TopWindow> dlg;
 	CtrlLayoutOKCancel(dlg, title);
 	dlg.lbl = label;
-	dlg.text = s.ToWString();
+	dlg.text <<= s.ToWString();
+	dlg.text.NotNull(notnull);
 	dlg.text.SetFilter(f);
-	if(maxlen) dlg.text.MaxLen(maxlen);
+	if(maxlen) {
+		dlg.text.MaxLen(maxlen);
+		dlg.text <<= callback3(sSyncLabel, &dlg.lbl, label, &dlg.text);
+		dlg.text.WhenAction();
+	}
 	if(dlg.Execute() == IDOK) {
-		s = dlg.text;
+		s = ~dlg.text;
 		return true;
 	}
 	return false;
+}
+
+bool EditText(String& s, const char *title, const char *label, int (*filter)(int), int maxlen)
+{
+	return EditText(s, title, label, filter, maxlen, false);
 }
 
 bool EditText(String& s, const char *title, const char *label, int maxlen)
 {
-	return EditText(s, title, label, CharFilterUnicode, maxlen);
+	return EditText(s, title, label, CharFilterUnicode, maxlen, false);
 }
 
-bool EditText(WString& s, const char *title, const char *label, int (*f)(int), int maxlen)
+bool EditTextNotNull(String& s, const char *title, const char *label, int (*filter)(int), int maxlen)
 {
-	WithEditStringLayout<TopWindow> dlg;
-	CtrlLayoutOKCancel(dlg, title);
-	dlg.lbl = label;
-	dlg.text = s;
-	dlg.text.SetFilter(f);
-	if(maxlen) dlg.text.MaxLen(maxlen);
-	if(dlg.Execute() == IDOK) {
-		s = dlg.text.GetText();
+	return EditText(s, title, label, filter, maxlen, true);
+}
+
+bool EditTextNotNull(String& s, const char *title, const char *label, int maxlen)
+{
+	return EditText(s, title, label, CharFilterUnicode, maxlen, true);
+}
+
+bool EditText(WString& s, const char *title, const char *label, int (*f)(int), int maxlen, bool notnull)
+{
+	String ss = s.ToString();
+	if(EditText(ss, title, label, f, maxlen, notnull)) {
+		s = ss.ToWString();
 		return true;
 	}
 	return false;
 }
 
-bool EditText(WString& s, const char *title, const char *label, int maxlen)
+bool EditText(WString& s, const char *title, const char *label, int (*filter)(int), int maxlen)
 {
-	return EditText(s, title, label, CharFilterUnicode, maxlen);
+	return EditText(s, title, label, filter, maxlen, false);
 }
 
-Callback CtrlRetriever::operator<<=(Callback cb)
+bool EditText(WString& s, const char *title, const char *label, int maxlen)
+{
+	return EditText(s, title, label, CharFilterUnicode, maxlen, false);
+}
+
+bool EditTextNotNull(WString& s, const char *title, const char *label, int (*filter)(int), int maxlen)
+{
+	return EditText(s, title, label, filter, maxlen, true);
+}
+
+bool EditTextNotNull(WString& s, const char *title, const char *label, int maxlen)
+{
+	return EditText(s, title, label, CharFilterUnicode, maxlen, true);
+}
+
+bool EditNumber(int& n, const char *title, const char *label, int min, int max, bool notnull)
+{
+	WithEditIntLayout<TopWindow> dlg;
+	CtrlLayoutOKCancel(dlg, title);
+	dlg.lbl = label;
+	dlg.number <<= n;
+	dlg.number.MinMax(min, max);
+	dlg.number.NotNull(notnull);
+	if(dlg.Execute() == IDOK) {
+		n = ~dlg.number;
+		return true;
+	}
+	return false;
+}
+
+bool EditNumber(double& n, const char *title, const char *label, double min, double max, bool notnull)
+{
+	WithEditDoubleLayout<TopWindow> dlg;
+	CtrlLayoutOKCancel(dlg, title);
+	dlg.lbl = label;
+	dlg.number <<= n;
+	dlg.number.MinMax(min, max);
+	dlg.number.NotNull(notnull);
+	if(dlg.Execute() == IDOK) {
+		n = ~dlg.number;
+		return true;
+	}
+	return false;
+}
+
+bool EditDateDlg(Date& d, const char *title, const char *label, Date min, Date max, bool notnull)
+{
+	WithEditDateLayout<TopWindow> dlg;
+	CtrlLayoutOKCancel(dlg, title);
+	dlg.lbl = label;
+	dlg.date <<= d;
+	dlg.date.MinMax(min, max);
+	dlg.date.NotNull(notnull);
+	if(dlg.Execute() == IDOK) {
+		d = ~dlg.date;
+		return true;
+	}
+	return false;
+}
+
+Event<> CtrlRetriever::operator^=(Event<> cb)
 {
 	for(int i = 0; i < item.GetCount(); i++) {
 		CtrlItem0 *m = dynamic_cast<CtrlItem0 *>(&item[i]);
 		if(m)
 			m->ctrl->WhenAction = cb;
+	}
+	return cb;
+}
+
+Event<> CtrlRetriever::operator<<(Event<> cb)
+{
+	for(int i = 0; i < item.GetCount(); i++) {
+		CtrlItem0 *m = dynamic_cast<CtrlItem0 *>(&item[i]);
+		if(m)
+			m->ctrl->WhenAction << cb;
 	}
 	return cb;
 }
@@ -195,6 +287,50 @@ void IdCtrls::Add(Id id, Ctrl& ctrl)
 	m.ctrl = &ctrl;
 }
 
+ValueMap IdCtrls::Get() const
+{
+	ValueMap m;
+	for(int i = 0; i < item.GetCount(); i++)
+		m.Add(item[i].id, item[i].ctrl->GetData());
+	return m;
+}
+
+void IdCtrls::Set(const ValueMap& m)
+{
+	for(int i = 0; i < item.GetCount(); i++)
+		item[i].ctrl->SetData(m[item[i].id]);
+}
+
+bool IdCtrls::Accept()
+{
+	for(int i = 0; i < item.GetCount(); i++)
+		if(!item[i].ctrl->Accept()) return false;
+	return true;
+}
+
+void IdCtrls::ClearModify() {
+	for(int i = 0; i < item.GetCount(); i++)
+		item[i].ctrl->ClearModify();
+}
+
+bool IdCtrls::IsModified() {
+	for(int i = 0; i < item.GetCount(); i++)
+		if(item[i].ctrl->IsModified()) return true;
+	return false;
+}
+
+void IdCtrls::Enable(bool b)
+{
+	for(int i = 0; i < item.GetCount(); i++)
+		item[i].ctrl->Enable(b);
+}
+
+void IdCtrls::SetNull()
+{
+	for(int i = 0; i < item.GetCount(); i++)
+		item[i].ctrl->SetData(Null);
+}
+
 void Set(ArrayCtrl& array, int ii, IdCtrls& m)
 {
 	for(int i = 0; i < m.GetCount(); i++)
@@ -207,6 +343,20 @@ void Get(ArrayCtrl& array, int ii, IdCtrls& m)
 		m[i] <<= array.Get(ii, m(i));
 }
 
+Event<> IdCtrls::operator<<(Event<> action)
+{
+	for(int i = 0; i < item.GetCount(); i++)
+		item[i].ctrl->WhenAction << action;
+	return action;
+}
+
+Event<> IdCtrls::operator^=(Event<> action)
+{
+	for(int i = 0; i < item.GetCount(); i++)
+		item[i].ctrl->WhenAction = action;
+	return action;
+}
+
 String sProfile(const MemoryProfile& mem)
 {
 	return AsString(mem);
@@ -217,8 +367,38 @@ void MemoryProfileInfo() {
 	String text = sProfile(mem);
 	const MemoryProfile *peak = PeakMemoryProfile();
 	if(peak)
-		text << "\r\n=== Выбрать профиль памяти\r\n" << sProfile(*peak);
+		text << "\r\n=== Peak memory profile\r\n" << sProfile(*peak);
 	PromptOK("[C " + DeQtfLf(text));
 };
 
-END_UPP_NAMESPACE
+FileSelButton::FileSelButton(MODE mode, const char *title)
+: title(title), mode(mode)
+{
+	button.NoWantFocus();
+	button.SetImage(CtrlImg::right_arrow());
+	button <<= THISBACK(OnAction);
+}
+
+void FileSelButton::OnAction()
+{
+	Ctrl *owner = button.GetParent();
+	ASSERT(owner);
+	String old = ~*owner;
+	if(mode == MODE_DIR)
+		ActiveDir(old);
+	else
+		Set(old);
+	if(mode == MODE_OPEN ? ExecuteOpen(title) : mode == MODE_SAVE ? ExecuteSaveAs(title) : ExecuteSelectDir(title))
+	{
+		*owner <<= Get();
+		owner->Action();
+	}
+}
+
+void FileSelButton::Detach()
+{
+	Ctrl *p = button.GetParent();
+	if(p) p->RemoveFrame(button);
+}
+
+}

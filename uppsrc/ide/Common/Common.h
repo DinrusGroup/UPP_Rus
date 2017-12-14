@@ -29,9 +29,14 @@ FileSel&  OutputFs();
 
 void      ShellOpenFolder(const String& dir);
 
-Image     IdeFileImage(const String& filename, bool fast = false, bool include_path = false);
+Image     ImageOver(const Image& back, const Image& over);
+
+Image     IdeFileImage(const String& filename, bool include_path, bool pch);
 
 bool FinishSave(String tmpfile, String outfile);
+void DeactivationSave(bool b);
+bool IsDeactivationSave();
+
 bool FinishSave(String outfile);
 bool SaveFileFinish(const String& filename, const String& data);
 bool SaveChangedFileFinish(const String& filename, const String& data);
@@ -41,6 +46,7 @@ struct IdeDesigner  {
 	virtual void   Save() = 0;
 	virtual void   SyncUsc()                                        {}
 	virtual void   SaveEditPos()                                    {}
+	virtual void   RestoreEditPos()                                 {}
 	virtual void   EditMenu(Bar& menu) = 0;
 	virtual int    GetCharset() const                               { return -1; }
 	virtual Ctrl&  DesignerCtrl() = 0;
@@ -50,9 +56,11 @@ struct IdeDesigner  {
 };
 
 struct IdeModule {
+	virtual String       GetID() = 0;
 	virtual void         CleanUsc() {}
 	virtual bool         ParseUsc(CParser&)                                       { return false; }
 	virtual Image        FileIcon(const char *filename)                           { return Null; }
+	virtual bool         AcceptsFile(const char *filename)                        { return !IsNull(FileIcon(filename)); }
 	virtual IdeDesigner *CreateDesigner(Ide *ide, const char *path, byte charset) { return CreateDesigner(path, charset); }
 	virtual IdeDesigner *CreateDesigner(const char *path, byte charset)           { return NULL; }
 	virtual void         Serialize(Stream& s) {}
@@ -69,7 +77,7 @@ enum {
 };
 
 void             RegisterWorkspaceConfig(const char *name);
-void             RegisterWorkspaceConfig(const char *name, Callback WhenFlush);
+void             RegisterWorkspaceConfig(const char *name, Event<>  WhenFlush);
 String&          WorkspaceConfigData(const char *name);
 
 template <class T>
@@ -88,5 +96,9 @@ void StoreToWorkspace(T& x, const char *name)
 }
 
 void SerializeWorkspaceConfigs(Stream& s);
+
+extern bool IdeExit;
+
+bool CopyFolder(const char *dst, const char *src, Progress *pi = NULL);
 
 #endif

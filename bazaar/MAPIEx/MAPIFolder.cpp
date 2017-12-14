@@ -1,3 +1,5 @@
+#ifdef _WIN32
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //
 // File: MAPIFolder.cpp
@@ -14,7 +16,6 @@
 
 // Ported to U++ Framework by Koldo. See License.txt file
 
-#include <MapiUtil.h>
 #include "MAPIEx.h"
 
 /////////////////////////////////////////////////////////////
@@ -56,7 +57,7 @@ void MAPIFolder::SetBufferSize(int nSize) {
 
 void MAPIFolder::ClearBuffer() {
 	if(m_pRows) {
-		FreeProws(m_pRows);
+		MAPIEx::FreeProws(m_pRows);
 		m_pRows = NULL;
 	}
 	m_nRowsIndex = 0;
@@ -255,7 +256,7 @@ bool MAPIFolder::GetNextAppointment(MAPIAppointment& appointment) {
 #ifdef _WIN32_WCE
 	return m_poom.GetNextAppointment(m_pMAPI,appointment);
 #else
-	SRow* pRow=GetNextRow();
+	SRow* pRow = GetNextRow();
 	return pRow ? appointment.Open(m_pMAPI, pRow->lpProps[PROP_ENTRYID].Value.bin) : false;
 #endif
 }
@@ -278,7 +279,7 @@ bool MAPIFolder::GetNextSubFolder(MAPIFolder& folder, String& strFolder) {
 				folder.Attach(m_pMAPI, pSubFolder, strFolder);
 			}
 		}
-		FreeProws(pRows);
+		MAPIEx::FreeProws(pRows);
 	}
 	if (!pSubFolder)
 		return false;
@@ -319,3 +320,5 @@ bool MAPIFolder::DeleteObject(MAPIObject& object) {
 	HRESULT hr = Folder()->DeleteMessages(&entries, 0, NULL, 0);
 	return (hr==S_OK);
 }
+
+#endif

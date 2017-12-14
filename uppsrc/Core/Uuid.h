@@ -2,11 +2,13 @@ struct Uuid : AssignValueTypeNo<Uuid, 50, Moveable<Uuid> > {
 	dword a, b, c, d;
 
 	void Serialize(Stream& s);
+	void Xmlize(XmlIO& xio);
+	void Jsonize(JsonIO& jio);
 	bool IsNullInstance() const   { return a == 0 && b == 0 && c == 0 && d == 0; }
 	void SetNull()                { a = b = c = d = 0; }
 
-	operator Value() const        { return RichValue<Uuid>(*this); }
-	Uuid(const Value& q)          { *this = RichValue<Uuid>::Extract(q); }
+	operator Value() const        { return RichToValue(*this); }
+	Uuid(const Value& q)          { *this = q.Get<Uuid>(); }
 	Uuid(const Nuller&)           { SetNull(); }
 	Uuid()                        {}
 

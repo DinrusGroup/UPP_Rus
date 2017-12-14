@@ -1,6 +1,6 @@
 #include <CtrlLib/CtrlLib.h>
 
-NAMESPACE_UPP
+namespace Upp {
 
 const Point Calendar::nullday = Point(-1, -1);
 
@@ -45,11 +45,11 @@ Calendar::Calendar()
 	Add(spin_all);
 
 	spin_month.SetCallbacks(THISBACK(OnMonthLeft), THISBACK(OnMonthRight));
-	spin_month.SetTips(t_("Предыдущий месяц"), t_("Следующий месяц"));
+	spin_month.SetTips(t_("Previous month"), t_("Next month"));
 	spin_year.SetCallbacks(THISBACK(OnYearLeft), THISBACK(OnYearRight));
-	spin_year.SetTips(t_("Предыдущий год"), t_("Следующий год"));
+	spin_year.SetTips(t_("Previous year"), t_("Next year"));
 	spin_all.SetCallbacks(THISBACK(OnMonthLeft), THISBACK(OnMonthRight));
-	spin_all.SetTips(t_("предыдущий месяц"), t_("Следующий месяц"));
+	spin_all.SetTips(t_("Previous month"), t_("Next month"));
 
 	time_mode = false;
 	swap_month_year = false;
@@ -59,6 +59,8 @@ Calendar::Calendar()
 	bs = 5;
 	SetStyle(StyleDefault());
 	Reset();
+	
+	ComputeSize();
 }
 
 void Calendar::Reset()
@@ -72,7 +74,8 @@ void Calendar::Reset()
 	wastoday = false;
 
 	newday = oldday = nullday;
-	stoday = Format("%s: %s", t_("Сегодня"), time_mode ? Format(today) : Format(Date(today)));
+	newweek = oldweek = -1;
+	stoday = Format("%s: %s", t_("Today"), time_mode ? Format(today) : Format(Date(today)));
 
 	UpdateFields();
 }
@@ -142,7 +145,7 @@ int	Calendar::DayOfWeek(int day, int month, int year, int zelleroffset)
 	int n1 = (26 * (month + 1)) / 10;
 	int n2 = (125 * year) / 100;
 
-	return ((day + n1 + n2 - (year / 100) + (year / 400) - zelleroffset) % 7);
+	return ((day + (8 - first_day) + n1 + n2 - (year / 100) + (year / 400) - zelleroffset) % 7);
 }
 
 int Calendar::WeekOfYear(int day, int month, int year) /* ISO-8601 */
@@ -199,6 +202,31 @@ int Calendar::WeekOfYear(int day, int month, int year) /* ISO-8601 */
 
 void Calendar::LeftDown(Point p, dword keyflags)
 {
+	if(WhenWeek && newweek >= 0) {
+		if(PopUpCtrl::IsPopUp())
+			Deactivate();
+		Date d = view;
+		int wday = days[newweek][0];
+		d.day = wday;
+		if(wday < 0) {
+			d.day = -wday;
+			if(newweek == 0)
+				d.month--;
+			else
+				d.month++;
+			if(d.month < 1) {
+				d.month = 12;
+				d.year--;
+			}
+			if(d.month > 12) {
+				d.month = 1;
+				d.year++;
+			}
+		}
+		WhenWeek(d);
+		return;
+	}
+
 	bool isnewday = newday != nullday;
 	int day = 1;
 	bool refall = false;
@@ -210,7 +238,7 @@ void Calendar::LeftDown(Point p, dword keyflags)
 		if(day < 0)
 		{
 			view.day = -day;
-			if(lastrow < 3)
+			if(newday.y == 0)
 				view.month--;
 			else
 				view.month++;
@@ -263,11 +291,11 @@ void Calendar::LeftDown(Point p, dword keyflags)
 			return;
 		}
 
-		RefreshDay(prevday);
+		Refresh();
 		if(istoday)
 			SetDate(tm);
 		else
-			RefreshDay(newday);
+			Refresh();
 	}
 
 	WhenSelect();
@@ -284,7 +312,7 @@ void Calendar::MouseMove(Point p, dword keyflags)
 			if(b)
 			{
 				view.day = 0;
-				RefreshDay(oldday);
+				Refresh();
 			}
 		}
 		if(newday != nullday)
@@ -293,16 +321,21 @@ void Calendar::MouseMove(Point p, dword keyflags)
 			if(b)
 			{
 				view.day = Day(newday);
-				RefreshDay(newday);
+				Refresh();
 			}
 		}
 		oldday = newday;
+	}
+	newweek = GetWeek(p);
+	if(newweek != oldweek && WhenWeek) {
+		Refresh();
+		oldweek = newweek;
 	}
 	istoday = MouseOnToday(p);
 	if(istoday != wastoday)
 	{
 		wastoday = istoday;
-		RefreshToday();
+		Refresh();
 	}
 }
 
@@ -310,7 +343,7 @@ Image Calendar::CursorImage(Point p, dword keyflags)
 {
 	bool b = (selall == false ? Day(newday) > 0 : true);
 	if((newday != nullday && b) || istoday)
-		return CtrlImg::HandCursor();
+		return Image::Hand();
 	else
 		return Image::Arrow();
 }
@@ -325,29 +358,6 @@ bool Calendar::MouseOnToday(Point p)
 	return (p.x >= x0 && p.x <= x1 && p.y >= y0 && p.y <= y1);
 }
 
-void Calendar::RefreshDay(Point p)
-{
-	col = p.x;
-	row = p.y;
-
-	int y0 = 2 + (int)((p.y + 1) * rowh + hs);
-	int x0 = bs + 2 + (int)((p.x + 1) * colw);
-
-	Refresh(x0, y0, cw, rh);
-}
-
-void Calendar::RefreshToday()
-{
-	Size sz = GetSize();
-	Refresh(0, sz.cy - ts, sz.cx, ts);
-}
-
-void Calendar::RefreshHeader()
-{
-	Size sz = GetSize();
-	Refresh(0, 0, sz.cx, hs);
-}
-
 Point Calendar::GetDay(Point p)
 {
 	for(int i = 0; i < rows; i++)
@@ -355,16 +365,29 @@ Point Calendar::GetDay(Point p)
 		int y0 = 2 + (int)((i + 1) * rowh + hs);
 		int y1 = y0 + rh;
 
-		if(p.y >= y0 && p.y < y1)
-		for(int j = 0; j < cols; j++)
-		{
-			int x0 = bs + 2 + (int)((j + 1) * colw);
-			int x1 = x0 + cw;
-			if(p.x >= x0 && p.x < x1)
-				return Point(j, i);
+		if(p.y >= y0 && p.y < y1) {
+			for(int j = 0; j < cols; j++)
+			{
+				int x0 = bs + 2 + (int)((j + 1) * colw);
+				int x1 = x0 + cw;
+				if(p.x >= x0 && p.x < x1)
+					return Point(j, i);
+			}
 		}
 	}
 	return Point(-1, -1);
+}
+
+int Calendar::GetWeek(Point p)
+{
+	for(int i = 0; i < rows; i++)
+	{
+		int y0 = 2 + (int)((i + 1) * rowh + hs);
+		int y1 = y0 + rh;
+		if(p.y >= y0 && p.y < y1 && p.x < bs + 2 + colw)
+			return i;
+	}
+	return -1;
 }
 
 Size Calendar::ComputeSize()
@@ -442,8 +465,8 @@ void Calendar::Paint(Draw &w)
 	{
 		int y = (int) (hs + (rowh - fh) / 2.0);
 		fnt.NoBold().NoUnderline();
-		tsz = GetTextSize(t_("Нед"), fnt);
-		w.DrawText(bs + (cw - tsz.cx) / 2, y, t_("Нед"), fnt, st.week);
+		tsz = GetTextSize(t_("Wk"), fnt);
+		w.DrawText(bs + (cw - tsz.cx) / 2, y, t_("Wk"), fnt, st.week);
 
 		for(int i = 0; i < cols; i++)
 		{
@@ -478,7 +501,16 @@ void Calendar::Paint(Draw &w)
 		int yc = (rh - fh) / 2;
 
 		str = AsString(WeekOfYear(d, m, y));
-		w.DrawText(bs + (cw - GetTextSize(str, fnt).cx) / 2, yp + yc, str, fnt.NoBold().NoUnderline(), st.week);
+		
+		Font wfnt = fnt;
+		wfnt.NoBold().NoUnderline();
+		Color wcolor = st.week;
+		if(newweek >= 0 && WhenWeek && newweek == i) {
+			wfnt.Bold().Underline();
+			wcolor = st.selectday;
+		}
+		
+		w.DrawText(bs + (cw - GetTextSize(str, wfnt).cx) / 2, yp + yc, str, wfnt, wcolor);
 
 		for(int j = 0; j < cols; j++)
 		{
@@ -631,7 +663,7 @@ void Calendar::MouseLeave()
 	{
 		istoday = false;
 		wastoday = false;
-		RefreshToday();
+		Refresh();
 	}
 	else
 		MouseMove(Point(-1, -1), 0);
@@ -1219,9 +1251,9 @@ Clock::Clock()
 	ln_hour <<= THISBACK(SetHourLine);
 	ln_minute <<= THISBACK(SetMinuteLine);
 	spin_hour.SetCallbacks(THISBACK(SetHourLeft), THISBACK(SetHourRight));
-	spin_hour.SetTips(t_("Предыдущий час"), t_("Следующий час"));
+	spin_hour.SetTips(t_("Previous hour"), t_("Next hour"));
 	spin_minute.SetCallbacks(THISBACK(SetMinuteLeft), THISBACK(SetMinuteRight));
-	spin_minute.SetTips(t_("Предыдущая минута"), t_("Следующая минута"));
+	spin_minute.SetTips(t_("Previous minute"), t_("Next minute"));
 
 	cur_line = -1;
 	prv_line = -1;
@@ -1239,6 +1271,8 @@ Clock::Clock()
 
 	SetFrame(BlackFrame());
 	BackPaint();
+	
+	ComputeSize();
 }
 
 // CalendarClock
@@ -1429,7 +1463,7 @@ void FlatSpin::SetTips(const char *tipl, const char *tipr)
 	right.Tip(tipr);
 }
 
-void FlatSpin::SetCallbacks(const Callback &cbl, const Callback& cbr)
+void FlatSpin::SetCallbacks(const Event<>& cbl, const Event<>& cbr)
 {
 	left.WhenAction = cbl;
 	right.WhenAction = cbr;
@@ -1437,7 +1471,6 @@ void FlatSpin::SetCallbacks(const Callback &cbl, const Callback& cbr)
 
 void FlatSpin::Layout()
 {
-	Size sz = GetSize();
 	left.LeftPos(0, left.GetImage().GetSize().cx + 8).VSizePos();
 	right.RightPos(0, right.GetImage().GetSize().cx + 8).VSizePos();
 }
@@ -1519,4 +1552,4 @@ CH_STYLE(Calendar, Style, StyleDefault)
 	spinhighlight = true;
 }
 
-END_UPP_NAMESPACE
+}

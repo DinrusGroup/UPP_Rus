@@ -1,6 +1,6 @@
 #include "RichText.h"
 
-NAMESPACE_UPP
+namespace Upp {
 
 String HtmlFontStyle(Font f, Font base)
 {
@@ -65,17 +65,18 @@ String HtmlParaStyle(const RichPara::Format& f, Zoom z)
 	String style;
 	int lm = z * f.lm;
 	if(f.bullet && f.bullet != RichPara::BULLET_TEXT) {
-		style << "display:list-item;line-style-type:";
+		style << "display:list-item;list-style-type:";
 		switch(f.bullet) {
 		case RichPara::BULLET_ROUND: style << "disc"; break;
 		case RichPara::BULLET_ROUNDWHITE: style << "circle"; break;
 		case RichPara::BULLET_BOX:
 		case RichPara::BULLET_BOXWHITE: style << "square"; break;
 		}
-		style << ";line-style-position:inside;";
+		style << ';';
+//		style << ";list-style-position:inside;";
 		lm += 20;
 	}
-	style << Format("margin:%d %d %d %d;text-indent:%d;",
+	style << Format("margin:%d`px %d`px %d`px %d`px;text-indent:%d`px;",
 	                z * f.before,
 	                z * f.rm,
 	                z * f.after,
@@ -92,6 +93,8 @@ String HtmlParaStyle(const RichPara::Format& f, Zoom z)
 	style << HtmlStyleColor(f.ink) + HtmlFontStyle(f);
 	if(!IsNull(f.paper))
 		style << HtmlStyleColor(f.paper, "background-color");
+	style << decode(f.linespacing, RichPara::LSP15, "line-height:150%",
+	                               RichPara::LSP20, "line-height:200%", "");
 	return style;
 }
 
@@ -106,22 +109,20 @@ void TabBorder(String& style, const char *txt, int border, Color bordercolor, co
 	      << ColorToHtml(border ? bordercolor : tf.gridcolor) << ';';
 }
 
-
 String AsHtml(const RichTxt& text, const RichStyles& styles, Index<String>& css,
               const VectorMap<String, String>& links,
               const VectorMap<String, String>& labels,
-              const String& outdir, const String& namebase, Zoom z, int& im,
-              const VectorMap<String, String>& escape,
-              int imtolerance)
+              Zoom z, const VectorMap<String, String>& escape,
+              HtmlObjectSaver& object_saver)
 {
 	String html;
 	for(int i = 0; i < text.GetPartCount(); i++)
 	{
 		if(text.IsTable(i)) {
 			const RichTable& t = text.GetTable(i);
-			int nx = t.format.column.GetCount();
-			int ny = t.cell.GetCount();
-			const RichTable::Format& tf = t.format;
+			const RichTable::Format& tf = t.GetFormat();
+			int nx = tf.column.GetCount();
+			int ny = t.GetRows();
 			html << "<table width=\"100%\" border=\"0\" cellpadding=\"0\" cellspacing=\"0\">";
 			if(tf.before > 0)
 				html << "<tr><td height=" << HtmlDot(tf.before, z) << " colspan=\"3\"></td></tr>";
@@ -137,14 +138,14 @@ String AsHtml(const RichTxt& text, const RichStyles& styles, Index<String>& css,
 			html << "<table width=\"100%\"" << FormatClass(css, style) << ">";
 			int sum = 0;
 			for(int i = 0; i < nx; i++)
-				sum += t.format.column[i];
+				sum += tf.column[i];
 			html << "<colgroup>";
 			for(int i = 0; i < nx; i++)
-				html << "<col width=\"" << 100 * t.format.column[i] / sum << "%\">";
+				html << "<col width=\"" << 100 * tf.column[i] / sum << "%\">";
 			html << "</colgroup>";
 			html << "\r\n";
 			for(int i = 0; i < ny; i++) {
-				const Array<RichCell>& r = t.cell[i];
+				const Array<RichCell>& r = t[i];
 				html << "<tr>";
 				for(int j = 0; j < r.GetCount(); j++) {
 					if(t(i, j)) {
@@ -171,8 +172,7 @@ String AsHtml(const RichTxt& text, const RichStyles& styles, Index<String>& css,
 						if(c.vspan)
 							html << " rowspan=" << c.vspan + 1;
 						html << '>';
-						html << AsHtml(c.text, styles, css, links, labels, outdir, namebase, z,
-						               im, escape, imtolerance);
+						html << AsHtml(c.text, styles, css, links, labels, z, escape, object_saver);
 						html << "</td>\r\n";
 					}
 				}
@@ -190,12 +190,6 @@ String AsHtml(const RichTxt& text, const RichStyles& styles, Index<String>& css,
 			RichPara p = text.Get(i, styles);
 			if(p.format.ruler)
 				html << "<hr>";
-			String lbl;
-			if(!IsNull(p.format.label)) {
-				lbl = labels.Get(p.format.label, Null);
-				if(lbl.GetCount())
-					html << "<a name=\"" << lbl << "\">";
-			}
 			bool bultext = false;
 			if(p.format.bullet == RichPara::BULLET_TEXT)
 				for(int i = 0; i < p.part.GetCount(); i++) {
@@ -216,31 +210,17 @@ String AsHtml(const RichTxt& text, const RichStyles& styles, Index<String>& css,
 				               max(z * p.format.indent, 0));
 				p.format.ruler = p.format.after = p.format.before = p.format.indent = p.format.lm = 0;
 			}
-			String par = "<p" + FormatClass(css, HtmlParaStyle(p.format, z)) + ">";
+			String par = "<p";
+			String lbl = labels.Get(p.format.label, p.format.label);
+			if(lbl.GetCount())
+				par << " id=\"" << lbl << "\"";
+			par << FormatClass(css, HtmlParaStyle(p.format, z)) << ">";
 			html << par;
 			for(int i = 0; i < p.part.GetCount(); i++) {
 				const RichPara::Part& part = p.part[i];
 				int q;
-				if(part.object) {
-					String name;
-					name << namebase << "_" << im++ << ".png";
-					Size psz = part.object.GetPixelSize();
-					String lname;
-					lname << "L$" << name;
-					Size sz = z * part.object.GetSize();
-					if(abs(100 * (psz.cx - sz.cx) / sz.cx) < imtolerance)
-						sz = psz;
-					PNGEncoder png;
-					png.SaveFile(AppendFileName(outdir, name), part.object.ToImage(sz));
-					if(psz.cx * psz.cy)
-						html << "<a href=\"" << lname << "\">";
-					html << "<img src=\"" << name << "\" border=\"0\" alt=\"\">";
-					if(psz.cx * psz.cy) {
-						html << "</a>";
-						PNGEncoder png;
-						png.SaveFile(AppendFileName(outdir, lname), part.object.ToImage(psz));
-					}
-				}
+				if(part.object)
+					html << object_saver.GetHtml(part.object);
 				else
 				if(part.format.indexentry.GetCount() &&
 				   (q = escape.Find(part.format.indexentry.ToString())) >= 0)
@@ -334,10 +314,48 @@ String AsHtml(const RichTxt& text, const RichStyles& styles, Index<String>& css,
 			html << "</p>";
 			if(bultext)
 				html << "</td></tr></table>";
-			if(lbl.GetCount())
-				html << "</a>";
 			html << "\r\n";
 		}
+	}
+	return html;
+}
+
+class DefaultHtmlObjectSaver : public HtmlObjectSaver
+{
+public:
+	DefaultHtmlObjectSaver(const String& outdir_, const String& namebase_, int imtolerance_, Zoom z_)
+	: outdir(outdir_), namebase(namebase_), z(z_), imtolerance(imtolerance_), im(0) {}
+
+	virtual String GetHtml(const RichObject& object);
+
+private:
+	String outdir;
+	String namebase;
+	Zoom z;
+	int imtolerance;
+	int im;
+};
+
+String DefaultHtmlObjectSaver::GetHtml(const RichObject& object)
+{
+	StringBuffer html;
+	String name;
+	name << namebase << "_" << im++ << ".png";
+	Size psz = object.GetPixelSize();
+	String lname;
+	lname << "L$" << name;
+	Size sz = z * object.GetSize();
+	if(abs(100 * (psz.cx - sz.cx) / sz.cx) < imtolerance)
+		sz = psz;
+	PNGEncoder png;
+	png.SaveFile(AppendFileName(outdir, name), object.ToImage(sz));
+	if(psz.cx * psz.cy)
+		html << "<a href=\"" << lname << "\">";
+	html << "<img src=\"" << name << "\" border=\"0\" alt=\"\">";
+	if(psz.cx * psz.cy) {
+		html << "</a>";
+		PNGEncoder png;
+		png.SaveFile(AppendFileName(outdir, lname), object.ToImage(psz));
 	}
 	return html;
 }
@@ -348,8 +366,17 @@ String EncodeHtml(const RichText& text, Index<String>& css,
                   const String& outdir, const String& namebase, Zoom z,
                   const VectorMap<String, String>& escape, int imt)
 {
-	int im = 0;
-	return AsHtml(text, text.GetStyles(), css, links, labels, outdir, namebase, z, im, escape, imt);
+	DefaultHtmlObjectSaver default_saver(outdir, namebase, imt, z);
+	return AsHtml(text, text.GetStyles(), css, links, labels, z, escape, default_saver);
+}
+
+String EncodeHtml(const RichText& text, Index<String>& css,
+                  const VectorMap<String, String>& links,
+                  const VectorMap<String, String>& labels,
+                  HtmlObjectSaver& object_saver, Zoom z,
+                  const VectorMap<String, String>& escape)
+{
+	return AsHtml(text, text.GetStyles(), css, links, labels, z, escape, object_saver);
 }
 
 String AsCss(Index<String>& ss)
@@ -362,4 +389,4 @@ String AsCss(Index<String>& ss)
 	return css;
 }
 
-END_UPP_NAMESPACE
+}

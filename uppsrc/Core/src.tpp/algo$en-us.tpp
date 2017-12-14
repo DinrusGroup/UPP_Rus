@@ -1,4 +1,4 @@
-topic "Algorithms";
+topic "Template Algorithms";
 [2 $$0,0#00000000000000000000000000000000:Default]
 [i448;a25;kKO9;2 $$1,0#37138531426314131252341829483380:class]
 [l288;2 $$2,0#27521748481378242620020725143825:desc]
@@ -9,426 +9,261 @@ topic "Algorithms";
 [l288;i1121;b17;O9;~~~.1408;2 $$7,0#10431211400427159095818037425705:param]
 [i448;b42;O9;2 $$8,8#61672508125594000341940100500538:tparam]
 [b42;2 $$9,9#13035079074754324216151401829390:normal]
-[{_}%EN-US 
-[ {{10000@(113.42.0) [s0; [*@7;4 Algorithms]]}}&]
-[s9; A number of generic algorithms.&]
+[{_} 
+[ {{10000@(113.42.0) [s0;%% [*@7;4 Template Algorithms]]}}&]
+[s3;%% &]
+[s5;:Swap`(T`&`,T`&`): [@(0.0.255) template]_<[@(0.0.255) class]_[*@4 T][@(0.0.255) >]_&]
+[s5;:Swap`(T`&`,T`&`): [@(0.0.255) void]_[* Swap]([*@4 T][@(0.0.255) `&]_[*@3 a], 
+[*@4 T][@(0.0.255) `&]_[*@3 b])&]
+[s2;%% Swaps values. Specific types might specialize [* Swap].&]
 [s3; &]
-[s0; &]
-[ {{10000F(128)G(128)@1 [s0; [* Global Functions]]}}&]
-[s3;%- &]
-[s5;:Swap`(T`&`,T`&`):%- [@(0.0.255) template]_<[@(0.0.255) class]_[*@4 T][@(0.0.255) >]_[@(0.0.255) v
-oid]_[* Swap]([*@4 T][@(0.0.255) `&]_[*@3 a], [*@4 T][@(0.0.255) `&]_[*@3 b])&]
-[s2; Swaps values. Specific types might specialize [* Swap] with more 
-effective variants.&]
-[s6; T must have either deep copy operator or pick operator.&]
-[s7; [*C@4 T]-|Type of values.&]
-[s7; [*C@3 a]-|First value to swap.&]
-[s7; [*C@3 b]-|Second value to swap.&]
-[s3;%- &]
-[s4;%- &]
-[s5;:IterSwap`(I`,I`):%- [@(0.0.255) template]_<[@(0.0.255) class]_[*@4 I][@(0.0.255) >]_[@(0.0.255) v
-oid]_[* IterSwap]([*@4 I]_[*@3 a], [*@4 I]_[*@3 b])&]
-[s2; Swaps values pointed to by iterators. Specific types might specialize 
-[* IterSwap] with more effective variants.&]
-[s6; Swap must be defined for type pointed to by I.&]
-[s7; [*C@4 I]-|Iterator type.&]
-[s7; [*C@3 a]-|Iterator pointing to first value.&]
-[s7; [*C@3 b]-|Iterator pointing to second value. xx&]
-[s3;%- &]
 [s4; &]
-[s5;:FindLowerBound`(const C`&`,int`,int`,const T`&`,const L`&`):%- [@(0.0.255) templat
-e]_<[@(0.0.255) class]_[*@4 C], [@(0.0.255) class]_[*@4 T], [@(0.0.255) class]_[*@4 L][@(0.0.255) >
-]_[@(0.0.255) int]_[* FindLowerBound]([@(0.0.255) const]_[*@4 C][@(0.0.255) `&]_[*@3 v], 
-[@(0.0.255) int]_[*@3 pos], [@(0.0.255) int]_[*@3 count], [@(0.0.255) const]_[*@4 T][@(0.0.255) `&
-]_[*@3 val], [@(0.0.255) const]_[*@4 L][@(0.0.255) `&]_[*@3 less])&]
-[s2; Finds first position in range of container sorted by [* less] 
-predicate where [* val] can be inserted without breaking the ordering.&]
-[s7; [*C@4 C]-|Type of container.&]
-[s7; [*C@4 T]-|Type of value.&]
-[s7; [*C@3 v]-|Container.&]
-[s7; [*C@3 pos]-|Beginning of range.&]
-[s7; [*C@3 count]-|Number of elements in range.&]
-[s7; [*C@3 val]-|Value to find.&]
-[s7; [*C@3 less]-|Ordering predicate.&]
-[s7; [*/ Return value]-|Position in container.&]
-[s3;%- &]
-[s4;%- &]
-[s5;:sgn`(T`):%- [@(0.0.255) template]_<[@(0.0.255) class]_[*@4 T]>_[@(0.0.255) int]_[* sgn]([*@4 T
-]_[*@3 a])&]
-[s2; Returns 1 if  [%-*@3 a]. is greater than zero, `-1 if [%-*@3 a] 
+[s5;:IterSwap`(I`,I`): [@(0.0.255) template]_<[@(0.0.255) class]_[*@4 I][@(0.0.255) >]_&]
+[s5;:IterSwap`(I`,I`): [@(0.0.255) void]_[* IterSwap]([*@4 I]_[*@3 a], [*@4 I]_[*@3 b])&]
+[s2;%% Swaps values pointed to by iterators. Specific types might 
+specialize [* IterSwap].&]
+[s3; &]
+[s4; &]
+[s5;:sgn`(T`): [@(0.0.255) template]_<[@(0.0.255) class]_[*@4 T]>_&]
+[s5;:sgn`(T`): [@(0.0.255) int]_[* sgn]([*@4 T]_[*@3 a])&]
+[s2;%% Returns 1 if  [%-*@3 a]. is greater than zero, `-1 if [%-*@3 a] 
 is smaller than zero and zero if [%-*@3 a] is zero.&]
-[s3; &]
-[s4;%- &]
-[s5;:tabs`(T`):%- [@(0.0.255) template]_<[@(0.0.255) class]_[*@4 T]>_[*@4 T]_[* tabs]([*@4 T]_[*@3 a
-])&]
-[s2; Returns the absolute value of [%-*@3 a].&]
-[s3; &]
-[s4;%- &]
-[s5;:cmp`(const T`&`,const T`&`):%- [@(0.0.255) template]_<[@(0.0.255) class]_[*@4 T]>_[@(0.0.255) i
-nt]_[* cmp]([@(0.0.255) const]_[*@4 T][@(0.0.255) `&]_[*@3 a], [@(0.0.255) const]_[*@4 T][@(0.0.255) `&
-]_[*@3 b])&]
-[s2;%- [%% Returns 1 if ][*@3 a][%%  is greater than ][*@3 b][%% , `-1 if ][*@3 a][%%  
+[s3;%% &]
+[s4; &]
+[s5;:tabs`(T`): [@(0.0.255) template]_<[@(0.0.255) class]_[*@4 T]>_&]
+[s5;:tabs`(T`): [*@4 T]_[* tabs]([*@4 T]_[*@3 a])&]
+[s2;%% Returns the absolute value of [%-*@3 a].&]
+[s3;%% &]
+[s4; &]
+[s5;:cmp`(const T`&`,const T`&`): [@(0.0.255) template]_<[@(0.0.255) class]_[*@4 T]>_&]
+[s5;:cmp`(const T`&`,const T`&`): [@(0.0.255) int]_[* cmp]([@(0.0.255) const]_[*@4 T][@(0.0.255) `&
+]_[*@3 a], [@(0.0.255) const]_[*@4 T][@(0.0.255) `&]_[*@3 b])&]
+[s2; [%% Returns 1 if ][*@3 a][%%  is greater than ][*@3 b][%% , `-1 if ][*@3 a][%%  
 is smaller than ][*@3 b][%%  and zero if ][*@3 a][%%  is equal than ][*@3 b.]&]
-[s3; &]
-[s4;%- &]
-[s5;:Reverse`(I`,I`):%- [@(0.0.255) template]_<[@(0.0.255) class]_[*@4 I]>_[@(0.0.255) void]_
-[* Reverse]([*@4 I]_[*@3 start], [*@4 I]_[*@3 end])&]
-[s2; Reverses the values of a C array that begins in [%-*@3 start] 
-and ends in [%-*@3 end].&]
-[s3; &]
-[s4;%- &]
-[s5;:Sum`(V`&`,T`,T`):%- [@(0.0.255) template]_<[@(0.0.255) class]_[*@4 T], 
-[@(0.0.255) class]_[*@4 V]>_[@(0.0.255) void]_[* Sum]([*@4 V][@(0.0.255) `&]_[*@3 sum], 
-[*@4 T]_[*@3 ptr], [*@4 T]_[*@3 end])&]
-[s2; Returns in [%-*@3 sum] the sum of the values of a C array that 
-begins in [%-*@3 ptr] and ends in [%-*@3 end].&]
-[s3; &]
-[s4;%- &]
-[s5;:MinElement`(T`,T`):%- [@(0.0.255) template]_<[@(0.0.255) class]_[*@4 T]>_[*@4 T]_[* MinEle
-ment]([*@4 T]_[*@3 ptr], [*@4 T]_[*@3 end])&]
-[s2; Returns the value of the min element of a C array that begins 
-in [%-*@3 ptr] and ends in [%-*@3 end].&]
-[s3; &]
-[s4;%- &]
-[s5;:MaxElement`(T`,T`):%- [@(0.0.255) template]_<[@(0.0.255) class]_[*@4 T]>_[*@4 T]_[* MaxEle
-ment]([*@4 T]_[*@3 ptr], [*@4 T]_[*@3 end])&]
-[s2; Returns the value of the max element of a C array that begins 
-in [%-*@3 ptr] and ends in [%-*@3 end].&]
-[s3; &]
-[s4;%- &]
-[s5;:FindLowerBound`(const C`&`,const T`&`,const L`&`):%- [@(0.0.255) template]_<[@(0.0.255) c
-lass]_[*@4 C], [@(0.0.255) class]_[*@4 T], [@(0.0.255) class]_[*@4 L][@(0.0.255) >]_[@(0.0.255) i
-nt]_[* FindLowerBound]([@(0.0.255) const]_[*@4 C][@(0.0.255) `&]_[*@3 v], 
-[@(0.0.255) const]_[*@4 T][@(0.0.255) `&]_[*@3 val], [@(0.0.255) const]_[*@4 L][@(0.0.255) `&]_
-[*@3 less])&]
-[s2; Finds first position in sorted by [* less] predicate where [* val] 
-can be inserted without breaking the ordering.&]
-[s7; [*C@4 C]-|Type of container.&]
-[s7; [*C@4 T]-|Type of value.&]
-[s7; [*C@3 v]-|Container.&]
-[s7; [*C@3 val]-|Value to find.&]
-[s7; [*C@3 less]-|Ordering predicate.&]
-[s7; [*/ Return value]-|Position in container.&]
-[s3;%- &]
-[s4;%- &]
-[s5;:FindLowerBound`(const C`&`,const T`&`):%- [@(0.0.255) template]_<[@(0.0.255) class]_
-[*@4 C], [@(0.0.255) class]_[*@4 T][@(0.0.255) >]_[@(0.0.255) int]_[* FindLowerBound]([@(0.0.255) c
-onst]_[*@4 C][@(0.0.255) `&]_[*@3 v], [@(0.0.255) const]_[*@4 T][@(0.0.255) `&]_[*@3 val])&]
-[s2; Finds first position in sorted by [*/ operator<] predicate where 
-[* val] can be inserted without breaking the ordering.&]
-[s7; [*C@4 C]-|Type of container.&]
-[s7; [*C@4 T]-|Type of value.&]
-[s7; [*C@3 v]-|Container.&]
-[s7; [*C@3 val]-|Value to find.&]
-[s7; [*/ Return value]-|Position in container.&]
-[s3;%- &]
-[s4;%- &]
-[s5;:FindUpperBound`(const C`&`,int`,int`,const T`&`,const L`&`):%- [@(0.0.255) templat
-e]_<[@(0.0.255) class]_[*@4 C], [@(0.0.255) class]_[*@4 T], [@(0.0.255) class]_[*@4 L][@(0.0.255) >
-]_[@(0.0.255) int]_[* FindUpperBound]([@(0.0.255) const]_[*@4 C][@(0.0.255) `&]_[*@3 v], 
-[@(0.0.255) int]_[*@3 pos], [@(0.0.255) int]_[*@3 count], [@(0.0.255) const]_[*@4 T][@(0.0.255) `&
-]_[*@3 val], [@(0.0.255) const]_[*@4 L][@(0.0.255) `&]_[*@3 less])&]
-[s2; Finds last position in range of container sorted by [* less] predicate 
-where [* val] can be inserted without breaking the ordering.&]
-[s7; [*C@4 C]-|Type of container.&]
-[s7; [*C@4 T]-|Type of value.&]
-[s7; [*C@3 v]-|Container.&]
-[s7; [*C@3 pos]-|Beginning of range.&]
-[s7; [*C@3 count]-|Number of elements in range.&]
-[s7; [*C@3 val]-|Value to find.&]
-[s7; [*C@3 less]-|Ordering predicate.&]
-[s7; [*/ Return value]-|Position in container.&]
-[s3;%- &]
-[s4;%- &]
-[s5;:FindUpperBound`(const C`&`,const T`&`,const L`&`):%- [@(0.0.255) template]_<[@(0.0.255) c
-lass]_[*@4 C], [@(0.0.255) class]_[*@4 T], [@(0.0.255) class]_[*@4 L][@(0.0.255) >]_[@(0.0.255) i
-nt]_[* FindUpperBound]([@(0.0.255) const]_[*@4 C][@(0.0.255) `&]_[*@3 v], 
-[@(0.0.255) const]_[*@4 T][@(0.0.255) `&]_[*@3 val], [@(0.0.255) const]_[*@4 L][@(0.0.255) `&]_
-[*@3 less])&]
-[s2; Finds last position in sorted by [* less] predicate where [* val] 
-can be inserted without breaking the ordering.&]
-[s7; [*C@4 C]-|Type of container.&]
-[s7; [*C@4 T]-|Type of value.&]
-[s7; [*C@3 v]-|Container.&]
-[s7; [*C@3 val]-|Value to find.&]
-[s7; [*C@3 less]-|Ordering predicate.&]
-[s7; [*/ Return value]-|Position in container.&]
-[s3;%- &]
-[s4;%- &]
-[s5;:FindUpperBound`(const C`&`,const T`&`):%- [@(0.0.255) template]_<[@(0.0.255) class]_
-[*@4 C], [@(0.0.255) class]_[*@4 T][@(0.0.255) >]_[@(0.0.255) int]_[* FindUpperBound]([@(0.0.255) c
-onst]_[*@4 C][@(0.0.255) `&]_[*@3 v], [@(0.0.255) const]_[*@4 T][@(0.0.255) `&]_[*@3 val])&]
-[s2; Finds last position in sorted by [*/ operator<] predicate where 
-[* val] can be inserted without breaking the ordering.&]
-[s7; [*C@4 C]-|Type of container.&]
-[s7; [*C@4 T]-|Type of value.&]
-[s7; [*C@3 v]-|Container.&]
-[s7; [*C@3 val]-|Value to find.&]
-[s7; [*/ Return value]-|Position in container.&]
-[s3;%- &]
-[s4;%- &]
-[s5;:FindBinary`(const C`&`,const T`&`,int`,int`,const L`&`):%- [@(0.0.255) template]_<
-[@(0.0.255) class]_[*@4 C], [@(0.0.255) class]_[*@4 T], [@(0.0.255) class]_[*@4 L][@(0.0.255) >
-]_[@(0.0.255) int]_[* FindBinary]([@(0.0.255) const]_[*@4 C][@(0.0.255) `&]_[*@3 v], 
-[@(0.0.255) const]_[*@4 T][@(0.0.255) `&]_[*@3 val], [@(0.0.255) int]_[*@3 pos], 
-[@(0.0.255) int]_[*@3 count], [@(0.0.255) const]_[*@4 L][@(0.0.255) `&]_[*@3 less])&]
-[s2; Finds position of element with specified value in a range of 
-container sorted by [* less] predicate. If no such element exists, 
-a negative value is returned.&]
-[s7; [*C@4 C]-|Type of container.&]
-[s7; [*C@4 T]-|Type of value.&]
-[s7; [*C@3 v]-|Container.&]
-[s7; [*C@3 pos]-|Beginning of range.&]
-[s7; [*C@3 count]-|Number of elements in range.&]
-[s7; [*C@3 val]-|Value to find.&]
-[s7; [*C@3 less]-|Ordering predicate.&]
-[s7; [*/ Return value]-|Position in container.&]
-[s3;%- &]
-[s4;%- &]
-[s5;:FindBinary`(const C`&`,const T`&`,const L`&`):%- [@(0.0.255) template]_<[@(0.0.255) c
-lass]_[*@4 C], [@(0.0.255) class]_[*@4 T], [@(0.0.255) class]_[*@4 L][@(0.0.255) >]_[@(0.0.255) i
-nt]_[* FindBinary]([@(0.0.255) const]_[*@4 C][@(0.0.255) `&]_[*@3 v], [@(0.0.255) const]_[*@4 T
-][@(0.0.255) `&]_[*@3 val], [@(0.0.255) const]_[*@4 L][@(0.0.255) `&]_[*@3 less])&]
-[s2; Finds position of element with specified value in the container 
-sorted by [* less] predicate. If no such element exists, a negative 
-value is returned.&]
-[s7; [*C@4 C]-|Type of container.&]
-[s7; [*C@4 T]-|Type of value.&]
-[s7; [*C@3 v]-|Container.&]
-[s7; [*C@3 val]-|Value to find.&]
-[s7; [*C@3 less]-|Ordering predicate.&]
-[s7; [*/ Return value]-|Position in container.&]
-[s3;%- &]
-[s4;%- &]
-[s5;:FindBinary`(const C`&`,const T`&`):%- [@(0.0.255) template]_<[@(0.0.255) class]_[*@4 C
-], [@(0.0.255) class]_[*@4 T][@(0.0.255) >]_[@(0.0.255) int]_[* FindBinary]([@(0.0.255) const
-]_[*@4 C][@(0.0.255) `&]_[*@3 v], [@(0.0.255) const]_[*@4 T][@(0.0.255) `&]_[*@3 val])&]
-[s2; Finds position of element with specified value in the container 
-sorted by [*/ operator<] predicate. If no such element exists, 
-a negative value is returned.&]
-[s7; [*C@4 C]-|Type of container.&]
-[s7; [*C@4 T]-|Type of value.&]
-[s7; [*C@3 v]-|Container.&]
-[s7; [*C@3 val]-|Value to find.&]
-[s7; [*/ Return value]-|Position in container.&]
-[s3;%- &]
-[s4;%- &]
-[s5;:AppendSorted`(C`&`,const C`&`,const L`&`):%- [@(0.0.255) template]_<[@(0.0.255) clas
-s]_[*@4 C], [@(0.0.255) class]_[*@4 L][@(0.0.255) >]_[*@4 C][@(0.0.255) `&]_[* AppendSorted]([*@4 C
-][@(0.0.255) `&]_[*@3 dest], [@(0.0.255) const]_[*@4 C][@(0.0.255) `&]_[*@3 src], 
-[@(0.0.255) const]_[*@4 L][@(0.0.255) `&]_[*@3 less])&]
-[s2; Merges source NTL container to destination NTL container. Both 
-containers must be sorted in ascending order. After the operation, 
-destination container is sorted in ascending order and contains 
-values from both containers. Duplicate values are preserved. 
-Ordering predicate is determined by [* less].&]
-[s7; [*C@4 C]-|Type of container.&]
-[s7; [*C@3 dest]-|Destination container.&]
-[s7; [*C@3 src]-|Source container.&]
-[s7; [*C@3 less]-|Ordering predicate.&]
-[s7; [*/ Return value]-|Destination container.[C template<class ][*C@4 C][C >]&]
-[s3;%- &]
-[s4;%- &]
-[s5;:AppendSorted`(C`&`,const C`&`):%- [@(0.0.255) template]_<[@(0.0.255) class]_[*@4 C][@(0.0.255) >
-]_[*@4 C][@(0.0.255) `&]_[* AppendSorted]([*@4 C][@(0.0.255) `&]_[*@3 dest], 
-[@(0.0.255) const]_[*@4 C][@(0.0.255) `&]_[*@3 src])&]
-[s2;~~~.992; Merges source NTL container to destination NTL container. 
-Both containers must be sorted in ascending order. After the 
-operation, destination container is sorted in ascending order 
-and contains values from both containers. Duplicate values are 
-preserved. Ordering is determined by [*/ operator<].&]
-[s7; [*C@4 C]-|Type of container.&]
-[s7; [*C@3 dest]-|Destination container.&]
-[s7; [*C@3 src]-|Source container.&]
-[s7; [*/ Return value]-|Destination container.[C template<class ][*C@4 C][C >]&]
-[s3;%- &]
-[s4;%- &]
-[s5;:UnionSorted`(C`&`,const C`&`,const L`&`):%- [@(0.0.255) template]_<[@(0.0.255) class
-]_[*@4 C], [@(0.0.255) class]_[*@4 L][@(0.0.255) >]_[*@4 C][@(0.0.255) `&]_[* UnionSorted]([*@4 C
-][@(0.0.255) `&]_[*@3 dest], [@(0.0.255) const]_[*@4 C][@(0.0.255) `&]_[*@3 src], 
-[@(0.0.255) const]_[*@4 L][@(0.0.255) `&]_[*@3 less])&]
-[s2; Merges source NTL container to destination NTL container. Both 
-containers must be sorted in ascending order and values must 
-be unique. After the operation, destination container is sorted 
-in ascending order and contains unique values from both containers. 
-Ordering is determined by [* less].&]
-[s7; [*C@4 C]-|Type of container.&]
-[s7; [*C@3 dest]-|Destination container.&]
-[s7; [*C@3 src]-|Source container.&]
-[s7; [*C@3 less]-|Ordering predicate.&]
-[s7; [*/ Return value]-|Destination container.&]
-[s3;%- &]
-[s4;%- &]
-[s5;:UnionSorted`(C`&`,const C`&`):%- [@(0.0.255) template]_<[@(0.0.255) class]_[*@4 C][@(0.0.255) >
-]_[*@4 C][@(0.0.255) `&]_[* UnionSorted]([*@4 C][@(0.0.255) `&]_[*@3 dest], 
-[@(0.0.255) const]_[*@4 C][@(0.0.255) `&]_[*@3 src])&]
-[s2; Merges the source NTL container to the destination NTL container. 
-Both containers must be sorted in ascending order and values 
-must be unique. After the operation, destination container is 
-sorted in ascending order and contains unique values from both 
-containers. Ordering is determined by [*/ operator<].&]
-[s7; [*C@4 C]-|Type of container.&]
-[s7; [*C@3 dest]-|Destination container.&]
-[s7; [*C@3 src]-|Source container.&]
-[s7; [*/ Return value]-|Destination container.&]
-[s3;%- &]
-[s4;%- &]
-[s5;:RemoveSorted`(C`&`,const C`&`,const L`&`):%- [@(0.0.255) template]_<[@(0.0.255) clas
-s]_[*@4 C], [@(0.0.255) class]_[*@4 L][@(0.0.255) >]_[*@4 C][@(0.0.255) `&]_[* RemoveSorted]([*@4 C
-][@(0.0.255) `&]_[*@3 from], [@(0.0.255) const]_[*@4 C][@(0.0.255) `&]_[*@3 what], 
-[@(0.0.255) const]_[*@4 L][@(0.0.255) `&]_[*@3 less])&]
-[s2; Removes elements of source container from destination container. 
-Both containers must be sorted in ascending order and values 
-must be unique. Ordering is determined by [* less].&]
-[s7; [*C@4 C]-|Type of container.&]
-[s7; [*C@3 from]-|Destination container.&]
-[s7; [*C@3 what]-|Source container.&]
-[s7; [*C@3 less]-|Ordering predicate.&]
-[s7; [*/ Return value]-|Destination container.&]
-[s3;%- &]
-[s4;%- &]
-[s5;:RemoveSorted`(C`&`,const C`&`):%- [@(0.0.255) template]_<[@(0.0.255) class]_[*@4 C][@(0.0.255) >
-]_[*@4 C][@(0.0.255) `&]_[* RemoveSorted]([*@4 C][@(0.0.255) `&]_[*@3 from], 
-[@(0.0.255) const]_[*@4 C][@(0.0.255) `&]_[*@3 what])&]
-[s2; Removes elements of source container from destination container. 
-Both containers must be sorted in ascending order and values 
-must be unique. Ordering is determined by [*/ operator<].&]
-[s7; [*C@4 C]-|Type of container.&]
-[s7; [*C@3 from]-|Destination container.&]
-[s7; [*C@3 what]-|Source container.&]
-[s7; [*/ Return value]-|Destination container.&]
-[s3;%- &]
-[s4;%- &]
-[s5;:IntersectSorted`(D`&`,const S`&`,const L`&`):%- [@(0.0.255) template]_<[@(0.0.255) c
-lass]_[*@4 D], [@(0.0.255) class]_[*@4 S], [@(0.0.255) class]_[*@4 L][@(0.0.255) >]_[*@4 D][@(0.0.255) `&
-]_[* IntersectSorted]([*@4 D][@(0.0.255) `&]_[*@3 dest], [@(0.0.255) const]_[*@4 S][@(0.0.255) `&
-]_[*@3 src], [@(0.0.255) const]_[*@4 L][@(0.0.255) `&]_[*@3 less])&]
-[s2; Removes elements from destination container that are not contained 
-in source container. Both containers must be sorted in ascending 
-order and values must be unique. Ordering is determined by [* less].&]
-[s7; [*C@4 D]-|Type of destination container.&]
-[s7; [*C@4 S]-|Type of source container.&]
-[s7; [*C@3 dest]-|Destination container.&]
-[s7; [*C@3 src]-|Source container.&]
-[s7; [*C@3 less]-|Destination container.&]
-[s3;%- &]
-[s4;%- &]
-[s5;:IntersectSorted`(D`&`,const S`&`):%- [@(0.0.255) template]_<[@(0.0.255) class]_[*@4 D],
- [@(0.0.255) class]_[*@4 S][@(0.0.255) >]_[*@4 D][@(0.0.255) `&]_[* IntersectSorted]([*@4 D][@(0.0.255) `&
-]_[*@3 dest], [@(0.0.255) const]_[*@4 S][@(0.0.255) `&]_[*@3 src])&]
-[s2; Removes elements from destination container that are not contained 
-in source container. Both containers must be sorted in ascending 
-order and values must be unique. Ordering is determined by [*/ operator<].&]
-[s7; [*C@4 D]-|Type of destination container.&]
-[s7; [*C@4 S]-|Type of source container.&]
-[s7; [*C@3 dest]-|Destination container.&]
-[s7; [*C@3 src]-|Source container.&]
-[s7; [*/ Return value]-|Destination container.&]
-[s3;%- &]
-[s4;%- &]
-[s5;:Sort`(T`&`,const Less`&`):%- [@(0.0.255) template]_<[@(0.0.255) class]_[*@4 T], 
-[@(0.0.255) class]_[*@4 Less][@(0.0.255) >]_[@(0.0.255) void]_[* Sort]([*@4 T][@(0.0.255) `&]_[*@3 c
-], [@(0.0.255) const]_[*@4 Less][@(0.0.255) `&]_[*@3 less])&]
-[s2; Sorts container. Ordering is determined by [* less].&]
-[s6; IterSwap must be defined for T`::Iterator.&]
-[s7; [*C@4 T]-|Type of container.&]
-[s7; [*C@3 c]-|Container.&]
-[s7; [*C@3 less]-|Ordering predicate.&]
-[s3;%- &]
-[s4;%- &]
-[s5;:Sort`(T`&`):%- [@(0.0.255) template]_<[@(0.0.255) class]_[*@4 T][@(0.0.255) >]_[@(0.0.255) v
-oid]_[* Sort]([*@4 T][@(0.0.255) `&]_[*@3 c])&]
-[s2; Sorts container. Ordering is determined by [*/ operator<].&]
-[s2; [*1 IterSwap must be defined for T`::Iterator.]&]
-[s7; [*C@4 T]-|Type of container.&]
-[s7; [*C@3 c]-|Container.&]
-[s3;%- &]
-[s4;%- &]
-[s5;:IndexSort`(KC`&`,VC`&`,const Less`&`):%- [@(0.0.255) template]_<[@(0.0.255) class]_[*@4 K
-C], [@(0.0.255) class]_[*@4 VC], [@(0.0.255) class]_[*@4 Less][@(0.0.255) >]_[@(0.0.255) void
-]_[* IndexSort]([*@4 KC][@(0.0.255) `&]_[*@3 keys], [*@4 VC][@(0.0.255) `&]_[*@3 values], 
-[@(0.0.255) const]_[*@4 Less][@(0.0.255) `&]_[*@3 less])&]
-[s2; Sorts pair of containers. Both containers must have same number 
-of items. Resulting order is determined by the [* keys] container. 
-Ordering is determined by [* less].&]
-[s7; [*C@4 KC]-|Type of keys container.&]
-[s7; [*C@4 VC]-|Type of values.&]
-[s7; [*C@3 keys]-|Container of keys.&]
-[s7; [*C@3 values]-|Container of values.&]
-[s7; [*C@3 less]-|Ordering predicate.&]
-[s3;%- &]
-[s4;%- &]
-[s5;:IndexSort`(KC`&`,VC`&`):%- [@(0.0.255) template]_<[@(0.0.255) class]_[*@4 KC], 
-[@(0.0.255) class]_[*@4 VC][@(0.0.255) >]_[@(0.0.255) void]_[* IndexSort]([*@4 KC][@(0.0.255) `&
-]_[*@3 keys], [*@4 VC][@(0.0.255) `&]_[*@3 values])&]
-[s2; Sorts pair of containers. Both containers must have same number 
-of items. Resulting order is determined by the [* keys] container. 
-Ordering is determined by [*/ operator<].&]
-[s7; [*C@4 KC]-|Type of keys container.&]
-[s7; [*C@4 VC]-|Type of values container.&]
-[s7; [*C@3 keys]-|Container of keys.&]
-[s7; [*C@3 values]-|Container of values.&]
-[s3;%- &]
-[s4;%- &]
-[s5;:GetSortOrder`(const C`&`,const Less`&`):%- [@(0.0.255) template]_<[@(0.0.255) class]_
-[*@4 C], [@(0.0.255) class]_[*@4 Less][@(0.0.255) >]_Vector[@(0.0.255) <int>]_[* GetSortOrder
-]([@(0.0.255) const]_[*@4 C][@(0.0.255) `&]_[*@3 container], [@(0.0.255) const]_[*@4 Less][@(0.0.255) `&
+[s3;%% &]
+[s4; &]
+[s5;:Upp`:`:Reverse`(Range`&`): [@(0.0.255) template]_<[@(0.0.255) class]_[*@4 Range]>_&]
+[s5;:Upp`:`:Reverse`(Range`&`): [@(0.0.255) void]_[* Reverse]([*@4 Range][@(0.0.255) `&]_[*@3 r
+])&]
+[s5;:Upp`:`:Reverse`(Range`&`&`): [@(0.0.255) template]_<[@(0.0.255) class]_[*@4 Range]>_&]
+[s5;:Upp`:`:Reverse`(Range`&`&`): [@(0.0.255) void]_[* Reverse]([*@4 Range][@(0.0.255) `&`&]_
+[*@3 r])&]
+[s2;%% Reverses the order of values in a range.&]
+[s3;%% &]
+[s4; &]
+[s5;:Upp`:`:Sum`(const Range`&`,const Upp`:`:ValueTypeOf`<Range`>`&`): [@(0.0.255) temp
+late]_<[@(0.0.255) class]_[*@4 Range]>_&]
+[s5;:Upp`:`:Sum`(const Range`&`,const Upp`:`:ValueTypeOf`<Range`>`&`): [_^Upp`:`:ValueTypeOf^ V
+alueTypeOf]<[*@4 Range]>_[* Sum]([@(0.0.255) const]_[*@4 Range][@(0.0.255) `&]_[*@3 r], 
+[@(0.0.255) const]_[_^Upp`:`:ValueTypeOf^ ValueTypeOf]<[*@4 Range]>`&_[*@3 zero])&]
+[s2; [%% Returns the sum of all elements in range ][*@3 r][%% , with ][*@3 zero][%%  
+representing initial zero value. ][*@4 T]_must have defined operator`+`=.&]
+[s3;%% &]
+[s4; &]
+[s5;:Sum`(const T`&`): [@(0.0.255) template]_<[@(0.0.255) class]_[*@4 Range]>_&]
+[s5;:Sum`(const T`&`): [@(0.0.255) typename]_[_^Upp`:`:ValueTypeOf^ ValueTypeOf]<[*@4 Range
+]>_[* Sum]([@(0.0.255) const]_[*@4 T][@(0.0.255) `&]_[*@3 c])&]
+[s2;%% Same as Sum(c, 0).&]
+[s3;%% &]
+[s4; &]
+[s5;:Upp`:`:Count`(const Range`&`,const V`&`): [@(0.0.255) template]_<[@(0.0.255) class]_
+[*@4 Range], [@(0.0.255) class]_[*@4 V]>_&]
+[s5;:Upp`:`:Count`(const Range`&`,const V`&`): [@(0.0.255) int]_[* Count]([@(0.0.255) const
+]_[*@4 Range][@(0.0.255) `&]_[*@3 r], [@(0.0.255) const]_[*@4 V][@(0.0.255) `&]_[*@3 val])&]
+[s2;%% Counts the number of elements in the Range [%-*@3 r] that are 
+equal to [%-*@3 val] .&]
+[s3;%% &]
+[s4; &]
+[s5;:Upp`:`:CountIf`(const Range`&`,const Predicate`&`): [@(0.0.255) template]_<[@(0.0.255) c
+lass]_[*@4 Range], [@(0.0.255) class]_[*@4 Predicate]>_&]
+[s5;:Upp`:`:CountIf`(const Range`&`,const Predicate`&`): [@(0.0.255) int]_[* CountIf]([@(0.0.255) c
+onst]_[*@4 Range][@(0.0.255) `&]_[*@3 r], [@(0.0.255) const]_[*@4 Predicate][@(0.0.255) `&]_[*@3 p
+])&]
+[s2;%% Counts the number of elements in the Range [%-*@3 r] that satisfy 
+condition [%-*@3 p].&]
+[s3;%% &]
+[s4; &]
+[s5;:Upp`:`:FindBest`(const Range`&`,const Pred`&`): [@(0.0.255) template]_<[@(0.0.255) c
+lass]_[*@4 Range], [@(0.0.255) class]_[*@4 Pred]>_&]
+[s5;:Upp`:`:FindBest`(const Range`&`,const Pred`&`): [@(0.0.255) int]_[* FindBest]([@(0.0.255) c
+onst]_[*@4 Range][@(0.0.255) `&]_[*@3 r], [@(0.0.255) const]_[*@4 Pred][@(0.0.255) `&]_[*@3 pre
+d])&]
+[s2;%% Finds the most suitable element in a range [%-*@3 r] as specified 
+by [%-*@3 pred]. E.g. if [%-*@3 pred] is std`::less, finds minimum. 
+If [%-*@3 r] is empty, returns `-1.&]
+[s3;%% &]
+[s4; &]
+[s5;:Upp`:`:FindMin`(const Range`&`): [@(0.0.255) template]_<[@(0.0.255) class]_[*@4 Range]>
+_&]
+[s5;:Upp`:`:FindMin`(const Range`&`): [@(0.0.255) int]_[* FindMin]([@(0.0.255) const]_[*@4 Ra
+nge][@(0.0.255) `&]_[*@3 r])&]
+[s2;%% Returns the index of minimal element of [%-*@3 r], using std`::less 
+to compare elements. If [%-*@3 r] is empty, returns `-1.&]
+[s3;%% &]
+[s4; &]
+[s5;:Upp`:`:Min`(const Range`&`): [@(0.0.255) template]_<[@(0.0.255) class]_[*@4 Range]>_&]
+[s5;:Upp`:`:Min`(const Range`&`): [@(0.0.255) const]_[_^Upp`:`:ValueTypeOf^ ValueTypeOf]<
+[*@4 Range]>`&_[* Min]([@(0.0.255) const]_[*@4 Range][@(0.0.255) `&]_[*@3 r])&]
+[s2;%% Returns the [/ value] of minimal element of [%-*@3 r], using std`::less 
+to compare elements. If [%-*@3 r] is empty, behavior is undefined 
+(ASSERT fails in debug).&]
+[s3;%% &]
+[s4; &]
+[s5;:Upp`:`:Min`(const Range`&`,const Upp`:`:ValueTypeOf`<Range`>`&`): [@(0.0.255) temp
+late]_<[@(0.0.255) class]_[*@4 Range]>_&]
+[s5;:Upp`:`:Min`(const Range`&`,const Upp`:`:ValueTypeOf`<Range`>`&`): [@(0.0.255) cons
+t]_[_^Upp`:`:ValueTypeOf^ ValueTypeOf]<[*@4 Range]>`&_[* Min]([@(0.0.255) const]_[*@4 Range
+][@(0.0.255) `&]_[*@3 r], [@(0.0.255) const]_[_^Upp`:`:ValueTypeOf^ ValueTypeOf]<[*@4 Range
+]>`&_[*@3 def])&]
+[s2;%% Returns the [/ value] of minimal element of [%-*@3 r], using std`::less 
+to compare elements. If [%-*@3 r] is empty, returns [%-*@3 def].&]
+[s3;%% &]
+[s4; &]
+[s5;:Upp`:`:FindMax`(const Range`&`): [@(0.0.255) template]_<[@(0.0.255) class]_[*@4 Range]>
+_&]
+[s5;:Upp`:`:FindMax`(const Range`&`): [@(0.0.255) int]_[* FindMax]([@(0.0.255) const]_[*@4 Ra
+nge][@(0.0.255) `&]_[*@3 r])&]
+[s2;%% Returns the index of maximal element of [%-*@3 r], using std`::greater 
+to compare elements. If [%-*@3 r] is empty, returns `-1.&]
+[s3;%% &]
+[s4; &]
+[s5;:Upp`:`:Max`(const Range`&`): [@(0.0.255) template]_<[@(0.0.255) class]_[*@4 Range]>_&]
+[s5;:Upp`:`:Max`(const Range`&`): [@(0.0.255) const]_[_^Upp`:`:ValueTypeOf^ ValueTypeOf]<
+[*@4 Range]>`&_[* Max]([@(0.0.255) const]_[*@4 Range][@(0.0.255) `&]_[*@3 r])&]
+[s2;%% Returns the [/ value] of maximal element of [%-*@3 r], using std`::less 
+to compare elements. If [%-*@3 r] is empty, behavior is undefined 
+(ASSERT fails in debug)..&]
+[s3;%% &]
+[s4; &]
+[s5;:Upp`:`:Max`(const Range`&`,const Upp`:`:ValueTypeOf`<Range`>`&`): [@(0.0.255) temp
+late]_<[@(0.0.255) class]_[*@4 Range]>_&]
+[s5;:Upp`:`:Max`(const Range`&`,const Upp`:`:ValueTypeOf`<Range`>`&`): [@(0.0.255) cons
+t]_[_^Upp`:`:ValueTypeOf^ ValueTypeOf]<[*@4 Range]>`&_[* Max]([@(0.0.255) const]_[*@4 Range
+][@(0.0.255) `&]_[*@3 r], [@(0.0.255) const]_[_^Upp`:`:ValueTypeOf^ ValueTypeOf]<[*@4 Range
+]>`&_[*@3 def])&]
+[s2;%% Returns the [/ value] of maximal element of [%-*@3 r], using std`::less 
+to compare elements. If [%-*@3 r] is empty, returns [%-*@3 def].&]
+[s3;%% &]
+[s4; &]
+[s5;:Upp`:`:IsEqualRange`(const Range1`&`,const Range2`&`): [@(0.0.255) template]_<[@(0.0.255) c
+lass]_[*@4 Range1], [@(0.0.255) class]_[*@4 Range2]>_&]
+[s5;:Upp`:`:IsEqualRange`(const Range1`&`,const Range2`&`): [@(0.0.255) bool]_[* IsEqualR
+ange]([@(0.0.255) const]_[*@4 Range1][@(0.0.255) `&]_[*@3 a], [@(0.0.255) const]_[*@4 Range2][@(0.0.255) `&
+]_[*@3 b])&]
+[s2;%% Returns true if [%-*@3 a] and [%-*@3 b] are equal. operator`=`= 
+is used to compare elements. Ranges are considered equal if they 
+have the same number of elements and for every element at index 
+[/ i: ][%-*@3 a]`[i`] `=`= [%-*@3 b]`[i`].&]
+[s3;%% &]
+[s4; &]
+[s5;:Upp`:`:CompareRanges`(const Range1`&`,const Range2`&`): [@(0.0.255) template]_<[@(0.0.255) c
+lass]_[*@4 Range1], [@(0.0.255) class]_[*@4 Range2]>_&]
+[s5;:Upp`:`:CompareRanges`(const Range1`&`,const Range2`&`): [@(0.0.255) int]_[* CompareR
+anges]([@(0.0.255) const]_[*@4 Range1][@(0.0.255) `&]_[*@3 a], [@(0.0.255) const]_[*@4 Range2
+][@(0.0.255) `&]_[*@3 b])&]
+[s2;%% Lexicographically compares ranges [%-*@3 a] [%-*@3 b], using SgnCompare 
+to compare elements. SgnCompare is supposed to return value < 
+0 if first element is less than second, 0 if they are equal, 
+>0 otherwise. Returns value <0, 0, >0 if [%-*@3 a] < [%-*@3 b],[%-*@3  
+a] `=`= [%-*@3 b],[%-*@3  a] > [%-*@3 b].&]
+[s3;%% &]
+[s4; &]
+[s5;:Upp`:`:FindMatch`(const Range`&`,const C`&`,int`): [@(0.0.255) template]_<[@(0.0.255) c
+lass]_[*@4 Range], [@(0.0.255) class]_[*@4 V], [@(0.0.255) class]_[*@4 C]>_&]
+[s5;:Upp`:`:FindMatch`(const Range`&`,const C`&`,int`): [@(0.0.255) int]_[* FindMatch]([@(0.0.255) c
+onst]_[*@4 Range][@(0.0.255) `&]_[*@3 r], [@(0.0.255) const]_[*@4 C][@(0.0.255) `&]_[*@3 match],
+ [@(0.0.255) int]_[*@3 from]_`=_[@3 0])&]
+[s2;%% Returns the index of first element for which predicate [%-*@3 match] 
+is true. If not found, returns `-1. Search starts at index [%-*@3 from].&]
+[s3;%% &]
+[s4; &]
+[s5;:Upp`:`:FindIndex`(const Range`&`,const V`&`,int`): [@(0.0.255) template]_<[@(0.0.255) c
+lass]_[*@4 Range], [@(0.0.255) class]_[*@4 V]>_&]
+[s5;:Upp`:`:FindIndex`(const Range`&`,const V`&`,int`): [@(0.0.255) int]_[* FindIndex]([@(0.0.255) c
+onst]_[*@4 Range][@(0.0.255) `&]_[*@3 r], [@(0.0.255) const]_[*@4 V][@(0.0.255) `&]_[*@3 value],
+ [@(0.0.255) int]_[*@3 from]_`=_[@3 0])&]
+[s2;%% Returns the index of first element which is equal to [%-*@3 value]. 
+If not found, returns `-1. Search starts at index [%-*@3 from].&]
+[s3;%% &]
+[s4; &]
+[s5;:Upp`:`:FindAll`(const Range`&`,Predicate`,int`): [@(0.0.255) template]_<[@(0.0.255) c
+lass]_[*@4 Range], [@(0.0.255) class]_[*@4 Predicate]>_&]
+[s5;:Upp`:`:FindAll`(const Range`&`,Predicate`,int`): [_^Upp`:`:Vector^ Vector]<[@(0.0.255) i
+nt]>_[* FindAll]([@(0.0.255) const]_[*@4 Range][@(0.0.255) `&]_[*@3 r], 
+[*@4 Predicate]_[*@3 match], [@(0.0.255) int]_[*@3 from]_`=_[@3 0])&]
+[s2;%% Returns the Vector of indices of  [/ ALL] elements for which 
+[%-*@3 match] is true. Returned Vector is sorted in ascending order. 
+Search starts at index [%-*@3 from].&]
+[s3;%% &]
+[s4; &]
+[s5;:Upp`:`:FindLowerBound`(const Range`&`,const T`&`,const Less`&`): [@(0.0.255) templ
+ate]_<[@(0.0.255) class]_[*@4 Range], [@(0.0.255) class]_[*@4 T], [@(0.0.255) class]_[*@4 Les
+s]>_&]
+[s5;:Upp`:`:FindLowerBound`(const Range`&`,const T`&`,const Less`&`): [@(0.0.255) int]_
+[* FindLowerBound]([@(0.0.255) const]_[*@4 Range][@(0.0.255) `&]_[*@3 r], 
+[@(0.0.255) const]_[*@4 T][@(0.0.255) `&]_[*@3 val], [@(0.0.255) const]_[*@4 Less][@(0.0.255) `&
 ]_[*@3 less])&]
-[s2; Creates ascending order of values in container. Ordering is 
-determined by [* less].&]
-[s7; [*C@4 C]-|Type of container.&]
-[s7; [*C@3 container]-|Source container.&]
-[s7; [*C@3 less]-|Ordering predicate.&]
-[s7; [*/ Return value]-|Vector of positions of source container in sorted 
-order.&]
-[s3;%- &]
-[s4;%- &]
-[s5;:GetSortOrder`(const C`&`):%- [@(0.0.255) template]_<[@(0.0.255) class]_[*@4 C][@(0.0.255) >
-]_Vector[@(0.0.255) <int>]_[* GetSortOrder]([@(0.0.255) const]_[*@4 C][@(0.0.255) `&]_[*@3 co
-ntainer])&]
-[s2; Creates ascending order of values in container. Ordering is 
-determined by [*/ operator<].&]
-[s7; [*C@4 C]-|Type of container.&]
-[s7; [*C@3 container]-|Source container.&]
-[s7; [*/ Return value]-|Vector of positions of source container in sorted 
-order.&]
-[s3;%- &]
-[s4;%- &]
-[s5;:FieldRelation`(O`(`*`)`,const R`&`):%- [@(0.0.255) template]_<[@(0.0.255) class]_[*@4 O
-], [@(0.0.255) class]_[*@4 T], [@(0.0.255) class]_[*@4 R][@(0.0.255) >]_FieldRelationCls[@(0.0.255) <
-][*@4 O], [*@4 T], [*@4 R][@(0.0.255) >]_[* FieldRelation]([*@4 O]_(T`::[@(0.0.255) `*][*@3 member
-]), [@(0.0.255) const]_[*@4 R][@(0.0.255) `&]_[*@3 relation])&]
-[s2; Creates ordering predicate for [* T] based on the value of member 
-variable of[*  T].&]
-[s7; [*C@4 T]-|Type of element.&]
-[s7; [*C@3 member]-|Member variable of T.&]
-[s7; [*C@3 relation]-|Ordering relation for [* member].&]
-[s7; [*/ Return value]-|Ordering predicate.&]
-[s3;%- &]
-[s4;%- &]
-[s5;:MethodRelation`(O`(`*`)`(`)`,const R`&`):%- [@(0.0.255) template]_<[@(0.0.255) class
-]_[*@4 O], [@(0.0.255) class]_[*@4 T], [@(0.0.255) class]_[*@4 R][@(0.0.255) >]_MethodRelatio
-nCls[@(0.0.255) <][*@4 O]_(T`::[@(0.0.255) `*])(), [*@4 T], [*@4 R][@(0.0.255) >]_[* MethodRelat
-ion]([*@4 O]_(T`::[@(0.0.255) `*][*@3 method])(), [@(0.0.255) const]_[*@4 R][@(0.0.255) `&]_[*@3 r
-elation])&]
-[s2; Creates ordering predicate for [* T] based on the value returned 
-by non`-const method of [* T].&]
-[s7; [*C@4 T]-|Type of element.&]
-[s7; [*C@3 method]-|Method of T.&]
-[s7; [*C@3 relation]-|Ordering relation for value returned by method.&]
-[s7; [*/ Return value]-|Ordering predicate.&]
-[s3;%- &]
-[s4;%- &]
-[s5;:MethodRelation`(O`(`*`)`(`)const`,const R`&`):%- [@(0.0.255) template]_<[@(0.0.255) c
-lass]_[*@4 O], [@(0.0.255) class]_[*@4 T], [@(0.0.255) class]_[*@4 R][@(0.0.255) >]_MethodRel
-ationCls[@(0.0.255) <][*@4 O]_(T`::[@(0.0.255) `*])()_[@(0.0.255) const], 
-[*@4 T], [*@4 R][@(0.0.255) >]_[* MethodRelation]([*@4 O]_(T`::[@(0.0.255) `*][*@3 method])()_[@(0.0.255) c
-onst], [@(0.0.255) const]_[*@4 R][@(0.0.255) `&]_[*@3 relation])&]
-[s2; Creates ordering predicate for [* T] based on the value returned 
-by const method of [* T].&]
-[s7; [*C@4 T]-|Type of element.&]
-[s7; [*C@3 method]-|Method of T.&]
-[s7; [*C@3 relation]-|Ordering relation for value returned by method.&]
-[s7; [*/ Return value]-|Ordering predicate.&]
+[s5;:Upp`:`:FindLowerBound`(const Range`&`,const T`&`): [@(0.0.255) template]_<[@(0.0.255) c
+lass]_[*@4 Range], [@(0.0.255) class]_[*@4 T]>_&]
+[s5;:Upp`:`:FindLowerBound`(const Range`&`,const T`&`): [@(0.0.255) int]_[* FindLowerBoun
+d]([@(0.0.255) const]_[*@4 Range][@(0.0.255) `&]_[*@3 r], [@(0.0.255) const]_[*@4 T][@(0.0.255) `&
+]_[*@3 val])&]
+[s2;%% Finds the first index in sorted range [%-*@3 r], which must 
+be sorted by [%-*@3 less ]predicate (or std`::less in second overload), 
+where [%-*@3 val] can be inserted without breaking the ordering.&]
+[s3;%% &]
+[s4; &]
+[s5;:Upp`:`:FindUpperBound`(const Range`&`,const T`&`,const L`&`): [@(0.0.255) template
+]_<[@(0.0.255) class]_[*@4 Range], [@(0.0.255) class]_[*@4 T], [@(0.0.255) class]_[*@4 L]>_&]
+[s5;:Upp`:`:FindUpperBound`(const Range`&`,const T`&`,const L`&`): [@(0.0.255) int]_[* Fi
+ndUpperBound]([@(0.0.255) const]_[*@4 Range][@(0.0.255) `&]_[*@3 r], 
+[@(0.0.255) const]_[*@4 T][@(0.0.255) `&]_[*@3 val], [@(0.0.255) const]_[*@4 L][@(0.0.255) `&]_
+[*@3 less])&]
+[s5;:Upp`:`:FindUpperBound`(const Range`&`,const T`&`): [@(0.0.255) template]_<[@(0.0.255) c
+lass]_[*@4 Range], [@(0.0.255) class]_[*@4 T]>_&]
+[s5;:Upp`:`:FindUpperBound`(const Range`&`,const T`&`): [@(0.0.255) int]_[* FindUpperBoun
+d]([@(0.0.255) const]_[*@4 Range][@(0.0.255) `&]_[*@3 r], [@(0.0.255) const]_[*@4 T][@(0.0.255) `&
+]_[*@3 val])&]
+[s2;%% Finds the last index in sorted range [%-*@3 r], which must be 
+sorted by [%-*@3 less ]predicate (or std`::less in second overload), 
+where [%-*@3 val] can be inserted without breaking the ordering.&]
 [s3; &]
-[s0; ]
+[s4; &]
+[s5;:Upp`:`:FindBinary`(const Range`&`,const T`&`,const L`&`): [@(0.0.255) template]_<[@(0.0.255) c
+lass]_[*@4 Range], [@(0.0.255) class]_[*@4 T], [@(0.0.255) class]_[*@4 L]>_&]
+[s5;:Upp`:`:FindBinary`(const Range`&`,const T`&`,const L`&`): [@(0.0.255) int]_[* FindBi
+nary]([@(0.0.255) const]_[*@4 Range][@(0.0.255) `&]_[*@3 r], [@(0.0.255) const]_[*@4 T][@(0.0.255) `&
+]_[*@3 val], [@(0.0.255) const]_[*@4 L][@(0.0.255) `&]_[*@3 less])&]
+[s5;:Upp`:`:FindBinary`(const Range`&`,const T`&`): [@(0.0.255) template]_<[@(0.0.255) cl
+ass]_[*@4 Range], [@(0.0.255) class]_[*@4 T]>_&]
+[s5;:Upp`:`:FindBinary`(const Range`&`,const T`&`): [@(0.0.255) int]_[* FindBinary]([@(0.0.255) c
+onst]_[*@4 Range][@(0.0.255) `&]_[*@3 r], [@(0.0.255) const]_[*@4 T][@(0.0.255) `&]_[*@3 val])&]
+[s2;%% Finds the index of [%-*@3 val] in sorted range [%-*@3 r], which 
+must be sorted by [%-*@3 less ]predicate (or std`::less in second 
+overload). If [%-*@3 val] is not present in [%-*@3 r], return `-1.&]
+[s3;%% &]
+[s4; &]
+[s5;:Upp`:`:LruAdd`(Container`&`,T`,int`): [@(0.0.255) template]_<[@(0.0.255) class]_[*@4 C
+ontainer], [@(0.0.255) class]_[*@4 T]>_&]
+[s5;:Upp`:`:LruAdd`(Container`&`,T`,int`): [@(0.0.255) void]_[* LruAdd]([*@4 Container][@(0.0.255) `&
+]_[*@3 lru], [*@4 T]_[*@3 value], [@(0.0.255) int]_[*@3 limit]_`=_[@3 10])&]
+[s2;%% This specialized algorithm is intended to manage Least`-Recently`-Used 
+lists. [%-*@3 lru] has to be U`+`+ array type (Vector, Array, InVector, 
+InArray) and represents the list. [%-*@3 value] is the value to 
+be eventually added to the list, [%-*@3 limit] is the maximum number 
+of elements in the list. On call, if [%-*@3 value] is present in 
+the [%-*@3 lru], it is moved to the front. If it is not present, 
+it is inserted to the front and the size of list is eventually 
+reduced to [%-*@3 limit], possibly removing the element at the 
+end of list.&]
+[s3;%% &]
+[s4; &]
+[s5;:Upp`:`:MakeIota`(V`,V`,V`): [@(0.0.255) template]_<[@(0.0.255) class]_[*@4 C]_`=_Vecto
+r<[@(0.0.255) int]>, [@(0.0.255) class]_[*@4 V]>_&]
+[s5;:Upp`:`:MakeIota`(V`,V`,V`): [*@4 C]_[* MakeIota]([*@4 V]_[*@3 end], 
+[*@4 V]_[*@3 start]_`=_[@3 0], [*@4 V]_[*@3 step]_`=_[@3 1])&]
+[s2;%% Returns a cointainer of type [%-*@4 C] filled with sequence 
+of numbers starting at [%-*@3 start] and less than [%-*@3 end] increasing 
+by [%-*@3 step] increments.&]
+[s3;%% &]
+[s0;%% ]]

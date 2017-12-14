@@ -92,10 +92,11 @@ inline void SqlSchemaInitClear(T *a, int n) {
 		SqlSchemaInitClear(*a++);
 }
 
-inline void SqlSchemaInitClear(int& a)    { a = Null; }
-inline void SqlSchemaInitClear(double& a) { a = Null; }
-inline void SqlSchemaInitClear(int64& a)  { a = Null; }
-inline void SqlSchemaInitClear(bool& a)   { a = false; }
+
+template<> inline void SqlSchemaInitClear(int& a)    { a = Null; }
+template<> inline void SqlSchemaInitClear(double& a) { a = Null; }
+template<> inline void SqlSchemaInitClear(int64& a)  { a = Null; }
+template<> inline void SqlSchemaInitClear(bool& a)   { a = false; }
 
 template <class T>
 inline void SqlSchemaClear(T& a)          { a = Null; }
@@ -108,10 +109,108 @@ inline void SqlSchemaClear(T *a, int n) {
 		SqlSchemaClear(*a++);
 }
 
+void SchDbInfoTable(const char *table);
+void SchDbInfoType(const char *table);
+void SchDbInfoColumn(const char *column);
+void SchDbInfoColumnArray(const char *name, int items);
+void SchDbInfoVar(void (*fn)(), const char *name);
+void SchDbInfoPrimaryKey();
+void SchDbInfoReferences(const char *table);
+void SchDbInfoReferences(const char *table, const char *column);
+
+SqlBool FindSchJoin(const String& tables);
+
+Vector<String>  GetSchTables();
+Vector<String>  GetSchColumns(const String& table);
+
 String ExportSch(SqlSession& session, const String& database);
 String ExportIds(SqlSession& session, const String& database);
 
 #ifndef NOAPPSQL
 String ExportSch(const String& database);
 String ExportIds(const String& database);
+#endif
+
+struct S_info {
+	struct Column : Moveable<Column> {
+		intptr_t    offset;
+		RefManager *manager;
+		int         width;
+	};
+	VectorMap<String, Column> column;
+	SqlSet        set;
+	Vector<SqlId> ids;
+	
+	int      GetCount() const                               { return column.GetCount(); }
+
+	SqlId    GetId(int i) const                             { return column.GetKey(i); }
+	int      GetIndex(const String& id) const               { return column.Find(id); }
+	int      GetIndex(const SqlId& id) const                { return column.Find(~id); }
+	
+	int      GetWidth(int i) const                          { return column[i].width; }
+	int      GetWidth(const SqlId& id) const;
+
+	Ref      GetRef(const void *s, int i) const;
+	Ref      GetRef(const void *s, const SqlId& id) const;
+	Value    Get(const void *s, const SqlId& id) const;
+	Value    Get(const void *s, int i) const;
+	ValueMap Get(const void *s) const;
+	
+	void     Set(const void *s, int i, const Value& v) const;
+	void     Set(const void *s, const SqlId& id, const Value& v) const;
+	void     Set(const void *s, const ValueMap& m) const;
+	
+	SqlSet   GetSet(const String& prefix) const;
+	SqlSet   GetOf(const SqlId& table) const;
+	
+	void     Init();
+};
+
+struct S_info_maker : FieldOperator {
+	S_info&  info;
+	void    *s;
+
+	virtual void Field(const char *name, Ref f, bool *b);
+	virtual void Width(int width);
+
+	S_info_maker(S_info& f, void *s) : info(f), s(s) {}
+};
+
+#if 0 // For documentation only, 'type' is a placeholder for the .sch TABLE or TYPE name
+struct S_type {
+	static const char           TableName[];
+	static const SqlSet&        ColumnSet();
+	static SqlSet               ColumnSet(const String& prefix);
+	static SqlSet               Of(SqlId table);
+	static const Vector<SqlId>& GetColumnIds();
+	
+	void                        Clear();
+
+	void                        FieldLayoutRaw(FieldOperator& f, const String& prefix = String());
+	void                        FieldLayout(FieldOperator& f);
+	operator                    Fields();
+
+	bool                        operator==(const S_type& x) const;
+	bool                        operator!=(const S_type& x) const;
+	String                      ToString() const;
+
+	static int                  GetCount();
+	static SqlId                GetId(int i);
+	static int                  GetIndex(const String& id);
+	static int                  GetIndex(const SqlId& id);
+	static int                  GetWidth(int i);
+	static int                  GetWidth(const SqlId& id);
+
+	Ref                         GetRef(int i);
+	Ref                         GetRef(const SqlId& id);
+	Value                       Get(const SqlId& id) const;
+	Value                       Get(int i) const;
+	ValueMap                    Get() const;
+	void                        Set(int i, const Value& v);
+	void                        Set(const SqlId& id, const Value& v);
+	void                        Set(const ValueMap& m);
+
+	S_type();
+	S_type(const ValueMap& m);
+};
 #endif

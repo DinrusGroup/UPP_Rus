@@ -2,7 +2,7 @@
 
 #ifdef GUI_WIN
 
-NAMESPACE_UPP
+namespace Upp {
 
 #ifndef PLATFORM_WINCE
 
@@ -47,7 +47,7 @@ void WinMetaFile::WriteClipboard() const {
 }
 
 void WinMetaFile::Clear() {
-	if(hemf/* && !IsPicked()*/) //TODO
+	if(hemf)
 		::DeleteEnhMetaFile(hemf);
 	hemf = NULL;
 }
@@ -331,6 +331,6 @@ String AsWMF(const Drawing& iw)
 
 #endif
 
-END_UPP_NAMESPACE
+}
 
 #endif

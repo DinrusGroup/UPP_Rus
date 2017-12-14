@@ -1,6 +1,6 @@
 #include "Core.h"
 
-NAMESPACE_UPP
+namespace Upp {
 
 /* Faster, but consuming more memory....
 PteBase::Prec *PteBase::PtrAdd()
@@ -27,14 +27,11 @@ static StaticCriticalSection sPteLock;
 
 PteBase::Prec *PteBase::PtrAdd()
 {
-	sPteLock.Enter();
-	if(prec) {
+	CriticalSection::Lock __(sPteLock);
+	if(prec)
 		++prec->n;
-		sPteLock.Leave();
-	}
 	else {
-		sPteLock.Leave();
-		prec = new Prec;
+		prec = tiny_new<Prec>();
 		prec->n = 1;
 		prec->ptr = this;
 	}
@@ -47,7 +44,7 @@ void PteBase::PtrRelease(Prec *prec)
 	if(prec && --prec->n == 0) {
 		if(prec->ptr)
 			prec->ptr->prec = NULL;
-		delete prec;
+		tiny_delete(prec);
 	}
 }
 
@@ -84,4 +81,4 @@ PtrBase::~PtrBase()
 	Release();
 }
 
-END_UPP_NAMESPACE
+}

@@ -1,6 +1,6 @@
 #include "Docking.h"
 
-NAMESPACE_UPP
+namespace Upp {
 
 #define ALIGN_ASSERT(al)	ASSERT(al >= 0 && al < 4)
 #define FRAME_MOVE_DIV 		5 // Outside fraction of the highlight that the mouse must be in to trigger dockpane reordering
@@ -191,7 +191,7 @@ void DockWindow::SaveDockerPos(DockableCtrl& dc, PosInfo& pi)
 		case DockCont::STATE_DOCKED: {
 			int align = GetDockAlign(*cont);
 			ALIGN_ASSERT(align);
-			int ps = dockpane[align].FindIndex(*cont);
+			int ps = dockpane[align].GetChildIndex(cont);
 			ASSERT(ps >= 0);
 			Size sz = cont->GetSize();
 			s % align % ps % sz;
@@ -424,7 +424,7 @@ DockCont *DockWindow::GetReleasedContainer(DockableCtrl& dc)
 
 void DockWindow::SyncContainer(DockCont& c)
 {
-	c.ToolWindow(childtoolwindows);	
+//	c.ToolWindow(childtoolwindows);	
 	c.Grouping(grouping);
 	c.WindowButtons(menubtn, hidebtn, closebtn);
 	c.SyncButtons();
@@ -615,7 +615,7 @@ void DockWindow::FloatContainer(DockCont& c, Point p, bool move)
 		Size best = CtrlBestSize(c, false);
 		if (p.IsNullInstance()) 
 			p = GetScreenRect().CenterPoint() - best/2;
-		c.SetRect(Rect(p, best));
+		c.SetClientRect(Rect(p, best));
 	}
 	c.Open(this);
 }
@@ -623,7 +623,7 @@ void DockWindow::FloatContainer(DockCont& c, Point p, bool move)
 void DockWindow::FloatFromTab(DockCont& c, DockCont& tab)
 {
 	Rect r = c.GetScreenRect();
-	tab.SetRect(r);
+	tab.SetClientRect(r);
 	tab.StateNotDocked(this);
 	c.RefreshLayout();
 	tab.MoveBegin();
@@ -885,7 +885,6 @@ void DockWindow::HighlightCtrl::SetHighlight(const Value& hl, bool _isnested, bo
 
 void DockWindow::HighlightCtrl::SetNested(bool _isnested)
 {
-	static int count = 0;
 	bool nest = cannest && _isnested;
 	if (nest != isnested) {
 		isnested = nest;		
@@ -921,7 +920,6 @@ void DockWindow::HighlightCtrl::CreateBuffer()
 void DockWindow::StartHighlight(DockCont *dc)
 {
 	int align = DOCK_NONE;
-	bool framemove = false;
 	DockCont *target = FindDockTarget(*dc, align);
 	if (align != DOCK_NONE || target) {
 		dc->SyncUserSize(true, true);
@@ -946,7 +944,7 @@ void DockWindow::Highlight(int align, DockCont& cont, DockCont *target)
 		// Do highlight
 		hl.SetHighlight(dc.GetStyle().highlight[0], false, 0);
 		hl.oldframesize = dockframe[align].GetSize();	
-		int pos = target ? dockpane[align].FindIndex(*target) : -1;
+		int pos = target ? dockpane[align].GetChildIndex(target) : -1;
 		Dock0(align, hl, pos, IsAnimatedHighlight(), true);
 	}
 	else if (target && IsTabbing()) {
@@ -1015,25 +1013,18 @@ void DockWindow::ContainerDragStart(DockCont& dc)
 {
 	if (!dc.IsFloating()) {
 		// Reposition if not under the mouse
-		Rect r = dc.GetScreenRect();
-		Point pt = GetMousePos();
-		Point tl = r.TopLeft();
-
 		Detach(dc);	
-		dc.StateFloating(*this);		
+		dc.StateFloating(*this);
+		Rect r = dc.GetScreenView();
 		r.SetSize(CtrlBestSize(dc, false));
-
-		if (r.left > pt.x || r.right < pt.x)
-			tl.x += pt.x - r.left - r.Width()/2;
-		if (r.top < pt.y)
-			tl.y += pt.y - r.top + DOCKCONT_WND_OFFSET;
 		dc.SyncUserSize(true, true);
 		if (IsAnimatedHighlight() && dc.IsDocked() && dc.GetParent()) {
 			Undock0(dc, true);
 			dc.StateNotDocked();
 		}
-		dc.SetRect(Rect(tl, r.GetSize()));
-		dc.Open(this);
+		dc.PlaceClientRect(r);
+		if(!dc.IsOpen())
+			dc.Open(this);
 		dc.StartMouseDrag();
 	}
 }
@@ -1231,14 +1222,14 @@ void DockWindow::DockWindowMenu(Bar& bar)
 	if (IsGrouping())
 		menu.GroupListMenu(bar);
 	else
-		menu.WindowListMenu(bar, t_("Все"));
+		menu.WindowListMenu(bar, t_("All"));
 	if (dockers.GetCount())
 		bar.Separator();
 	if (layouts.GetCount()) {
-		bar.Add(t_("Раскладки"), callback(&menu, &DockMenu::LayoutListMenu));
+		bar.Add(t_("Layouts"), callback(&menu, &DockMenu::LayoutListMenu));
 		bar.Separator();
 	}
-	bar.Add(t_("Управлять Окнами..."), THISBACK(DockManager));
+	bar.Add(t_("Manage Windows..."), THISBACK(DockManager));
 }
 
 void DockWindow::SerializeWindow(Stream& s)
@@ -1464,16 +1455,29 @@ void DockWindow::EnableFloating(bool enable)
 }
 
 DockWindow::DockWindow()
-: init(false), tabbing(true), grouping(true), nestedtabs(false), nesttoggle(K_CTRL | K_SHIFT),
-  locked(false), menubtn(true), closebtn(true), hidebtn(true), tabtext(true), tabalign(false),
-  frameorder(true), autohide(true), childtoolwindows(false), showlockedhandles(false)
 {
 	menu.Set(*this);
 
 #ifdef PLATFORM_WIN32
 	childtoolwindows = true;
 #endif
-	
+
+	init= false;
+	tabbing = true;
+	nestedtabs = false;
+	grouping = true;
+	menubtn = true;
+	nesttoggle = (K_CTRL | K_SHIFT);
+	closebtn = true;
+	hidebtn = true;
+	locked = false;
+	tabtext = true;
+	tabalign = false;
+	autohide = true;
+	frameorder = true;
+	childtoolwindows = false;
+	showlockedhandles = false;
+
 	for (int i = 0; i < 4; i++) {
 		dockframe[i].Set(dockpane[i], 0, i);
 		IsTB(i) ? dockpane[i].Horz() : dockpane[i].Vert();
@@ -1703,4 +1707,4 @@ CH_STYLE(PopUpDockWindow, Style, StyleDefault)
 	outersize = 25;
 }
 
-END_UPP_NAMESPACE
+}

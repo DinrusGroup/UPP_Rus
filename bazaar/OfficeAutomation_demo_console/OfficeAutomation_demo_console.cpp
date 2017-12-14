@@ -1,9 +1,12 @@
-#include <Core/Core.h>
+ #include <Core/Core.h>
 
 using namespace Upp;
 
 #include <Functions4U/Functions4U.h>
 #include <OfficeAutomation/OfficeAutomation.h>
+
+
+#ifdef _WIN32
 
 bool end = false;
 
@@ -50,7 +53,13 @@ void TestSheetDetail(OfficeSheet &sheet)
 	else
 		Puts("Tab 'My new tab' NOT removed");
 	Puts("Press enter to continue...");	getchar();
-	
+
+	if(sheet.ChooseTab(0))
+		Puts("Tab 0 chosen");
+	else
+		Puts("Tab 0 NOT chosen");
+	Puts("Press enter to continue...");	getchar();
+		
 	Puts("Changing col width and row height");  
 	sheet.SetRowHeight(4, 30);
 	sheet.SetColWidth(3, 30);
@@ -72,19 +81,25 @@ void TestSheetDetail(OfficeSheet &sheet)
 	sheet.SetVertAlignment(4, 3, OfficeSheet::CENTER);
 	
 	Puts("Filling cells using SetValue");  
-	for (int y = 2; y <= 20; ++y)
+	for (int y = 2; y <= 10; ++y)
 		for (int x = 1; x <= 20; ++x)
 			sheet.SetValue(x, y, x*y);	 
 
-/*				
+			
 	Puts("Filling cells MUCH faster using Range functions");  
-	sheet.Select("A21:GR2020");
-	sheet.DefMatrix(200, 2000);
-	for (int x = 1; x <= 200; ++x)
-		for (int y = 1; y <= 2000; ++y)
-			sheet.SetMatrixValue(x, y, x*y);	
-	sheet.FillSelectionMatrix();		// Fill selected range with matrix values
-*/
+	
+	Vector<Vector<Value> > data;
+	for (int y = 0; y < 300; ++y) {
+		data.Add();
+		for (int x = 0; x < 200; ++x) 
+			data[y].Add(x*y);
+	}
+	sheet.MatrixSet(1, 11, data);
+	
+	data.Clear();
+	sheet.MatrixGet(1, 11, 10, 10, data);
+	Puts(Format("Retrieved data from cell 5, 16: %s", AsString(data[5][5])));
+		
 	sheet.SetValue(2, 2, "=A7*B5");
 	sheet.SetValue(3, 21, "Hello");				Puts("Cell(3, 21) = " + sheet.GetValue(3, 21).ToString());
 	sheet.SetValue("BD25", 23242.343);			Puts("Cell(BD25) = " + sheet.GetValue("BD25").ToString());
@@ -109,6 +124,7 @@ void TestSheetDetail(OfficeSheet &sheet)
 	sheet.SaveAs(test2, "xls");
 	sheet.Quit();  	
 }
+
 void TestSheet()
 {
 	OfficeSheet sheet;
@@ -206,3 +222,13 @@ CONSOLE_APP_MAIN
 	TestSheet();
 	TestDoc();
 }
+
+#else
+
+CONSOLE_APP_MAIN 
+{
+	puts("\nOfficeAutomation package only works in Windows");	
+	puts("\nPress a key to end...");		getchar();
+}
+
+#endif

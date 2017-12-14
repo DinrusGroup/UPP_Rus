@@ -18,23 +18,31 @@ Controls4U_Demo::Controls4U_Demo() {
 	CtrlLayout(*this, "Controls4U Demo");
 	Sizeable().Zoomable();
 
-	tab.Add(fileBrowser_Demo.SizePos(), "FileBrowser (experimental)");	
+	grid.AddColumn("Demos");
+	controls.Add(&fileBrowser_Demo);	grid.Add("FileBrowser (experimental)");
+	controls.Add(&meter_Demo);			grid.Add("Meter & Knob");
+	controls.Add(&jbcontrols_Demo);		grid.Add("JBControls");
+	controls.Add(&staticClock_Demo);	grid.Add("StaticClock");
+	controls.Add(&editFileFolder_Demo);	grid.Add("StaticImage & EditFile/Folder");
+	controls.Add(&staticImageSet_Demo);	grid.Add("StaticImageSet");
+	controls.Add(&staticCtrls_Demo);	grid.Add("Static Controls");
+	controls.Add(&staticCtrlsTest_Demo);grid.Add("Static Controls Test");
+	//tab.Add(painterCanvas_Demo);		grid.Add("PainterCanvas (experimental)");
+	controls.Add(&functions4U_Demo);	grid.Add("Functions4U samples");
+	controls.Add(&splitterButton_Demo);	grid.Add("SplitterButton");
 #if defined(PLATFORM_WIN32) 	
-	tab.Add(vlc_Demo.SizePos(), "VLC ActiveX");
-	tab.Add(firefox_Demo.SizePos(), "Firefox ActiveX");
-	tab.Add(iexplorer_Demo.SizePos(), "Internet Explorer ActiveX");
+	controls.Add(&vlc_Demo);			grid.Add("VLC ActiveX");
+	controls.Add(&firefox_Demo);		grid.Add("Firefox ActiveX");
+	controls.Add(&iexplorer_Demo);		grid.Add("Internet Explorer ActiveX");
 #endif
-	tab.Add(meter_Demo.SizePos(), "Meter & Knob");
-	tab.Add(jbcontrols_Demo.SizePos(), "JBControls");
-	tab.Add(staticClock_Demo.SizePos(), "StaticClock");
-	tab.Add(editFileFolder_Demo.SizePos(), "StaticImage & EditFile/Folder");
-	tab.Add(staticCtrls_Demo.SizePos(), "Static Controls");
-	tab.Add(staticCtrlsTest_Demo.SizePos(), "Static Controls Test");
-	//tab.Add(drawingCanvas_Demo.SizePos(), "DrawingCanvas (experimental)");
-	tab.Add(functions4U_Demo.SizePos(), "Functions4U samples");
+	controls.Add(&aboutDlg);			grid.Add("About U++");
 
-	tab.Set(tab.Find(jbcontrols_Demo));	// Select the last
-	//tab.Set(tab.Find(drawingCanvas_Demo));	// Select the last
+	for (int i = 0; i < controls.GetCount(); ++i) 
+		rect.Add(controls[i]->SizePos());
+	
+	grid.WhenSel << THISBACK (OnGridSel);
+	grid.SetCursor(9);
+	OnGridSel();
 	
 	timerOn = false;
 	SetTimeCallback(-100, THISBACK(Timer));
@@ -46,6 +54,7 @@ void Controls4U_Demo::Timer() {
 	timerOn = true;
 	staticClock_Demo.UpdateInfo();
 	timerOn = false;
+	
 #if defined(PLATFORM_WIN32)
 	firefox_Demo.UpdateInfo();
 	iexplorer_Demo.UpdateInfo();
@@ -72,8 +81,12 @@ EditFileFolder_Demo::EditFileFolder_Demo() {
 	back.Set(Images::paper());
 }
 void EditFileFolder_Demo::OnNewFile() {
-	if (!clipImage.Set(~FileName))
-		Exclamation("File not found");
+	if (!clipImage.Set(~FileName)) {
+		if (FileExists(~FileName))
+			Exclamation("File not found");
+		else	
+			Exclamation("File format is not supported");
+	}
 }
 void EditFileFolder_Demo::ChangeProperties() {
 	clipImage.SetAngle(~angleList);
@@ -122,7 +135,7 @@ StaticClock_Demo::StaticClock_Demo() {
 	checkImage = false;
 	checkImage.WhenAction = THISBACK(ChangeProperties);
 	back.Set(Images::cream2());
-};
+}
 
 void Meter_Demo::ChangeValueKnob(Knob *knob, Meter *meter) {
 	*meter <<= ~*knob;
@@ -177,7 +190,7 @@ Meter_Demo::Meter_Demo() {
 FileBrowser_Demo::FileBrowser_Demo() {
 	CtrlLayout(*this);
 
-	browser.SetReadOnly().SetUseTrashBin().SetBrowseLinks().SetDeleteReadOnly().SetAskBeforeDelete().SetDragAndDrop();
+	browser.SetReadOnly().SetUseTrashBin().SetBrowseLinks().SetDeleteReadOnly().SetDragAndDrop();
 	
 	browser.WhenAction = THISBACK(FileOpened);
 	browser.WhenSelected = THISBACK(FileSelected);
@@ -214,6 +227,7 @@ Functions4U_Demo::Functions4U_Demo() {
 
 	butDiff.WhenAction = THISBACK(OnDiff);	
 	butPatch.WhenAction = THISBACK(OnPatch);
+	butShowEquation.WhenAction = THISBACK(OnSet);
 }
 
 void Functions4U_Demo::OnDiff() {
@@ -226,15 +240,59 @@ void Functions4U_Demo::OnPatch() {
 		Exclamation(DeQtf(BsGetLastError()));
 }
 
+void Functions4U_Demo::OnSet() {
+	String myqtf;
+
+	QtfRichObject a = QtfEquation(~strEquation);
 	
-DrawingCanvas_Demo::DrawingCanvas_Demo() {
+	myqtf << a;
+
+	userEquation.SetData(myqtf);	
+}
+
+PainterCanvas_Demo::PainterCanvas_Demo() {
 	CtrlLayout(*this);
 
 	//imgCtrl.SetImage(Images::ClockImage());
-	LoadSvg(drawingCanvas, AppendFileName(GetDesktopFolder(), "svg/demo.svg"));
+	//LoadSvg(drawingCanvas, AppendFileName(GetDesktopFolder(), "svg/demo.svg"));
 	
-	LineElem &elem = static_cast<LineElem&>(drawingCanvas.elemList.elems.Add(new LineElem(100, 100, 200, 200)));
+	LineElem &elem = static_cast<LineElem&>(painterCanvas.elemList.elems.Add(new LineElem(100, 100, 200, 200)));
 	elem.style.SetStrokeColor(Green()).SetStrokeWidth(3);
 }
 
+StaticImageSet_Demo::StaticImageSet_Demo() {
+	CtrlLayout(*this);
+
+	imageSet.Add(Images::cream2());
+	imageSet.Add(Images::paper());
+	imageSet.Add(Images::ClockImage());
+}
+
+SplitterButton_Demo::SplitterButton_Demo() {
+	Add(splitterH.SizePos());
+	
+	splitterV.Vert(top.SizePos(), bottom.SizePos()).SetPositions(1000, 5000, 9000).SetInitialPositionId(1);
+	splitterH.Horz(left.SizePos(), splitterV.SizePos()).SetPositions(1000, 5000, 9000).SetInitialPositionId(1);
+	
+	top.AddColumn("Column");
+	bottom.AddColumn("Column");
+	left.AddColumn("Column");
+	for (int i = 0; i < 200; ++i) {
+		String str = Format("Data %d", i);
+		top.Add(str);
+		bottom.Add(str);
+		left.Add(str);
+	}
+}
+
+
+void Controls4U_Demo::OnGridSel() {
+	int row = grid.GetCursor();
+	for (int i = 0; i < controls.GetCount(); ++i) {
+		if (i == row)
+			controls[i]->Show();
+		else 
+			controls[i]->Hide();
+	}
+}
 

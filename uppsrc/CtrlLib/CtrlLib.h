@@ -7,7 +7,9 @@
 #undef Status 
 #endif
 
-NAMESPACE_UPP
+namespace Upp {
+
+INITIALIZE(CtrlLib);
 
 #define IMAGECLASS CtrlImg
 #define IMAGEFILE <CtrlLib/Ctrl.iml>
@@ -24,6 +26,7 @@ NAMESPACE_UPP
 class Bar;
 
 #include <CtrlLib/LabelBase.h>
+#include <CtrlLib/DisplayPopup.h>
 #include <CtrlLib/StaticCtrl.h>
 #include <CtrlLib/PushCtrl.h>
 #include <CtrlLib/MultiButton.h>
@@ -44,6 +47,7 @@ class Bar;
 #include <CtrlLib/SliderCtrl.h>
 #include <CtrlLib/ColumnList.h>
 #include <CtrlLib/DateTimeCtrl.h>
+#include <CtrlLib/SuggestCtrl.h>
 
 #define  LAYOUTFILE <CtrlLib/Ctrl.lay>
 #include <CtrlCore/lay.h>
@@ -55,6 +59,6 @@ class Bar;
 
 #include <CtrlLib/Ch.h>
 
-END_UPP_NAMESPACE
+}
 
 #endif

@@ -1,6 +1,6 @@
 #include "Geom.h"
 
-NAMESPACE_UPP
+namespace Upp {
 
 double Distance(Pointf X, Pointf A, Pointf B, double *arg)
 {
@@ -99,7 +99,7 @@ bool Crosses(const Rectf& R, Pointf A, Pointf B)
 		{ 9, 2, 1, 2, 1, 9 },
 	};
 
-	ax = clue2[ay][ax];
+	ax = clue2[(int)ay][(int)ax];
 
 	double temp;
 	switch(ax >> 1)
@@ -373,7 +373,6 @@ private:
 template <class C, class VP>
 Vector<int> ConvexHullGenerator<C, VP>::Generate()
 {
-	RTIMING("ConvexHullGenerator::Generate");
 	for(int i = 0; i < points.GetCount(); i++)
 		if(!IsNull(points[i]))
 			upper.Add(i);
@@ -416,7 +415,6 @@ bool ConvexHullGenerator<C, VP>::operator () (int i, int j) const
 template <class C, class VP>
 void ConvexHullGenerator<C, VP>::Recurse(int ib, int ie, int &ue, int& le)
 {
-	RTIMING("ConvexHullGenerator::Recurse");
 	if(ie - ib <= 2) {
 		ue = le = ie;
 		return;
@@ -432,7 +430,6 @@ void ConvexHullGenerator<C, VP>::Recurse(int ib, int ie, int &ue, int& le)
 template <class C, class VP>
 int ConvexHullGenerator<C, VP>::Stitch(int lb, int le, int rb, int re, bool is_lower)
 {
-	RTIMING("ConvexHullGenerator::Stitch");
 	Vector<int>& index = (is_lower ? lower : upper);
 	for(;;) {
 		const P& l1 = points[index[le - 1]];
@@ -479,7 +476,7 @@ Vector<int> ConvexHullOrder(const Array<Pointf>& points)
 // VecArcIterator::
 
 VecArcIterator::VecArcIterator(Pointf start, Pointf end, double bulge, Callback1<Pointf> lineto)
-	: clip(Null), arc(start, end, bulge), lineto(lineto)
+	: arc(start, end, bulge), clip(Null), lineto(lineto)
 {
 	level = DEFAULT_LEVEL;
 	precision = 1; // default precision
@@ -488,7 +485,7 @@ VecArcIterator::VecArcIterator(Pointf start, Pointf end, double bulge, Callback1
 //////////////////////////////////////////////////////////////////////
 
 VecArcIterator::VecArcIterator(const VecArc& arc, Callback1<Pointf> lineto)
-	: clip(Null), arc(arc), lineto(lineto)
+	: arc(arc), clip(Null), lineto(lineto)
 {
 	level = DEFAULT_LEVEL;
 	precision = 1; // default precision
@@ -887,8 +884,8 @@ Pointf VecArc::GetPointAt(Pointf P, Pointf Q, double l, double h, double t)
 	double beta = 2 * atan(lambda);
 	t = sin((2 * t - 1) * beta) / sin(beta);
 	C += (Q - P) * (t / 2);
-	double k2 = k * k;
-	double k4 = k2 * k2;
+//	double k2 = k * k;
+//	double k4 = k2 * k2;
 	double l2 = lambda * lambda;
 	double opl = 1 + l2;
 	t *= t;
@@ -1018,10 +1015,10 @@ VecArc VecCurve::Segment(int i) const
 
 VecArcInfo::VecArcInfo()
 	: C(Null)
-	, radius(Null)
+	, bow(Null)
 	, alpha(Null)
 	, beta(Null)
-	, bow(Null)
+	, radius(Null)
 {
 }
 
@@ -1804,4 +1801,4 @@ bool VecIntersection::AA(const VecArcInfo &a1, const VecArcInfo &a2)
 
 //////////////////////////////////////////////////////////////////////
 
-END_UPP_NAMESPACE
+}

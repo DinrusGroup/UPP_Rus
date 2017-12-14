@@ -4,8 +4,10 @@ bool IsCb(String t) {
 	int q = t.Find('<');
 	if(q >= 0)
 		t.Trim(q);
-	return  t == "Callback" || t == "Callback1" || t == "Callback2" || t == "Callback3" ||
-	        t == "Gate" || t == "Gate1" || t == "Gate2";
+	if(t.StartsWith("Upp::"))
+		t = t.Mid(5);
+	return  t == "Event<> " || t == "Event<" || t == "Event<> 2" || t == "Event<> 3" ||
+	        t == "Gate" || t == "Gate1" || t == "Gate";
 }
 
 struct ThisbacksDlg : WithThisbacksLayout<TopWindow> {
@@ -40,11 +42,11 @@ void ThisbacksDlg::CbEdit(One<Ctrl>& ctrl)
 ThisbacksDlg::ThisbacksDlg(const String& scope)
 {
 	CtrlLayoutOKCancel(*this, "THISBACKs");
-	list.AddColumn("Определено в");
-	list.AddColumn("Тип");
-	list.AddColumn("ОбрВызов");
-	list.AddColumn("Вставка").Ctrls<Option>();
-	list.AddColumn("Имя метода").Ctrls(THISBACK(CbEdit));
+	list.AddColumn("Defined in");
+	list.AddColumn("Type");
+	list.AddColumn("Event<> ");
+	list.AddColumn("Insert").Ctrls<Option>();
+	list.AddColumn("Method name").Ctrls(THISBACK(CbEdit));
 	list.SetLineCy(EditField::GetStdHeight());
 	list.ColumnWidths("110 245 157 41 129");
 	list.EvenRowColor();
@@ -54,8 +56,8 @@ ThisbacksDlg::ThisbacksDlg(const String& scope)
 	if(q < 0)
 		return;
 	const Array<CppItem>& n = CodeBase()[q];
-	for(int i = 0; i < n.GetCount(); i = FindNext(n, i))
-		nname.Add(n[i].name);
+	for(int i = 0; i < n.GetCount(); i++)
+		nname.FindAdd(n[i].name);
 	Index<String> done;
 	GatherCallbacks("", done, scope, PRIVATE);
 }

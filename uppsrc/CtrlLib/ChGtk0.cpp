@@ -1,19 +1,19 @@
 #include "CtrlLib.h"
 
-#ifdef GUI_X11
+#ifdef PLATFORM_X11
 #ifdef flagNOGTK
 
-NAMESPACE_UPP
+namespace Upp {
 
 void ChHostSkin() {}
 
-END_UPP_NAMESPACE
+}
 
 #else
 
 #include "ChGtk.h"
 
-NAMESPACE_UPP
+namespace Upp {
 
 #if defined(_DEBUG)// && 0
 #include <plugin/png/png.h>
@@ -70,11 +70,15 @@ void SetChGtkSpy_(void (*spy)(const char *name, int state, int shadow, const cha
 	chgtkspy__ = spy;
 }
 
-Image GetGTK(GtkWidget *widget, int state, int shadow, const char *detail, int type, int cx, int cy,
-             Rect rect)
+INITBLOCK { // This is required to avoid animation related problems with Oxygen-GTK theme
+	setenv("OXYGEN_APPLICATION_NAME_OVERRIDE", "firefox", 1);
+}
+
+Image GetGTK0(GtkWidget *widget, int state, int shadow, const char *detail, int type, int cx, int cy, Rect rect)
 {
 	MemoryIgnoreLeaksBlock __;
-	GdkPixbuf *icon;
+	GdkPixbuf *icon = NULL;
+
 	if(type == GTK_ICON || type == GTK_THEMEICON) {
 		gtk_widget_set_sensitive(widget, 1);
 		gtk_widget_set_state(widget, GTK_STATE_NORMAL);
@@ -91,6 +95,7 @@ Image GetGTK(GtkWidget *widget, int state, int shadow, const char *detail, int t
 		gtk_widget_set_sensitive(widget, state != 4);
 		gtk_widget_set_state(widget, (GtkStateType)state);
 	}
+
 	int ht = type & 0xf000;
 	int rcx, rcy;
 	int margin = (type >> 4) & 7;
@@ -139,12 +144,21 @@ Image GetGTK(GtkWidget *widget, int state, int shadow, const char *detail, int t
 	Image m[2];
 	Color back = White;
 	for(int i = 0; i < 2; i++) {
-		ImageDraw iw(cx + 2 * margin, cy + 2 * margin);
+		Size isz(cx + 2 * margin, cy + 2 * margin);
+		ImageDraw iw(isz);
+#ifdef GUI_GTK
+		GdkPixmap *pixmap = gdk_pixmap_new(gdk_get_default_root_window(), isz.cx, isz.cy, -1);
+		cairo_t *cairo = gdk_cairo_create(pixmap);
+		SystemDraw sw(cairo, NULL);
+		sw.DrawRect(isz, back);
+		cairo_destroy(cairo);
+#else
 		iw.DrawRect(0, 0, cx + 2 * margin, cy + 2 * margin, back);
 		static GdkColormap *cm = gdk_x11_colormap_foreign_new(
 			                        gdkx_visual_get(XVisualIDFromVisual(Xvisual)), Xcolormap);
 		GdkPixmap *pixmap = gdk_pixmap_foreign_new(iw.GetDrawable());
 		gdk_drawable_set_colormap(pixmap, cm);
+#endif
 		GdkRectangle cr;
 		cr.x = 0;
 		cr.y = 0;
@@ -208,17 +222,41 @@ Image GetGTK(GtkWidget *widget, int state, int shadow, const char *detail, int t
 			                rect.left + margin, rect.top + margin, rcx, rcy);
 			break;
 		}
-		g_object_unref(pixmap);
+#ifdef GUI_GTK
+		gdk_cairo_set_source_pixmap(iw, pixmap, 0, 0);
+		cairo_paint(iw);
+#endif
 		m[i] = Crop(iw, crop);
+		g_object_unref(pixmap);
 		back = Black;
 	}
 	if(type == GTK_ICON)
 		g_object_unref(icon);
 	sLastImage = RecreateAlpha(m[0], m[1]);
+	if(type & GTK_CROPM) {
+		Rect m = GetImageMargins(sLastImage, RGBAZero());
+		int cm = min(m.left, m.right, m.top, m.bottom);
+		Size isz = sLastImage.GetSize();
+		if(cm > 0 && cm < isz.cx && cm < isz.cy)
+			sLastImage = Crop(sLastImage, Rect(cm, cm, isz.cx - cm, isz.cy - cm));
+	}
+
 	if(chgtkspy__)
 		chgtkspy__(G_OBJECT_TYPE_NAME(widget), state, shadow, detail, type, cx, cy, sLastImage);
 	return sLastImage;
 }
+
+Image GetGTK(GtkWidget *widget, int state, int shadow, const char *detail, int type, int cx, int cy, Rect rect)
+{
+	if(type & GTK_TRYBIGGER) {
+		Image m1 = GetGTK0(widget, state, shadow, detail, type|GTK_CROPM, cx + DPI(20), cy + DPI(20), rect);
+		Image m2 = GetGTK0(widget, state, shadow, detail, type|GTK_CROPM, cx + DPI(24), cy + DPI(24), rect);
+		if(m1 == m2)
+			return m1;
+	}
+	return GetGTK0(widget, state, shadow, detail, type, cx, cy, rect);
+}
+
 
 Vector<ChGtkI>& ChGtkIs()
 {
@@ -285,8 +323,9 @@ struct GtkImageMaker : ImageMaker {
 	}
 };
 
-Value GtkLookFn(Draw& w, const Rect& rect, const Value& v, int op)
+Value GtkLookFn(Draw& w, const Rect& rect_, const Value& v, int op)
 {
+	Rect rect = rect_;
 	if(IsTypeRaw<GtkElement>(v)) {
 		const GtkElement& e = ValueTo<GtkElement>(v);
 		ChGtkI& eg = ChGtkIs()[e.gtki];
@@ -297,6 +336,8 @@ Value GtkLookFn(Draw& w, const Rect& rect, const Value& v, int op)
 			return false;
 		}
 		if(op == LOOK_PAINT || op == LOOK_PAINTEDGE) {
+			if(eg.type & GTK_INFLATE2)
+				rect.Inflate(DPI(2));
 			Rect r = rect.Inflated(eg.type & GTK_XMARGIN ? 0 : (eg.type >> 4) & 7);
 			r.Deflate((eg.type >> 16) & 15);
 			if(r.IsEmpty()) return 1;
@@ -412,18 +453,22 @@ int  GtkInt(const char *id)
 }
 
 void GtkIml(int uii, GtkWidget *w, int shadow, int state, const char *detail, int type, int cx, int cy,
-            const Rect& rect)
+            const Rect& rect, int maxcx, int maxcy)
 {
-	CtrlsImg::Set(uii, GetGTK(w, state, shadow, detail, type, cx, cy, rect));
+	Image m = GetGTK(w, state, shadow, detail, type, cx, cy, rect);
+	Size isz = m.GetSize();
+	if(isz.cx > maxcx || isz.cy > maxcy)
+		m = Rescale(m, maxcx, maxcy);
+	CtrlsImg::Set(uii, m);
 }
 
 void GtkIml(int uii, GtkWidget *w, int shadow, const char *detail, int type, int cx, int cy,
-            const Rect& rect)
+            const Rect& rect, int maxcx, int maxcy)
 {
-	GtkIml(uii + 0, w, shadow, 0, detail, type, cx, cy, rect);
-	GtkIml(uii + 1, w, shadow, 2, detail, type, cx, cy, rect);
-	GtkIml(uii + 2, w, shadow, 1, detail, type, cx, cy, rect);
-	GtkIml(uii + 3, w, shadow, 4, detail, type, cx, cy, rect);
+	GtkIml(uii + 0, w, shadow, 0, detail, type, cx, cy, rect, maxcx, maxcy);
+	GtkIml(uii + 1, w, shadow, 2, detail, type, cx, cy, rect, maxcx, maxcy);
+	GtkIml(uii + 2, w, shadow, 1, detail, type, cx, cy, rect, maxcx, maxcy);
+	GtkIml(uii + 3, w, shadow, 4, detail, type, cx, cy, rect, maxcx, maxcy);
 }
 
 Color ChGtkColor(int ii, GtkWidget *widget)
@@ -603,7 +648,7 @@ void GtkChScrollBar(Value *lbutton, Value *lbutton2,
 */
 }
 
-END_UPP_NAMESPACE
+}
 
 #endif
 #endif

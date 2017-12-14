@@ -1,13 +1,21 @@
+//$ namespace Upp {
 //$ class Ctrl {
 private:
 	bool         activex:1;
 	bool         isdhctrl:1;
 
+#if WINCARET
 	static void WndDestroyCaret();
-	void WndCreateCaret0(const Rect& cr);
 	void WndCreateCaret(const Rect& cr);
+#else
+	static int                 WndCaretTime;
+	static bool                WndCaretVisible;
+	static void AnimateCaret();
+#endif
 
 	static  bool GetMsg(MSG& msg);
+
+	static  bool DumpMessage(Ctrl *w, UINT message, WPARAM wParam, LPARAM lParam);
 
 	static LRESULT CALLBACK UtilityProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam);
 	static void RenderFormat(int format);
@@ -15,10 +23,10 @@ private:
 	static void DestroyClipboard();
 
 public:
-	static Event     ExitLoopEvent;
-	static bool      endsession;
-	static void      EndSession();
-	static HINSTANCE hInstance;
+	static Win32Event ExitLoopEvent;
+	static bool       endsession;
+	static void       EndSession();
+	static HINSTANCE  hInstance;
 
 protected:
 	static HCURSOR   hCursor;
@@ -26,9 +34,9 @@ protected:
 	static VectorMap< HWND, Ptr<Ctrl> >& Windows();
 	static LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam);
 
-	static Event  OverwatchEndSession;
-	static HWND   OverwatchHWND;
-	static HANDLE OverwatchThread;
+	static Win32Event OverwatchEndSession;
+	static HWND       OverwatchHWND;
+	static HANDLE     OverwatchThread;
 
 	static LRESULT CALLBACK OverwatchWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam);
 	static DWORD WINAPI Win32OverwatchThread(LPVOID);
@@ -40,7 +48,7 @@ protected:
 	Image DoMouse(int e, Point p, int zd = 0);
 	static void sProcessMSG(MSG& msg);
 
-	static  Vector<Callback> hotkey;
+	static  Vector<Event<> > hotkey;
 
 	friend void sSetCursor(Ctrl *ctrl, const Image& m);
 	
@@ -49,6 +57,7 @@ public:
 	virtual void    NcDestroy();
 	virtual void    PreDestroy();
 	virtual LRESULT WindowProc(UINT message, WPARAM wParam, LPARAM lParam);
+	virtual bool    PreprocessMessage(MSG& msg);
 
 	HWND  GetHWND() const              { return parent ? NULL : top ? top->hwnd : NULL; }
 	HWND  GetOwnerHWND() const;
@@ -65,4 +74,5 @@ public:
 	static void InitWin32(HINSTANCE hinst);
 	static void ExitWin32();
 	static void GuiFlush()                              { ::GdiFlush(); }
+//$ };
 //$ };

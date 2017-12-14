@@ -2,7 +2,7 @@
 
 #ifdef GUI_X11
 
-NAMESPACE_UPP
+namespace Upp {
 
 #define LLOG(x)  // LOG(x)
 
@@ -219,6 +219,8 @@ bool Ctrl::ClipHas(int type, const char *fmt)
 {
 	GuiLock __; 
 	LLOG("ClipHas " << type << ": " << fmt);
+	if(strcmp(fmt, "files") == 0)
+		fmt = "text/uri-list";
 	if(type == 0)
 		return Ctrl::xclipboard().IsAvailable(XAtom(fmt), "CLIPBOARD");
 	if(type == 2) {
@@ -235,6 +237,8 @@ String Ctrl::ClipGet(int type, const char *fmt)
 {
 	GuiLock __; 
 	LLOG("ClipGet " << type << ": " << fmt);
+	if(strcmp(fmt, "files") == 0)
+		fmt = "text/uri-list";
 	if(type && GetDragAndDropSource())
 		return DnDGetData(fmt);
 	return Ctrl::xclipboard().Read(
@@ -353,17 +357,35 @@ int JustLf(int c)
 	return (byte)c >= 32 || c == '\n' ? c : 0;
 }
 
+Vector<String> GetClipFiles(const String& data)
+{
+	Vector<String> r;
+	Vector<String> f = Split(Filter(data, JustLf), '\n');
+	for(int i = 0; i < f.GetCount(); i++)
+		if(f[i].StartsWith("file://"))
+			r.Add(UrlDecode(f[i].Mid(7)));
+	return r;
+}
+
 Vector<String> GetFiles(PasteClip& clip) {
-	GuiLock __; 
+	GuiLock __;
 	Vector<String> r;
 	if(clip.Accept("text/uri-list")) {
 		String txt = clip;
-		Vector<String> f = Split(Filter(txt, JustLf), '\n');
-		for(int i = 0; i < f.GetCount(); i++)
-			if(f[i].StartsWith("file://"))
-				r.Add(f[i].Mid(7));
+		r = GetClipFiles(txt);
 	}
 	return r;
+}
+
+void AppendFiles(VectorMap<String, ClipData>& data, const Vector<String>& files)
+{
+	GuiLock __;
+	if(files.GetCount() == 0)
+		return;
+	String h;
+	for(int i = 0; i < files.GetCount(); i++)
+		h << "file://" << UrlEncode(files[i]) << '\n';
+	data.GetAdd("text/uri-list") = h;
 }
 
 bool PasteClip::IsAvailable(const char *fmt) const
@@ -381,6 +403,6 @@ void PasteClip::GuiPlatformConstruct()
 	type = 0;
 }
 
-END_UPP_NAMESPACE
+}
 
 #endif

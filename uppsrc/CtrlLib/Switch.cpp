@@ -1,6 +1,6 @@
 #include "CtrlLib.h"
 
-NAMESPACE_UPP
+namespace Upp {
 
 #define LDUMP(x) // DUMP(x)
 
@@ -158,12 +158,18 @@ void Switch::Paint(Draw& w) {
 	linecy = max(mincy, max(16, tcy + 2));
 	int y = 0;
 	int x = 0;
-	int ty = (linecy - tcy) / 2;
 	bool horz = linecy * cs.GetCount() > sz.cy;
-	if(horz)
+	
+	if (direction == 1) horz = true;
+	else if (direction == -1) horz = false;
+	
+	if(horz) {
 		posx.SetCount(cs.GetCount());
+		linecy = sz.cy;
+	}
 	else
 		posx.Clear();
+	int ty = (linecy - tcy) / 2;
 	bool ds = !IsShowEnabled();
 	int i;
 	light = -1;
@@ -306,6 +312,7 @@ void Switch::CancelMode() {
 }
 
 Switch::Switch() {
+	direction = 0;
 	linecy = 16;
 	mincy = 0;
 	Transparent();
@@ -315,4 +322,4 @@ Switch::Switch() {
 
 Switch::~Switch() {}
 
-END_UPP_NAMESPACE
+}

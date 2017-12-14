@@ -1,7 +1,6 @@
 #include "GeomCtrl.h"
-#pragma hdrstop
 
-NAMESPACE_UPP
+namespace Upp {
 
 #define LAYOUTFILE <Geom/Ctrl/pathedit.lay>
 #include           <CtrlCore/lay.h>
@@ -425,8 +424,8 @@ void PathEditorCtrl::Layout()
 void PathEditorCtrl::UpdateScroll()
 {
 	Size size = GetSize();
-	double pwd = hruler.GetLength() * hruler.GetScale(G + 2 * GAP + HGAP;
-	double pht - vruler.GetLength() * vruler.GetScale() + 2 * GAP;
+	double pwd = hruler.GetLength() * hruler.GetScale() + 2 * GAP + HGAP;
+	double pht = vruler.GetLength() * vruler.GetScale() + 2 * GAP;
 	hruler.SetZoom(hruler.GetScale(), pwd <= size.cx ? GAP : minmax(hruler.GetDelta(), size.cx - double(GAP) - pwd, double(GAP)));
 	double t = style->width / 2 * vruler.GetScale();
 	vruler.SetZoom(vruler.GetScale(), pht <= size.cy ? pht / 2 : minmax(vruler.GetDelta(), size.cy - double(GAP) - t, double(GAP) + t));
@@ -537,7 +536,7 @@ void PathEditorCtrl::Paint(Draw& draw)
 		}
 		else
 		{
-			area.Set(plotter, Nvl(trace.color, Black), INT64(0xaa55aa55aa55aa55), Null, outline, 3);
+			area.Set(plotter, Nvl(trace.color, Black), I64(0xaa55aa55aa55aa55), Null, outline, 3);
 			if(area.SetExtent(trace.GetExtent()))
 				trace.Paint(area, false, outline);
 		}
@@ -1630,7 +1629,6 @@ DlgPathEditor::DlgPathEditor()
 	menu_bar.Set(THISBACK(ToolRoot));
 	tool_bar.Set(THISBACK(ToolRoot));
 	dialog << path.SizePos();
-//	dialog.SetRect(CalcWindowRect(dialog, Ctrl::GetWorkStock.GetScreenSize() >> 1));
 	dialog.Sizeable().Zoomable();
 	dialog.SetMinSize(Size(300, 200));
 	path.WhenRescan = THISBACK(Rescan);
@@ -2235,7 +2233,7 @@ private:
 bool RunDlgPathStyleMap(PathStyleMap& map, String& style, bool editor, bool read_only)
 { return DlgPathStyleMap().Run(map, style, editor, read_only); }
 
-RegisterHelpTopicObjectTitle(DlgPathStyleMap, "MapStyle")
+RegisterHelpTopicObjectTitle(DlgPathStyleMap, "Mapa stylù")
 
 DlgPathStyleMap::DlgPathStyleMap()
 {
@@ -2253,7 +2251,7 @@ bool DlgPathStyleMap::Run(PathStyleMap& m, String& style, bool editor, bool read
 {
 	if(editor) {
 		dialog.ok.Hide();
-		dialog.cancel.SetLabel(t_("Çàêðûòü"));
+		dialog.cancel.SetLabel(t_("Close"));
 	}
 
 	map = &m;
@@ -2316,4 +2314,4 @@ void PathStyleCtrl::DoAction()
 		SetDataAction(s);
 }
 
-END_UPP_NAMESPACE
+}

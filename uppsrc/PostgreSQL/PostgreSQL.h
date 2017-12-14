@@ -10,19 +10,23 @@
 #include <postgresql/libpq-fe.h>
 #endif
 
-NAMESPACE_UPP
+// debian: sudo apt-get install libpq-dev
+
+namespace Upp {
 
 // Postgre -> Value types
 // Bytea_v values are stored as bytea data, but recived as string type
 const char *PostgreSQLReadString(const char *s, String& stmt);
 
+
+// Deprecated, use SqlPerformScript instead
 bool PostgreSQLPerformScript(const String& text,
 #ifdef NOAPPSQL
 	StatementExecutor& se,
 #else
 	StatementExecutor& se = SQLStatementExecutor(),
 #endif
-	Gate2<int, int> progress_canceled = false
+	Gate<int, int> progress_canceled = Null
 );
 
 
@@ -54,6 +58,9 @@ private:
 	
 	String                conns;
 	bool                  keepalive;
+	bool                  hex_blobs;
+	
+	VectorMap<String, String> pkache;
 
 	void                  ExecTrans(const char * statement);
 	Vector<String>        EnumData(char type, const char *schema = NULL);
@@ -88,7 +95,7 @@ public:
 	virtual void          Rollback();
 	virtual int           GetTransactionLevel() const;
 
-	PostgreSQLSession()                                   { conn = NULL; Dialect(PGSQL); level = 0; keepalive = false; }
+	PostgreSQLSession()                                   { conn = NULL; Dialect(PGSQL); level = 0; keepalive = hex_blobs = false; }
 	~PostgreSQLSession()                                  { Close(); }
 	PGconn * GetPGConn()                                  { return conn; }
 };
@@ -115,7 +122,7 @@ public:
 	PgSequence() : seq(ssq)                                             { session = NULL; }
 };
 
-END_UPP_NAMESPACE
+}
 
 #endif
 

@@ -3,7 +3,9 @@
 
 #include <Draw/Draw.h>
 
-NAMESPACE_UPP
+namespace Upp {
+	
+INITIALIZE(PNGRaster);
 
 class PNGRaster : public StreamRaster {
 	class Data;
@@ -45,6 +47,6 @@ private:
 	bool         interlace;
 };
 
-END_UPP_NAMESPACE
+}
 
 #endif

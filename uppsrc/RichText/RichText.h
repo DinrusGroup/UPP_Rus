@@ -4,12 +4,20 @@
 #include <Draw/Draw.h>
 #include <plugin/png/png.h>
 
-NAMESPACE_UPP
+namespace Upp {
+
+#define IMAGECLASS RichTextImg
+#define IMAGEFILE <RichText/RichText.iml>
+#include <Draw/iml_header.h>
+
+INITIALIZE(RichImage);
 
 class  PasteClip;
 struct RichPara;
 class  RichTable;
 class  RichTxt;
+
+inline Color VoidColor() { return Color(223, 0); } // Used for mixed/no change in Get/SetCellFormat
 
 struct Zoom {
 	int m, d;
@@ -174,6 +182,7 @@ class RichObject : Moveable<RichObject> {
 	static VectorMap<String, RichObjectType *>& Map();
 
 	void                  NewSerial();
+	void                  AdjustPhysicalSize();
 
 public:
 	static void   Register(const char *name, RichObjectType *type) init_;
@@ -240,14 +249,14 @@ enum {
 	RICHHOT_RM = -2,
 };
 
-struct RichHotPos {
+struct RichHotPos { // used for resizing table dimensions by mouse
 	int table;
-	int column;
+	int column; // can be RICHHOT_LM or RICHHOT_RM or columns index
 	int delta;
 	int left, cx;
 	int textleft, textcx;
 
-	RichHotPos()       { table = 0; column = Null; }
+	RichHotPos()       { table = 0; column = Null; left = cx = 0; }
 };
 
 struct RichValPos : Moveable<RichValPos> {
@@ -265,6 +274,8 @@ struct PaintInfo {
 	PageY   bottom;
 	Color   hyperlink;
 	Color   indexentry;
+	Color   textcolor; // not Null overrides text color, makes paper transparent, useful for QTFDisplay
+	bool    indexentrybg;
 	bool    usecache;
 	bool    sizetracking;
 	Color   showcodes;
@@ -272,7 +283,7 @@ struct PaintInfo {
 	int     highlightpara;
 	Color   highlight;
 	bool    coloroverride;
-	void    *context;
+	void   *context;
 	bool    showlabels;
 	bool    shrink_oversized_objects;
 
@@ -282,6 +293,28 @@ struct PaintInfo {
 int LineZoom(Zoom z, int a);
 
 class RichTable;
+class RichText;
+struct RichStyle;
+
+typedef ArrayMap<Uuid, RichStyle> RichStyles;
+
+struct RichContext {
+	const RichText   *text;
+	const RichStyles *styles;
+	RichText         *header, *footer;
+	int               header_cy, footer_cy; // next page header/footer size
+	int               current_header_cy, current_footer_cy; // current header/footer size
+	Rect              page;
+	PageY             py;
+
+	void              HeaderFooter(RichText *header, RichText *footer_qtf);
+	void              AdjustPage();
+	void              Page();
+	void              Set(PageY p0, const Rect& first_page, const Rect& next_page, PageY p);
+
+	RichContext(const RichStyles& styles, const RichText *text);
+	RichContext() {}
+};
 
 #include "Para.h"
 
@@ -291,7 +324,7 @@ struct RichPos {
 	int              tabposintabtext;
 	int              tabtextlen;
 
-	int              table;
+	int              table; // current level table index (unique in text) or zero if not in table
 	Size             tabsize;
 	Point            cell;
 
@@ -351,22 +384,23 @@ struct RichStyle {
 	RichStyle()          { next = GetDefaultId(); }
 };
 
-typedef ArrayMap<Uuid, RichStyle> RichStyles;
-
 const RichStyle& GetStyle(const RichStyles& s, const Uuid& id);
 int   FindStyleWithName(const RichStyles& style, const String& name);
 
-struct RichContext {
-	const RichStyles& styles;
-	Rect              page;
-	PageY             py;
-
-	void              Page() { py.page++; py.y = page.top; }
-
-	RichContext(const RichStyles& styles) : styles(styles) {}
-};
+class RichText;
 
 struct RichCellPos;
+
+enum {
+	QTF_BODY = 1,
+	QTF_ALL_STYLES = 2,
+	QTF_NOSTYLES = 4,
+	QTF_CRLF = 8,
+	QTF_NOCHARSET = 16,
+	QTF_NOLANG = 32,
+	
+	QTF_ALL = 0xffffffff
+};
 
 #include "Txt.h"
 #include "Table.h"
@@ -409,19 +443,11 @@ public:
 RichText AsRichText(const RichObject& obj);
 String   AsQTF(const RichObject& obj);
 
+bool ParseQTF(RichText& txt, const char *qtf, int accesskey = 0, void *context = NULL);
+
 RichText ParseQTF(const char *qtf, int accesskey = 0, void *context = NULL);
 
 RichText AsRichText(const wchar *s, const RichPara::Format& f = RichPara::Format());
-
-enum
-{
-	QTF_BODY = 1,
-	QTF_ALL_STYLES = 2,
-	QTF_NOSTYLES = 4,
-	QTF_CRLF = 8,
-	QTF_NOCHARSET = 16,
-	QTF_NOLANG = 32,
-};
 
 String   AsQTF(const RichText& doc, byte charset = CHARSET_UTF8,
                dword options = QTF_BODY|QTF_ALL_STYLES|QTF_CRLF);
@@ -431,6 +457,11 @@ inline String StylesAsQTF(const RichText& doc, byte charset = CHARSET_UTF8)
 
 inline String BodyAsQTF(const RichText& doc, byte charset = CHARSET_UTF8)
 { return AsQTF(doc, charset, QTF_BODY|QTF_CRLF); }
+
+
+void SetQTF(One<RichText>& txt, const String& qtf);
+
+int GetRichTextScreenStdFontHeight();
 
 enum
 {
@@ -454,12 +485,25 @@ Zoom  GetRichTextStdScreenZoom();
 const Display& QTFDisplay();
 const Display& QTFDisplayVCenter();
 
+class HtmlObjectSaver
+{
+public:
+	virtual ~HtmlObjectSaver() {}
+	
+	virtual String GetHtml(const RichObject& object) = 0;
+};
+
 String EncodeHtml(const RichText& text, Index<String>& css,
                   const VectorMap<String, String>& links,
                   const VectorMap<String, String>& labels,
                   const String& path, const String& base = Null, Zoom z = Zoom(8, 40),
                   const VectorMap<String, String>& escape = VectorMap<String, String>(),
                   int imtolerance = 0);
+String EncodeHtml(const RichText& text, Index<String>& css,
+                  const VectorMap<String, String>& links,
+                  const VectorMap<String, String>& labels,
+                  HtmlObjectSaver& object_saver, Zoom z = Zoom(8, 40),
+                  const VectorMap<String, String>& escape = VectorMap<String, String>());
 String AsCss(Index<String>& ss);
 
 inline //BW - no labels
@@ -490,6 +534,12 @@ struct PrintPageDraw : PageDraw {
 	virtual ~PrintPageDraw() {}
 };
 
-END_UPP_NAMESPACE
+Array<Drawing> RenderPages(const RichText& txt, Size pagesize = Size(3968, 6074));
+
+String Pdf(const RichText& txt, Size pagesize = Size(3968, 6074), int margin = 200,
+           bool pdfa = false, const PdfSignatureInfo *sign = NULL);
+
+
+}
 
 #endif

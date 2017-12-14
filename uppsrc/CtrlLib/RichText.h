@@ -10,7 +10,10 @@ public:
 	virtual void  LeftDown(Point p, dword keyflags);
 	virtual void  MouseMove(Point p, dword keyflags);
 	virtual void  LeftRepeat(Point p, dword keyflags);
+	virtual void  LeftDouble(Point p, dword keyflags);
+	virtual void  LeftTriple(Point p, dword keyflags);
 	virtual void  RightDown(Point p, dword keyflags);
+	virtual String GetSelectionData(const String& fmt) const;
 
 private:
 	Rect          margin;
@@ -33,10 +36,12 @@ private:
 	void          SetSb();
 	void          Scroll();
 	int           GetPageCx(bool reduced = false) const;
+	Point         GetTextPoint(Point p) const;
 	int           GetPointPos(Point p) const;
 	String        GetLink(int pos, Point p) const;
 	void          RefreshSel();
 	void          RefreshRange(int a, int b);
+	WString       GetSelText() const;
 
 protected:
 	enum {
@@ -45,21 +50,23 @@ protected:
 	};
 
 public:
-	Callback1<const String&> WhenLink;
-	Callback1<int>           WhenMouseMove;
+	Event<const String&> WhenLink;
+	Event<int>           WhenMouseMove;
 
 	void            Clear();
-	void            Pick(pick_ RichText& t);
-	void            Pick(pick_ RichText& txt, Zoom z);
+	void            Pick(RichText&& t);
+	void            Pick(RichText&& txt, Zoom z);
 	void            SetQTF(const char *qtf, Zoom z = Zoom(1, 1));
 	const RichText& Get() const                               { return text; }
 	String          GetQTF(byte cs = CHARSET_UTF8) const      { return AsQTF(text, cs); }
 
 	int             GetWidth() const                          { return text.GetWidth(); }
 	int             GetHeight(int cx) const                   { return text.GetHeight(Zoom(1, 1), cx); }
+	int             GetHeight() const                         { return GetHeight(GetSize().cx); }
 
 	int             GetSb() const                             { return sb; }
 	void            SetSb(int i)                              { sb = i; }
+	void            ScrollInto(int pos)                       { sb.ScrollInto(pos); }
 	int             GetSbTotal() const                        { return sb.GetTotal(); }
 	Zoom            GetZoom() const;
 	Rect            GetPage() const;
@@ -69,6 +76,7 @@ public:
 
 	int             GetLength() const                         { return text.GetLength(); }
 
+	bool            IsSelection() const                       { return anchor != cursor; }
 	void            Copy();
 
 	void            ScrollUp()                                { sb.PrevLine(); }
@@ -116,7 +124,14 @@ public:
 	RichTextCtrl();
 };
 
-int Prompt(Callback1<const String&> WhenLink,
+
+int Prompt(Event<const String&> WhenLink,
+           const char *title, const Image& iconbmp, const char *qtf, bool okcancel,
+           const char *button1, const char *button2, const char *button3,
+		   int cx,
+		   Image im1, Image im2, Image im3);
+
+int Prompt(Event<const String&> WhenLink,
            const char *title, const Image& icon, const char *qtf, bool okcancel,
            const char *button1, const char *button2 = NULL, const char *button3 = NULL,
 		   int cx = 0);
@@ -134,8 +149,17 @@ int  PromptYesNoCancel(const char *qtf);
 int  PromptRetryCancel(const char *qtf);
 int  PromptAbortRetry(const char *qtf);
 int  PromptAbortRetryIgnore(const char *qtf);
+int  PromptSaveDontSaveCancel(const char *qtf);
 
 void Exclamation(const char *qtf);
+
+void ErrorOK(const char *qtf);
+int  ErrorOKCancel(const char *qtf);
+int  ErrorYesNo(const char *qtf);
+int  ErrorYesNoCancel(const char *qtf);
+int  ErrorRetryCancel(const char *qtf);
+int  ErrorAbortRetry(const char *qtf);
+int  ErrorAbortRetryIgnore(const char *qtf);
 
 Image YesButtonImage();
 Image NoButtonImage();
@@ -146,6 +170,15 @@ void YesButtonImage_Write(Image m);
 void NoButtonImage_Write(Image m);
 void AbortButtonImage_Write(Image m);
 void RetryButtonImage_Write(Image m);
+
+
+typedef
+int (*RedirectPromptFn)(Event<const String&> WhenLink,
+                        const char *title, const Image& iconbmp, const char *qtf, bool okcancel,
+                        const char *button1, const char *button2, const char *button3,
+                        int cx, Image im1, Image im2, Image im3);
+
+void RedirectPrompts(RedirectPromptFn r);
 
 void ShowExc(const Exc& exc);
 

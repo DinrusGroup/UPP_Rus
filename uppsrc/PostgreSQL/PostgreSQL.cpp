@@ -12,7 +12,7 @@
 
 #ifndef flagNOPOSTGRESQL
 
-NAMESPACE_UPP
+namespace Upp {
 
 enum PGSQL_StandardOid {
 	PGSQL_BOOLOID = 16,
@@ -111,7 +111,7 @@ const char *PostgreSQLReadString(const char *s, String& stmt)
 		if(*s == '\0') break;
 		else
 		if(*s == '\'' && s[1] == '\'') {
-			stmt.Cat('\'');
+			stmt.Cat("\'\'");
 			s += 2;
 		}
 		else
@@ -132,7 +132,7 @@ const char *PostgreSQLReadString(const char *s, String& stmt)
 	return s;
 }
 
-bool PostgreSQLPerformScript(const String& txt, StatementExecutor& se, Gate2<int, int> progress_canceled)
+bool PostgreSQLPerformScript(const String& txt, StatementExecutor& se, Gate<int, int> progress_canceled)
 {
 	const char *text = txt;
 	for(;;) {
@@ -153,7 +153,7 @@ bool PostgreSQLPerformScript(const String& txt, StatementExecutor& se, Gate2<int
 			else
 				stmt.Cat(*text++);
 		}
-		if(progress_canceled(text - txt.Begin(), txt.GetLength()))
+		if(progress_canceled(int(text - txt.Begin()), txt.GetLength()))
 			return false;
 		if(!se.Execute(stmt))
 			return false;
@@ -193,10 +193,10 @@ Vector<String> PostgreSQLSession::EnumUsers()
 }
 
 Vector<String> PostgreSQLSession::EnumDatabases()
-{
+{// For now, we really enumerate namespaces rather than databases here
 	Vector<String> vec;
 	Sql sql(*this);
-	sql.Execute("select datname from pg_database");
+	sql.Execute("select nspname from pg_namespace where nspacl is not null");
 	while(sql.Fetch())
 		vec.Add(sql[0]);
 	return vec;
@@ -301,7 +301,7 @@ SqlConnection * PostgreSQLSession::CreateConnection()
 void PostgreSQLSession::ExecTrans(const char * statement)
 {
 	if(trace)
-		*trace << statement << "\n";
+		*trace << statement << UPP::EOL;
 	
 	int itry = 0;
 
@@ -349,7 +349,13 @@ bool PostgreSQLSession::Open(const char *connect)
 {
 	Close();
 	conns = connect;
-	conn = PQconnectdb(connect);
+
+	{
+		MemoryIgnoreLeaksBlock __;
+		// PGSQL, when sharing .dll SSL, does not free SSL data
+		conn = PQconnectdb(connect);
+	}
+
 	if(PQstatus(conn) != CONNECTION_OK)
 	{	
 		SetError(FromSystemCharset(PQerrorMessage(conn)), "Opening database");
@@ -371,7 +377,11 @@ bool PostgreSQLSession::Open(const char *connect)
 	DoKeepAlive();
 
 	LLOG( String("Postgresql client encoding: ") + pg_encoding_to_char( PQclientEncoding(conn) ) );
-	
+
+	Sql sql(*this);
+	if(sql.Execute("select setting from pg_settings where name = 'bytea_output'") && sql.Fetch() && sql[0] == "hex")
+		hex_blobs = true;
+
 	return true;
 }
 
@@ -397,11 +407,7 @@ void PostgreSQLSession::Close()
 {
 	if(!conn)
 		return;
-#ifndef flagNOAPPSQL
-	if(SQL.IsOpen() && &SQL.GetSession() == this)
-		SQL.Cancel();
-#endif
-
+	SessionClose();
 	PQfinish(conn);
 	conn = NULL;
 	level = 0;
@@ -441,8 +447,8 @@ void PostgreSQLConnection::SetParam(int i, const Value& r)
 			String raw = SqlRaw(r);
 			size_t rl;
 			unsigned char *s = PQescapeByteaConn(conn, (const byte *)~raw, raw.GetLength(), &rl);
-			p.Reserve(rl + 16);
-			p = "\'" + String(s, rl - 1) + "\'::bytea";
+			p.Reserve(int(rl + 16));
+			p = "\'" + String(s, int(rl - 1)) + "\'::bytea";
 			PQfreemem(s);
 			break;
 		}
@@ -454,7 +460,7 @@ void PostgreSQLConnection::SetParam(int i, const Value& r)
 				char *q = b;
 				*q = '\'';
 				int *err = NULL;
-				int n = PQescapeStringConn(conn, q + 1, v, v.GetLength(), err);
+				int n = (int)PQescapeStringConn(conn, q + 1, v, v.GetLength(), err);
 				q[1 + n] = '\'';
 				b.SetCount(2 + n);
 				p = b;
@@ -506,8 +512,13 @@ bool PostgreSQLConnection::Execute()
 		if(*s == '\'' || *s == '\"')
 			s = PostgreSQLReadString(s, query);
 		else {
-			if(*s == '?')
+			if(*s == '?') {
+				if(pi >= param.GetCount()) {
+					session.SetError("Invalid number of parameters", statement);
+					return false;
+				}
 				query.Cat(param[pi++]);
+			}
 			else
 				query.Cat(*s);
 			s++;
@@ -573,7 +584,24 @@ int PostgreSQLConnection::GetRowsProcessed() const
 
 Value PostgreSQLConnection::GetInsertedId() const
 {
-	Sql sql("select currval('" + last_insert_table + "_id_seq')", session);
+	String pk = session.pkache.Get(last_insert_table, Null);
+	if(IsNull(pk)) {
+		String sqlc_expr; 
+		sqlc_expr <<
+		"SELECT " <<
+		  "pg_attribute.attname " <<
+		"FROM pg_index, pg_class, pg_attribute " <<
+		"WHERE " <<
+		  "pg_class.oid = '" << last_insert_table << "'::regclass AND "
+		  "indrelid = pg_class.oid AND "
+		  "pg_attribute.attrelid = pg_class.oid AND "
+		  "pg_attribute.attnum = any(pg_index.indkey) "
+		  "AND indisprimary";
+		Sql sqlc(sqlc_expr, session);
+		pk = sqlc.Execute() && sqlc.Fetch() ? sqlc[0] : "ID";
+		session.pkache.Add(last_insert_table, pk);
+	}
+	Sql sql("select currval('" + last_insert_table + "_" + pk +"_seq')", session);
 	if(sql.Execute() && sql.Fetch())
 		return sql[0];
 	else
@@ -613,7 +641,7 @@ void PostgreSQLConnection::GetColumn(int i, Ref f) const
 			f.SetValue(atoi(s));
 			break;
 		case DOUBLE_V:
-			f.SetValue(atof(s));
+			f.SetValue(Atof(s));
 			break;
 		case BOOL_V:
 			f.SetValue(*s == 't' ? "1" : "0");
@@ -631,10 +659,14 @@ void PostgreSQLConnection::GetColumn(int i, Ref f) const
 			break;
 		default: {
 			if(oid[i] == PGSQL_BYTEAOID) {
-				size_t len;
-				unsigned char *q = PQunescapeBytea((const unsigned char *)s, &len);
-				f.SetValue(String(q, len));
-				PQfreemem(q);
+				if(session.hex_blobs)
+					f.SetValue(ScanHexString(s, (int)strlen(s)));
+				else {
+					size_t len;
+					unsigned char *q = PQunescapeBytea((const unsigned char *)s, &len);
+					f.SetValue(String(q, (int)len));
+					PQfreemem(q);
+				}
 			}
 			else
 				f.SetValue(FromCharset(String(s)));
@@ -693,6 +725,6 @@ Value PgSequence::Get()
 	return sql[0];
 }
 
-END_UPP_NAMESPACE
+}
 
 #endif

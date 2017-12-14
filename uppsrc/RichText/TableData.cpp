@@ -1,10 +1,10 @@
 #include "RichText.h"
 
-NAMESPACE_UPP
+namespace Upp {
 
 void RichTable::Invalidate()
 {
-	cpy.page = -1;
+	clayout.py.page = -1;
 	length = tabcount = -1;
 }
 
@@ -13,17 +13,37 @@ void RichTable::InvalidateRefresh(int i, int j)
 	if(i < format.header)
 		r_row = -1;
 	else
-	if(r_row != i || r_column != j)
+	if(r_row != i || r_column != j) {
 		if(r_row == -2 && clayout.sz == GetSize()) {
 			r_row = i;
 			r_column = j;
-			r_py = cpy;
+			r_py = clayout.py;
 			r_pyy = clayout[min(GetRows() - 1, i + cell[i][j].vspan)].pyy;
-			r_page = cpage;
+			r_first_page = clayout.first_page;
+			r_next_page = clayout.next_page;
 		}
 		else
 			r_row = -1;
+	}
 	Invalidate();
+}
+
+int  RichTable::GetInvalid(PageY& top, PageY& bottom, RichContext rc) const
+{
+	if(r_row == -2)
+		return -1;
+	const TabLayout& tab = Realize(rc);
+	Rect first_page, next_page;
+	Reduce(rc, first_page, next_page);
+	if(r_row >= 0 && r_first_page == first_page && r_next_page == next_page
+	   && r_py == rc.py && tab[min(GetRows() - 1, r_row + cell[r_row][r_column].vspan)].pyy == r_pyy) {
+		const PaintRow& pr = tab[r_row];
+		const RichCell& cl = cell[r_row][r_column];
+		top = pr.py;
+		bottom = tab[min(cell.GetCount() - 1, r_row + cl.vspan)].pyy;
+		return 0;
+	}
+	return 1;
 }
 
 void RichTable::Normalize0()
@@ -134,7 +154,7 @@ void RichTable::Normalize()
 		}
 		else
 			j++;
-	int sum = Sum0(format.column);
+	int sum = Sum(format.column);
 	if(sum != 10000) {
 		r_row = -1;
 		if(format.column.GetCount()) {
@@ -244,35 +264,19 @@ void RichTable::Validate()
 	r_row = -2;
 }
 
-int  RichTable::GetInvalid(PageY& top, PageY& bottom, RichContext rc) const
-{
-	if(r_row == -2)
-		return -1;
-	const TabLayout& tab = Realize(rc);
-	if(r_row >= 0 && r_page == rc.page
-	   && r_py == rc.py && tab[min(GetRows() - 1, r_row + cell[r_row][r_column].vspan)].pyy == r_pyy) {
-		const PaintRow& pr = tab[r_row];
-		const RichCell& cl = cell[r_row][r_column];
-		top = pr.py;
-		bottom = tab[min(cell.GetCount() - 1, r_row + cl.vspan)].pyy;
-		return 0;
-	}
-	return 1;
-}
-
 void RichTable::AddColumn(int cx)
 {
 	format.column.Add(cx);
 }
 
-void RichTable::SetPick(int i, int j, pick_ RichTxt& text)
+void RichTable::SetPick(int i, int j, RichTxt&& text)
 {
-	cell.At(i).At(j).text = text;
+	cell.At(i).At(j).text = pick(text);
 }
 
 RichTxt RichTable::GetPick(int i, int j)
 {
-	return cell[i][j].text;
+	return pick(cell[i][j].text);
 }
 
 void RichTable::SetQTF(int i, int j, const char *qtf)
@@ -301,6 +305,8 @@ Size RichTable::GetSpan(int i, int j) const
 void RichTable::SetFormat(const Format& fmt)
 {
 	format = fmt;
+	Upp::SetQTF(header, fmt.header_qtf);
+	Upp::SetQTF(footer, fmt.footer_qtf);
 }
 
 RichTable RichTable::Copy(const Rect& sel) const
@@ -380,12 +386,17 @@ void RichTable::InsertColumn(int column, const RichStyles& style)
 void  RichTable::SplitCell(Point cl, Size sz, const RichStyles& style)
 {
 	const RichCell& sc = cell[cl.y][cl.x];
-	int ext = sz.cy - cell[cl.y][cl.x].vspan - 1;
-	if(ext > 0) {
-		cell.InsertN(cl.y + 1, ext);
+	int exty = sz.cy - cell[cl.y][cl.x].vspan - 1;
+	int extx = sz.cx - cell[cl.y][cl.x].hspan - 1;
+	int ny = cell.GetCount() + exty;
+	int nx = format.column.GetCount() + extx;
+	if(ny < 0 || ny > 20000 || nx < 0 || nx > 200)
+		return;
+	if(exty > 0) {
+		cell.InsertN(cl.y + 1, exty);
 		if(cl.y < format.header)
-			format.header += ext;
-		for(int i = 0; i < ext; i++) {
+			format.header += exty;
+		for(int i = 0; i < exty; i++) {
 			cell[cl.y + 1 + i].SetCount(GetColumns());
 			for(int j = 0; j < GetColumns(); j++) {
 				RichCell& c = cell[cl.y + 1 + i][j];
@@ -398,16 +409,16 @@ void  RichTable::SplitCell(Point cl, Size sz, const RichStyles& style)
 		for(int i = 0; i < GetColumns(); i++) {
 			CellInfo& cf = ci[cl.y][i];
 			if(cf.valid)
-				cell[cl.y][i].vspan += ext;
+				cell[cl.y][i].vspan += exty;
 			else
 			if(cf.master.x == i)
-				cell[cf.master.y][cf.master.x].vspan += ext;
+				cell[cf.master.y][cf.master.x].vspan += exty;
 		}
 	}
 
 	cell[cl.y][cl.x].vspan = 0;
-	if(ext < 0)
-		cell[cl.y + sz.cy - 1][cl.x].vspan = -ext;
+	if(exty < 0)
+		cell[cl.y + sz.cy - 1][cl.x].vspan = -exty;
 	for(int i = 1; i < sz.cy; i++) {
 		RichCell& c = cell[cl.y + i][cl.x];
 		c.format = sc.format;
@@ -416,19 +427,19 @@ void  RichTable::SplitCell(Point cl, Size sz, const RichStyles& style)
 	}
 
 	Normalize0();
-	ext = sz.cx - cell[cl.y][cl.x].hspan - 1;
-	if(ext > 0) {
+	// ext = sz.cx - cell[cl.y][cl.x].hspan - 1;
+	if(extx > 0) {
 		int clx = 0;
 		for(int i = 0; i <= cell[cl.y][cl.x].hspan; i++)
 			clx += format.column[cl.x + i];
-		format.column.InsertN(cl.x, ext);
+		format.column.InsertN(cl.x, extx);
 		int q = clx / sz.cx;
 		for(int i = 1; i < sz.cx; i++)
 			format.column[cl.x + i] = q;
 		format.column[cl.x] = clx - (sz.cx - 1) * q;
 		for(int i = 0; i < cell.GetCount(); i++) {
-			cell[i].InsertN(cl.x + 1, ext);
-			for(int q = 0; q < ext; q++) {
+			cell[i].InsertN(cl.x + 1, extx);
+			for(int q = 0; q < extx; q++) {
 				RichCell& c = cell[i][cl.x + 1 + q];
 				const RichCell& sc = cell[i][cl.x];
 				c.format = sc.format;
@@ -437,10 +448,10 @@ void  RichTable::SplitCell(Point cl, Size sz, const RichStyles& style)
 			}
 			CellInfo& cf = ci[i][cl.x];
 			if(cf.valid)
-				cell[i][cl.x].hspan += ext;
+				cell[i][cl.x].hspan += extx;
 			else
 			if(cf.master.y == i)
-				cell[cf.master.y][cf.master.x].hspan += ext;
+				cell[cf.master.y][cf.master.x].hspan += extx;
 		}
 	}
 	for(int i = 0; i < sz.cy; i++)
@@ -485,9 +496,9 @@ RichCell::Format RichTable::GetCellFormat(const Rect& sel) const
 				if(fmt.align != f.align)
 					fmt.align = Null;
 				if(fmt.color != f.color)
-					fmt.color = Null;
+					fmt.color = VoidColor;
 				if(fmt.bordercolor != f.bordercolor)
-					fmt.bordercolor = Null;
+					fmt.bordercolor = VoidColor;
 			}
 	return fmt;
 }
@@ -504,7 +515,8 @@ void sSetRect(Rect& t, const Rect& s)
 		t.bottom = s.bottom;
 }
 
-void  RichTable::SetCellFormat(const Rect& sel, const RichCell::Format& fmt, bool setkeep)
+void  RichTable::SetCellFormat(const Rect& sel, const RichCell::Format& fmt,
+                               bool setkeep, bool setround)
 {
 	for(int i = sel.top; i <= sel.bottom; i++)
 		for(int j = sel.left; j <= sel.right; j++)
@@ -514,14 +526,16 @@ void  RichTable::SetCellFormat(const Rect& sel, const RichCell::Format& fmt, boo
 				sSetRect(f.margin, fmt.margin);
 				if(!IsNull(fmt.align))
 					f.align = fmt.align;
-				if(!IsNull(fmt.color))
+				if(fmt.color != VoidColor)
 					f.color = fmt.color;
-				if(!IsNull(fmt.bordercolor))
+				if(fmt.bordercolor != VoidColor)
 					f.bordercolor = fmt.bordercolor;
 				if(!IsNull(fmt.minheight))
 					f.minheight = fmt.minheight;
 				if(setkeep)
 					f.keep = fmt.keep;
+				if(setround)
+					f.round = fmt.round;
 			}
 
 	Normalize();
@@ -572,9 +586,9 @@ RichTable::RichTable(const RichTable& src, int)
 
 RichTable::RichTable()
 {
-	cpy.page = -1;
+	clayout.py.page = -1;
 	r_row = -1;
 	Invalidate();
 }
 
-END_UPP_NAMESPACE
+}

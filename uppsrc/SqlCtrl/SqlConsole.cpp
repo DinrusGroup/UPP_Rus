@@ -1,7 +1,9 @@
 #include "SqlCtrl.h"
+#include "SqlDlg.h"
 #include <Report/Report.h>
+#include <CodeEditor/CodeEditor.h>
 
-NAMESPACE_UPP
+namespace Upp {
 
 #define IMAGEFILE <SqlCtrl/SqlCtrl.iml>
 #define IMAGECLASS SqlConsoleImg
@@ -20,7 +22,7 @@ static const int MAX_NESTING_LEVEL = 10;
 static const int PROGRESS_RANGE = 1000000000;
 
 bool SqlRunScript(int dialect, Stream& script_stream, 
-	Gate1<String> executor, Gate2<int, int> progress,
+	Gate<String> executor, Gate<int, int> progress,
 	Index<String>& script_file_names, int progress_min, int progress_max)
 {
 	int line_number = 1;
@@ -129,7 +131,7 @@ bool SqlRunScript(int dialect, Stream& script_stream,
 }
 
 bool SqlRunScript(int dialect, Stream& script_stream, const String& file_name,
-	Gate1<String> executor, Gate2<int, int> progress)
+                  Gate<String> executor, Gate<int, int> progress)
 {
 	Index<String> script_file_names;
 	String fn = NormalizePath(file_name);
@@ -141,190 +143,6 @@ bool SqlRunScript(int dialect, Stream& script_stream, const String& file_name,
 }
 
 void RunDlgSqlExport(Sql& cursor, String command, String tablename);
-
-class MacroSet {
-	struct Macro {
-		int            n;
-		String         text;
-		Vector<String> param;
-
-		void           Serialize(Stream& s)         { s / n % text % param; }
-	};
-	ArrayMap<String, Macro> macro;
-
-	static bool   Spaces(const char *&s);
-	static String GetId(const char *&s);
-	static bool   IsId(int c) { return c >= 'A' && c <= 'Z' || c >= 'a' && c <= 'z' || c == '_'; }
-
-	String Expand(const char *s, Index<int>& used) const;
-
-public:
-	void   Serialize(Stream& s);
-	bool   Define(const char *s);
-	String Expand(const char *s) const;
-	int    GetCount() const                         { return macro.GetCount(); }
-	String Get(int i) const;
-};
-
-bool   MacroSet::Spaces(const char *&s) {
-	if(*s != ' ' && *s != '\t') return false;
-	while(*s == ' ' || *s == '\t')
-		s++;
-	return true;
-}
-
-String MacroSet::GetId(const char *&s) {
-	String result;
-	while(*s >= 'A' && *s <= 'Z' || *s >= 'a' && *s <= 'z' || *s >= '0' && *s <= '9' || *s == '_')
-		result.Cat(*s++);
-	return result;
-}
-
-void MacroSet::Serialize(Stream& s) {
-	int version = 0;
-	s % version;
-	int n = macro.GetCount();
-	s / n;
-	if(s.IsLoading()) {
-		macro.Clear();
-		for(int i = 0; i < n; i++) {
-			String key;
-			Macro  value;
-			s % key;
-			s % macro.Add(key);
-		}
-	}
-	else
-		for(int i = 0; i < n; i++) {
-			String key;
-			Macro  value;
-			key = macro.GetKey(i);
-			value = macro[i];
-			s % key % value;
-		}
-}
-
-bool MacroSet::Define(const char *s) {
-	if(!IsId(*s)) return false;
-	String name = GetId(s);
-	Index<String> param;
-	Spaces(s);
-	if(*s == '(') {
-		s++;
-		Spaces(s);
-		if(*s != ')')
-			for(;;) {
-				Spaces(s);
-				if(!IsId(*s)) return false;
-				if(param.GetCount() >= 16) return false;
-				param.Add(GetId(s));
-				Spaces(s);
-				if(*s == ')') break;
-				if(*s != ',') return false;
-				s++;
-			}
-		s++;
-	}
-	Spaces(s);
-	Macro& m = macro.GetAdd(name);
-	m.n = param.GetCount();
-	m.param <<= param.GetKeys();
-	m.text.Clear();
-	while(*s) {
-		if(IsId(*s)) {
-			String name = GetId(s);
-			int i = param.Find(name);
-			if(i >= 0)
-				m.text.Cat(i + 16);
-			else
-				m.text.Cat(name);
-		}
-		else {
-			if(*s >= 16 && *s < 32)
-				m.text.Cat(' ');
-			else
-				m.text.Cat(*s);
-			s++;
-		}
-	}
-	return true;
-}
-
-String MacroSet::Expand(const char *s, Index<int>& used) const {
-	String text;
-	while(*s)
-		if(IsId(*s)) {
-			String name = GetId(s);
-			int i = macro.Find(name);
-			if(i >= 0 && used.Find(i) < 0) {
-				const Macro& m = macro[i];
-				Vector<String> param;
-				const char *t = s;
-				Spaces(s);
-				if(*s == '(') {
-					int level = 0;
-					String p;
-					for(;;) {
-						s++;
-						if((*s == ',' || *s == ')') && level == 0) {
-							p = TrimRight(TrimLeft(p));
-//							p.TrimLeft();
-//							p.TrimRight();
-							param.Add(Expand(p));
-							p.Clear();
-						}
-						else
-							p.Cat(*s);
-						if(*s == '(') level++;
-						if(*s == ')') {
-							if(level <= 0) {
-								s++;
-								break;
-							}
-							level--;
-						}
-					}
-				}
-				else
-					s = t;
-				param.SetCount(16);
-				Index<int> newused(used, 1);
-				newused.Add(i);
-				String mt = Expand(m.text, newused);
-				for(const char *q = mt; *q; q++)
-					if(*q >= 16 && *q < 32)
-						text.Cat(param[*q - 16]);
-					else
-						text.Cat(*q);
-			}
-			else
-				text.Cat(name);
-		}
-		else
-			text.Cat(*s++);
-	return text;
-}
-
-String MacroSet::Expand(const char *s) const {
-	Index<int> temp;
-	return Expand(s, temp);
-}
-
-String MacroSet::Get(int i) const {
-	const Macro& m = macro[i];
-	String s = macro.GetKey(i);
-	if(m.param.GetCount()) {
-		s.Cat('(');
-		for(i = 0; i < m.param.GetCount(); i++) {
-			if(i) s.Cat(", ");
-			s.Cat(m.param[i]);
-		}
-		s.Cat(')');
-	}
-	s.Cat("   ");
-	s.Cat(Expand(s));
-	return s;
-}
 
 class SqlConsole : public TopWindow {
 public:
@@ -345,14 +163,17 @@ protected:
 	DocEdit                    errortext;
 	ArrayCtrl                  record;
 	ArrayCtrl                  trace;
-	WithDropChoice<EditString> command;
+	CodeEditor                 command;
+	Button                     execute;
 	Button                     schema;
+	Button                     csv;
+	ParentCtrl                 command_pane;
 //	CallbackSet                hide;
 	Vector<int>                cw;
 	Vector<bool>               visible;
 	Vector<bool>               lob;
 	String                     LastDir;
-	MacroSet                   macroset;
+	Label                      info1, info2;
 
 	enum {
 		NORMAL,
@@ -367,12 +188,12 @@ protected:
 	void    Execute(int type = NORMAL);
 	void    TraceToCommand();
 	void    TraceToExecute();
-	void    ListToCommand();
+	void    ListToCommand(ArrayCtrl *list);
 	void    SaveTrace();
 	void    RunScript(bool quiet);
 	void    TraceMenu(Bar& menu);
-	void    MacroList();
 	void    ObjectTree() { SQLObjectTree(cursor.GetSession()); }
+	void    Csv();
 
 	class Exec;
 	friend class Exec;
@@ -386,59 +207,40 @@ protected:
 			me->command <<= stmt; me->Sync(); me->Execute(quiet ? QUIET : SCRIPT); return true;
 		}
 		bool GateExec(String stmt) { return Execute(stmt); }
-		operator Gate1<String> () { return THISBACK(GateExec); }
+		operator Gate<String> ()   { return THISBACK(GateExec); }
 		
 	};
+
+	void ViewRecord();
 
 public:
 	typedef SqlConsole CLASSNAME;
 
 	void    Perform();
 
+	void    AddInfo(Ctrl& tgt, Label& info, const char *txt);
+
 	SqlConsole(SqlSession& session);
 };
 
-void SqlConsole::MacroList() {
-	list.Reset();
-	record.Clear();
-	list.AddColumn(t_("Defined macros"));
-	for(int i = 0; i < macroset.GetCount(); i++)
-		list.Add('#' + macroset.Get(i));
-}
-
 void SqlConsole::Execute(int type) {
 	list.Reset();
+	list.HeaderObject().Absolute().Moving();
 	visible.Clear();
 	lob.Clear();
 	record.Clear();
-	String s = command.GetText().ToString();
-	if(*s == '#') {
-		if(s[1] == '\0') {
-			MacroList();
-			command.Clear();
-			return;
-		}
-		list.AddColumn(t_("Macro definition"));
-		if(macroset.Define(~s + 1)) {
-			list.Add("OK");
-			trace.Add(s, t_("Macro OK"), "");
-			if(type == NORMAL)
-				command.AddHistory();
-			command.Clear();
-		}
-		else {
-			list.Add(t_("Invalid macro"));
-			trace.Add(s, t_("Invalid"), "");
-		}
-		return;
-	}
-	s = TrimRight(macroset.Expand(s));
-//	s.TrimRight();
+	String s = ~command;
 	while(*s.Last() == ';')
 		s.Trim(s.GetLength() - 1);
 	int ms0 = GetTickCount();
 	cursor.ClearError();
 	lastquery = s;
+	String ttl = s;
+	ttl.Replace("\t", " ");
+	ttl.Replace("\n", " ");
+	ttl.Replace("\r", "");
+	info1.Remove();
+	info2.Remove();
 	if(!cursor.Execute(s)) {
 	error:
 		record.Hide();
@@ -449,7 +251,7 @@ void SqlConsole::Execute(int type) {
 		list.Add(err);
 		trace.Add(s, err, "");
 		trace.GoEnd();
-		Title((s + " - " + err).ToWString());
+		Title((ttl + " - " + err).ToWString());
 		return;
 	}
 	if(type == QUIET)
@@ -460,12 +262,15 @@ void SqlConsole::Execute(int type) {
 	int ms1 = GetTickCount();
 	cw.SetCount(cursor.GetColumns());
 	visible.SetCount(cw.GetCount(), true);
+	int margins;
 	for(int i = 0; i < cursor.GetColumns(); i++) {
 		const SqlColumnInfo& ci = cursor.GetColumnInfo(i);
-		list.AddColumn(ci.name);
+		String n = ToLower(ci.name);
+		list.AddColumn(n);
 		list.HeaderTab(i).WhenAction = THISBACK1(Hide, i);
-		cw[i] = GetTextSize(ci.name, StdFont()).cx + 2 * list.HeaderTab(i).GetMargin();
-		record.Add(ci.name, Null);
+		margins = HorzLayoutZoom(2) + 2 * list.HeaderTab(i).GetMargin();
+		cw[i] = GetTextSize(n, StdFont()).cx + margins;
+		record.Add(n, Null);
 		lob.Add(ci.type == -1 || ci.type == -2); // !! BLOB / CLOB hack
 	}
 	Progress pi;
@@ -480,21 +285,21 @@ void SqlConsole::Execute(int type) {
 				cursor.GetColumn(i, temp);
 				row[i] = temp;
 			}
-			cw[i] = max(cw[i], GetTextSize(StdFormat(row[i]), StdFont()).cx +
-				2 * list.HeaderTab(i).GetMargin());
+			cw[i] = max(cw[i], GetTextSize(StdFormat(row[i]), StdFont()).cx + margins);
+			cw[i] = min(cw[i], list.GetSize().cx / 3);
 		}
 		list.Add(row);
 		if(pi.StepCanceled()) break;
 	}
-	if(cursor.GetColumns() && cursor.WasError()) {
+	if(cw.GetCount() && cursor.WasError()) {
 		list.Reset();
 		goto error;
 	}
-	visible.SetCount(cursor.GetColumns(), true);
+	visible.SetCount(list.GetColumnCount(), true);
 	ColSize();
 	if(list.GetCount() > 0)
 		list.SetCursor(0);
-	Title(NFormat(t_("%s (%d rows)"), s, pi.GetPos()));
+	Title(NFormat(t_("%s (%d rows)"), ttl, list.GetCount()));
 	String rrows = Format(t_("%d rows"), max(list.GetCount(), cursor.GetRowsProcessed()));
 	String rms = Format(t_("%d ms"), ms1 - ms0);
 	if(type == RERUN && trace.IsCursor()) {
@@ -505,25 +310,19 @@ void SqlConsole::Execute(int type) {
 		trace.Add(s, rrows, rms);
 		trace.GoEnd();
 	}
-	if(type == NORMAL)
-		command.AddHistory();
-	command.Clear();
+	command.Remove(0, command.GetLength());
+	command.SetSelection(0, 0);
 }
 
 void SqlConsole::ColSize() {
-	int maxw = 18 * StdFont().Info().GetAveWidth();
-	int maxx = list.GetSize().cx;
+	int maxw = list.GetSize().cx;
 	int wx = 0;
-	for(int i = 0; i < cursor.GetColumns(); i++)
+	for(int i = 0; i < list.GetColumnCount(); i++)
 		if(visible[i]) {
 			int w = min(maxw, cw[i]);
 			wx += w;
-			if(wx < maxx) {
-				list.HeaderObject().SetTabRatio(i, w);
-				list.HeaderObject().ShowTab(i);
-			}
-			else
-				list.HeaderObject().HideTab(i);
+			list.HeaderObject().SetTabRatio(i, w);
+			list.HeaderObject().ShowTab(i);
 		}
 		else
 			list.HeaderObject().HideTab(i);
@@ -539,12 +338,12 @@ void SqlConsole::Record() {
 	if(list.GetIndexCount() == 1)
 		errortext <<= StdFormat(list.Get(0));
 	for(int i = 0; i < list.GetIndexCount(); i++)
-		record.Set(i, 1, list.Get(i));
+		record.Set(i, 1, list.IsCursor() ? list.Get(i) : Value());
 }
 
 bool SqlConsole::Key(dword key, int count) {
 	switch(key) {
-	case K_ENTER:
+	case K_F5:
 		Execute();
 		return true;
 	case K_CTRL_R:
@@ -556,20 +355,12 @@ bool SqlConsole::Key(dword key, int count) {
 	case K_CTRL_S:
 		SaveTrace();
 		return true;
-	case K_CTRL_M:
-		MacroList();
-		return true;
-	}
-	if(key >= ' ' && key < 256 || key == K_RIGHT || key == K_LEFT || key == K_ALT_DOWN) {
-		command.SetFocus();
-		command.Key(key, count);
-		return true;
 	}
 	return TopWindow::Key(key, count);
 }
 
 void SqlConsole::Serialize(Stream& s) {
-	int version = 2;
+	int version = 0;
 	s / version;
 	s.Magic();
 	Rect r = GetRect();
@@ -578,19 +369,28 @@ void SqlConsole::Serialize(Stream& s) {
 	vsplit.Serialize(s);
 	record.SerializeHeader(s);
 	lires.Serialize(s);
-	command.SerializeList(s);
 	trace.SerializeHeader(s);
+	if(s.IsLoading())
+		trace.Clear();
+	Vector<ValueArray> ar;
+	for(int i = 0; i < trace.GetCount(); i++)
+		ar.Add(trace.GetArray(i));
+	s % ar;
+	if(s.IsLoading()) {
+		for(int i = 0; i < ar.GetCount(); i++)
+			trace.SetArray(i, ar[i]);
+		trace.GoEnd();
+	}
 	if(version >= 1)
 		s % LastDir;
-	if(version >= 2)
-		s % macroset;
+	s.Magic();
 }
 
 void SqlConsole::Perform() {
 	const char cfg[] = "SqlConsole.cfg";
 	LoadFromFile(*this, cfg);
 	Title(t_("SQL Commander"));
-	Icon(SqlConsoleImg::SqlConsoleIconSmall(), SqlConsoleImg::SqlConsoleIconLarge());
+	Icon(SqlConsoleImg::database_edit(), SqlConsoleImg::SqlConsoleIconLarge());
 	Sizeable();
 	Zoomable();
 	ActiveFocus(command);
@@ -600,15 +400,19 @@ void SqlConsole::Perform() {
 }
 
 void SqlConsole::TraceToCommand() {
-	if(trace.IsCursor())
+	if(trace.IsCursor()) {
 		command.SetData(trace.Get(0));
+		command.SetCursor(command.GetLength());
+	}
 }
 
-void SqlConsole::ListToCommand() {
-	int c = list.GetEditColumn();
-	if(list.IsCursor() && c >= 0 && c < list.GetIndexCount())
-		command.Insert(StdFormat(list.Get(c)).ToWString());
-	command.SetFocus();
+void SqlConsole::ListToCommand(ArrayCtrl *l)
+{
+	int c = l->GetClickColumn();
+	if(GetCtrl() && l->IsCursor() && c >= 0 && c < l->GetColumnCount()) {
+		command.Paste(AsString(l->Get(c)).ToWString());
+		command.SetFocus();
+	}
 }
 
 void SqlConsole::TraceToExecute() {
@@ -616,7 +420,7 @@ void SqlConsole::TraceToExecute() {
 }
 
 void SqlConsole::SaveTrace() {
-	FileSelector fsel;
+	FileSel fsel;
 	fsel.ActiveDir(LastDir);
 	fsel.DefaultExt("sql");
 	fsel.Type(t_("SQL scripts (*.sql)"), "*.sql");
@@ -637,7 +441,7 @@ void SqlConsole::RunScript(bool quiet) {
 //		Exclamation(t_("Database connection doesn't support running scripts."));
 //		return;
 //	}
-	FileSelector fsel;
+	FileSel fsel;
 	fsel.ActiveDir(LastDir);
 	fsel.DefaultExt("sql");
 	fsel.Type(t_("SQL scripts (*.sql)"), "*.sql");
@@ -664,7 +468,6 @@ void SqlConsole::TraceMenu(Bar& menu) {
 	menu.Add(t_("Save as script.."), THISBACK(SaveTrace)).Key(K_CTRL_S);
 	menu.Add(t_("Run script.."), THISBACK1(RunScript, false)).Key(K_CTRL_R);
 	menu.Add(t_("Run script quietly.."), THISBACK1(RunScript, true)).Key(K_CTRL_Q);
-	menu.Add(t_("List macros.."), THISBACK(MacroList)).Key(K_CTRL_M);
 }
 
 void SqlConsole::ListMenu(Bar& bar)
@@ -672,6 +475,11 @@ void SqlConsole::ListMenu(Bar& bar)
 	bar.Add(t_("Print record"), THISBACK(ListPrintRow));
 	bar.Add(t_("Print list"), THISBACK(ListPrintList));
 	bar.Add(t_("Export..."), THISBACK(ListExport));
+}
+
+void SqlConsole::Csv()
+{
+	SelectSaveFile("Csv\t*.csv", list.AsCsv());
 }
 
 void SqlConsole::ListPrintRow()
@@ -713,6 +521,65 @@ void SqlConsole::ListExport()
 	RunDlgSqlExport(cursor, lastquery, Null);
 }
 
+struct SqlValueViewDlg : public WithSqlValueViewLayout<TopWindow> {
+	typedef SqlValueViewDlg CLASSNAME;
+	
+	String value;
+	
+	void Sync();
+	void Save();
+
+	SqlValueViewDlg();
+};
+
+void SqlValueViewDlg::Sync()
+{
+	if(~format) {
+		StringStream ss;
+		HexDumpData(ss, ~value, value.GetLength(), false, 1000000);
+		text <<= ss.GetResult();
+	}		
+	else
+		text <<= value;
+}
+
+void SqlValueViewDlg::Save()
+{
+	SelectSaveFile("File\t*.*", value);
+}
+
+SqlValueViewDlg::SqlValueViewDlg()
+{
+	CtrlLayout(*this, "");
+	text.SetFont(Monospace(GetStdFont().GetHeight()));
+	format <<= THISBACK(Sync);
+	save <<= THISBACK(Save);
+	format = 0;
+}
+
+void SqlViewValue(const String& title, const String& value)
+{
+	SqlValueViewDlg dlg;
+	dlg.Title(title);
+	dlg.value = value;
+	dlg.Sync();
+	dlg.Execute();
+}
+
+void SqlConsole::ViewRecord()
+{
+	if(!record.IsCursor())
+		return;
+	SqlViewValue(record.Get(0), AsString(record.Get(1)));
+}
+
+void SqlConsole::AddInfo(Ctrl& tgt, Label& info, const char *txt)
+{
+	info = txt;
+	tgt.Add(info.SizePos());
+//	tgt.Add(info.BottomPos(0, GetStdFontCy()).RightPos(0, GetTextSize(txt, StdFont()).cx));
+}
+
 SqlConsole::SqlConsole(SqlSession& session)
 : cursor(session)
 {
@@ -723,26 +590,44 @@ SqlConsole::SqlConsole(SqlSession& session)
 	errortext.SetFont(Courier(12));
 	errortext.Hide();
 	vsplit.Vert(lires, trace);
-	record.NoCursor();
+	vsplit.Add(command_pane);
+	vsplit.SetPos(6500);
+	vsplit.SetPos(8500, 1);
+	lires.SetPos(7000);
 	record.AddColumn(t_("Column"), 5);
 	record.AddColumn(t_("Value"), 10);
+	record.WhenLeftDouble = THISBACK(ViewRecord);
+	record.WhenLeftClick = THISBACK1(ListToCommand, &record);
+	AddInfo(record, info1, "\1[g= Use [@B Ctrl+Click] to copy data into SQL&[@B DoubleClick] for detailed view.");
 	trace.AddColumn(t_("Command"), 8);
 	trace.AddColumn(t_("Result"), 1);
 	trace.AddColumn(t_("Duration"), 1);
 	trace.WhenLeftClick = THISBACK(TraceToCommand);
 	trace.WhenLeftDouble = THISBACK(TraceToExecute);
 	trace.WhenBar = THISBACK(TraceMenu);
-	list.WhenEnterRow = THISBACK(Record);
-	list.WhenLeftDouble = THISBACK(ListToCommand);
+	trace.NoWantFocus();
+	list.WhenSel = THISBACK(Record);
+	list.WhenLeftClick = THISBACK1(ListToCommand, &list);
 	list.WhenBar = THISBACK(ListMenu);
-	Add(vsplit.VSizePos(0, ecy + 4).HSizePos(0, 0));
-	Add(command.BottomPos(0, ecy).HSizePos(0, 90));
-	Add(schema.BottomPos(0, ecy).RightPos(0, 80));
+	list.HeaderObject().Absolute();
+	AddInfo(list, info2, "\1[g= Use [@B Ctrl+Click] to copy data into SQL.");
+	Add(vsplit.SizePos());
+	command.SetFont(Courier(GetStdFontCy()));
+	command_pane.Add(command.VSizePos().HSizePos(0, HorzLayoutZoom(100)));
+	ecy = max(24, ecy);
+	command_pane.Add(execute.TopPos(0, ecy).RightPos(4, HorzLayoutZoom(90)));
+	command_pane.Add(schema.TopPos(ecy + 4, ecy).RightPos(4, HorzLayoutZoom(90)));
+	command_pane.Add(csv.TopPos(2 * ecy + 4, ecy).RightPos(4, HorzLayoutZoom(90)));
+	command.Highlight("sql");
 	schema.SetLabel(t_("&Schema"));
 	schema <<= THISBACK(ObjectTree);
-//	hide = callback(this, &SqlConsole::Hide);
-//	Size sz = Stock.GetScreenSize();
-//	SetRect((sz.cx - 600) / 2, (sz.cy - 400) / 2, 600, 400);
+	schema.SetImage(SqlConsoleImg::bricks());
+	execute <<= THISBACK1(Execute, NORMAL);
+	execute.SetImage(SqlConsoleImg::lightning());
+	execute.SetLabel(t_("Execute (F5)"));
+	csv <<= THISBACK(Csv);
+	csv.SetLabel(t_("Export.."));
+	csv.SetImage(SqlConsoleImg::database_save());
 	ActiveFocus(command);
 }
 
@@ -751,4 +636,9 @@ void SQLCommander(SqlSession& session) {
 	con.Perform();
 }
 
-END_UPP_NAMESPACE
+bool IsSqlConsoleActive__()
+{
+	return dynamic_cast<SqlConsole *>(Ctrl::GetActiveWindow());
+}
+
+}

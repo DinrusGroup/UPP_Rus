@@ -1,7 +1,6 @@
 #include "GeomCtrl.h"
-#pragma hdrstop
 
-NAMESPACE_UPP
+namespace Upp {
 
 #define IMAGECLASS PlotterImg
 #define IMAGEFILE  <Geom/Ctrl/PlotterCtrl.iml>
@@ -1270,4 +1269,4 @@ void PanDragDrop::Cancel()
 	GetOwner().PanOffset(Point(0, 0));
 }
 
-END_UPP_NAMESPACE
+}

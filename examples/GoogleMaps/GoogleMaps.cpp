@@ -21,7 +21,11 @@ String GetGoogleMap(double center_x, double center_y, int zoom, int cx, int cy,
 		       "&size=" << cx << 'x' << cy <<
 		       "&format=" << format <<
 		       "&sensor=false&key=" << apikey;
-	return HttpClientGet(request, NULL, error);
+	HttpRequest r(request);
+	String h = r.Execute();
+	if(r.IsFailure())
+		*error = r.GetErrorDesc();
+	return h;
 }
 
 Image GetGoogleMapImage(double center_x, double center_y, int zoom, int cx, int cy,
@@ -102,7 +106,7 @@ String FormatDegree(double d, int decimals)
 	char sign = (d < 0 ? '-' : '+');
 	if(d < 0) d = -d;
 	int deg = ffloor(d);
-	String cd = ToCharset(CHARSET_DEFAULT, "%c%d°", CHARSET_UTF8);
+	String cd = ToCharset(CHARSET_DEFAULT, "%c%dÂ°", CHARSET_UTF8);
 	if(decimals <= -2)
 		return NFormat(cd, sign, deg);
 	d = (d - deg) * 60;
@@ -173,5 +177,5 @@ Pointf GoogleMapsGpsToPixelDiff(Pointf center, int zoom, Pointf gps)
 
 Pointf GoogleMapsGpsToPixel(Pointf center, int zoom, Size sz, Pointf gps)
 {
-	return sz / 2 - GoogleMapsGpsToPixelDiff(center, zoom, gps);
+	return (Sizef)sz / 2.0 - GoogleMapsGpsToPixelDiff(center, zoom, gps);
 }

@@ -2,7 +2,7 @@
 
 #define LLOG(x) DLOG(x)
 
-NAMESPACE_UPP
+namespace Upp {
 
 RichObjectType::RichObjectType() {}
 RichObjectType::~RichObjectType() {}
@@ -133,7 +133,7 @@ String RichObjectType::GetLink(const Value& data, Point pt, Size sz, void *conte
 void RichObject::InitSize(int cx, int cy, void *context)
 {
 	Size sz;
-	Size phsz = GetPixelSize();
+	Size phsz = 600 * GetPixelSize() / 96; // 100% size...
 	if(cx || cy)
 		sz = GetRatioSize(phsz, cx, cy);
 	else
@@ -144,9 +144,11 @@ void RichObject::InitSize(int cx, int cy, void *context)
 	SetSize(sz);
 }
 
-typedef VectorMap<String, RichObjectType *> RichObjectHT;
-
-GLOBAL_VAR(RichObjectHT, RichObject::Map);
+VectorMap<String, RichObjectType *>& RichObject::Map()
+{
+	static VectorMap<String, RichObjectType *> h;
+	return h;
+}
 
 void RichObject::NewSerial()
 {
@@ -206,6 +208,12 @@ void RichObject::SetData(const Value& v)
 	NewSerial();
 }
 
+void RichObject::AdjustPhysicalSize()
+{
+	if(physical_size.cx == 0 || physical_size.cy == 0)
+		physical_size = 600 * pixel_size / 96;
+}
+
 void   RichObject::Set(RichObjectType *_type, const Value& _data, Size maxsize, void *context)
 {
 	Clear();
@@ -215,6 +223,7 @@ void   RichObject::Set(RichObjectType *_type, const Value& _data, Size maxsize, 
 		physical_size = type->GetPhysicalSize(data, context);
 		pixel_size = type->GetPixelSize(data, context);
 		size = type->GetDefaultSize(data, maxsize, context);
+		AdjustPhysicalSize();
 	}
 	NewSerial();
 }
@@ -247,6 +256,7 @@ bool   RichObject::Read(const String& _type_name, const String& _data, Size sz, 
 		data = type->Read(_data);
 		physical_size = type->GetPhysicalSize(data, context);
 		pixel_size = type->GetPixelSize(data, context);
+		AdjustPhysicalSize();
 		size = sz;
 		return true;
 	}
@@ -376,14 +386,6 @@ void RichObjectTypeDrawingCls::Paint(const Value& data, Draw& w, Size sz) const
 		w.DrawDrawing(Rect(sz), ValueTo<Data>(data).drawing);
 }
 
-Drawing AsDrawing(const Painting& pw)
-{
-	Size sz = pw.GetSize();
-	DrawingDraw dw(sz);
-	dw.DrawPainting(sz, pw);
-	return dw.GetResult();
-}
-
 RichObject CreatePaintingObject(const Painting& pw, Size dot_size, Size out_size)
 {
 	return CreateDrawingObject(AsDrawing(pw), dot_size, out_size);
@@ -479,4 +481,4 @@ INITBLOCK {
 	RichObject::Register("PING", &Single<RichObjectTypePNGCls>());
 };
 
-END_UPP_NAMESPACE
+}

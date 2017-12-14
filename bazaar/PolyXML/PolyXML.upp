@@ -1,9 +1,9 @@
 uses
-	Draw;
+	Core,
+	ClassFactory;
 
 file
-	ClassFactory.h,
-	ClassFactory.cpp,
+	PolyXML.cpp,
 	PolyXML.h,
 	src.tpp,
 	srcdoc.tpp;

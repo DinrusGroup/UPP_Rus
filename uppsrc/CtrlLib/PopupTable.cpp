@@ -1,6 +1,6 @@
 #include "CtrlLib.h"
 
-NAMESPACE_UPP
+namespace Upp {
 
 CH_VALUE(DropEdge, ChBorder(BlackBorder()));
 
@@ -134,7 +134,7 @@ void PopUpTable::Normal()
 	NoGrid();
 	AutoHideSb();
 	SetLineCy(Draw::GetStdFontCy());
-	NoPopUpEx();
+//	NoPopUpEx();
 }
 
 PopUpTable::PopUpTable() {
@@ -146,4 +146,4 @@ PopUpTable::PopUpTable() {
 
 PopUpTable::~PopUpTable() {}
 
-END_UPP_NAMESPACE
+}

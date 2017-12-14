@@ -85,7 +85,7 @@ public:
 
 		void               MakeRGBA() const;
 		void Free()                             { if(free) delete[] data; if(fmtfree) delete[] fmtdata; }
-		void Pick(pick_ Line& b);
+		void Pick(Line&& b);
 
 	public:
 		const RGBA         *GetRGBA() const     { if(!data) MakeRGBA(); return data; }
@@ -97,11 +97,11 @@ public:
 			: data(data), fmtdata((byte *)data), raster(NULL), free(free), fmtfree(false) {}
 		Line(const byte *fmtdata, Raster *raster, bool fmtfree)
 			: data(NULL), fmtdata(fmtdata), raster(raster), free(false), fmtfree(fmtfree) {}
-		Line(pick_ Line& b)                     { Pick(b); }
+		Line(Line&& b)                          { Pick(pick(b)); }
 		Line()                                  { data = NULL; fmtdata = NULL; raster = NULL; free = fmtfree = false; }
 		~Line()                                 { Free(); }
 
-		void operator=(pick_ Line& b)           { Free(); Pick(b); }
+		void operator=(Line&& b)                { Free(); Pick(pick(b)); }
 	};
 
 	struct Info {
@@ -136,8 +136,8 @@ public:
 	int    GetHeight()                             { return GetSize().cy; }
 	Line   operator[](int i)                       { return GetLine(i); }
 	
-	Image  GetImage(int x, int y, int cx, int cy, const Gate2<int, int> progress = false);
-	Image  GetImage(const Gate2<int, int> progress = false);
+	Image  GetImage(int x, int y, int cx, int cy, const Gate<int, int> progress = Null);
+	Image  GetImage(const Gate<int, int> progress = Null);
 
 	virtual ~Raster();
 };
@@ -198,17 +198,17 @@ public:
 
 	void    SetError()                  { error = true; }
 
-	Image Load(Stream& s, const Gate2<int, int> progress = false);
-	Image LoadFile(const char *fn, const Gate2<int, int> progress = false);
-	Image LoadString(const String& s, const Gate2<int, int> progress = false);
+	Image Load(Stream& s, const Gate<int, int> progress = Null);
+	Image LoadFile(const char *fn, const Gate<int, int> progress = Null);
+	Image LoadString(const String& s, const Gate<int, int> progress = Null);
 
 	template <class T>
 	static void Register()              { AddFormat(&StreamRaster::FactoryFn<T>); }
 
 	static One<StreamRaster> OpenAny(Stream& s);
-	static Image LoadAny(Stream& s, const Gate2<int, int> progress = false);
-	static Image LoadFileAny(const char *fn, const Gate2<int, int> progress = false);
-	static Image LoadStringAny(const String& s, const Gate2<int, int> progress = false);
+	static Image LoadAny(Stream& s, Gate<int, int> progress = Null);
+	static Image LoadFileAny(const char *fn, Gate<int, int> progress = Null);
+	static Image LoadStringAny(const String& s, Gate<int, int> progress = Null);
 
 	StreamRaster()                      { error = true; }
 };

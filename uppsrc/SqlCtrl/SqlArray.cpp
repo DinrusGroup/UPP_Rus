@@ -1,6 +1,6 @@
 #include "SqlCtrl.h"
 
-NAMESPACE_UPP
+namespace Upp {
 
 void SqlArray::Join(SqlId id, ArrayCtrl& master) {
 	master.AddCtrlAt(0, *this);
@@ -69,7 +69,7 @@ bool SqlArray::UpdateRow() {
 	else {
 		SqlUpdate update(table);
 		for(int i = 0; i < GetIndexCount(); i++)
-			if(!GetId(i).IsNull() && IsModified(i) && (i || lateinsert))
+			if(!GetId(i).IsNull() && IsModified(i) && (i || lateinsert || updatekey))
 				update(GetId(i), Get(i));
 		if(update) {
 			Session().ClearError();
@@ -198,11 +198,12 @@ void SqlArray::AppendQuery(SqlBool where)
 			if(WhenFilter(fm))
 				Add(row);
 		}
-		if(GetCount())
+		if(GetCount()) {
 			if(goendpostquery)
 				GoEnd();
 			else
 				GoBegin();
+		}
 		DoColumnSort();
 		WhenPostQuery();
 	}
@@ -234,7 +235,8 @@ SqlArray::SqlArray() {
 	RowName(t_("record"));
 	offset = 0;
 	count = Null;
-	WhenFilter = true;
+	WhenFilter = [=](const VectorMap<Id, Value>& row) -> bool { return true; };
+	updatekey = false;
 }
 
-END_UPP_NAMESPACE
+}

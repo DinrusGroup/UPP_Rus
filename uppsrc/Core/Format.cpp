@@ -1,8 +1,7 @@
 #include "Core.h"
 //#BLITZ_APPROVE
-#include <float.h>
 
-NAMESPACE_UPP
+namespace Upp {
 
 // Old format ---------------------------
 
@@ -21,7 +20,8 @@ String  VFormat(const char *fmt, va_list ptr) {
 String FormatIntBase(int i, int base, int width, char lpad, int sign, bool upper)
 {
 	enum { BUFFER = sizeof(int) * 8 + 1 };
-	ASSERT(base >= 2 && base <= 36);
+	if(base < 2 || base > 36)
+		return "<invalid base>";
 	char buffer[BUFFER];
 	char *const e = buffer + (int)BUFFER;
 	char *p = e;
@@ -170,7 +170,7 @@ String Format64Hex(uint64 a)
 
 String FormatInteger(int a)            { return IsNull(a) ? String() : FormatInt(a); }
 String FormatUnsigned(unsigned long a) { return Sprintf("%u", a); }
-String FormatDouble(double a)          { return IsNull(a) ? String() : IsNaN(a) ? "?" : FormatDouble(a, 10, FD_REL); }
+String FormatDouble(double a)          { return IsNull(a) ? String() : IsNaN(a) ? "?" : FormatDouble(a, 17, FD_REL); }
 String FormatBool(bool a)              { return a ? "true" : "false"; }
 String FormatPtr(const void *p)        { return "0x" + FormatHex(p); }
 
@@ -252,7 +252,7 @@ String FormatDoubleDigits(double d, int raw_digits, int flags, int& exponent)
 		else
 			p[-1]++;
 	}
-	if(flags & FD_ZERO)
+	if(flags & FD_ZEROS)
 	{
 		char *e = p;
 		while(e > ~buffer && e[-1] == '0')
@@ -313,7 +313,7 @@ String FormatDoubleFix(double d, int digits, int flags)
 	int pointchar = (flags & FD_COMMA) ? ',' : '.';
 	if(IsNull(exp) || exp < -digits) {
 		out.Cat('0');
-		if((flags & FD_ZERO) && digits) {
+		if((flags & FD_ZEROS) && digits) {
 			out.Cat(pointchar);
 			out.Cat('0', digits);
 		}
@@ -323,7 +323,7 @@ String FormatDoubleFix(double d, int digits, int flags)
 		out.Cat(pointchar);
 		out.Cat('0', -1 - exp);
 		int fill = digits + exp + 1;
-		if(!(flags & FD_ZERO) || dig.GetLength() >= fill)
+		if(!(flags & FD_ZEROS) || dig.GetLength() >= fill)
 			out.Cat(dig, min(fill, dig.GetLength()));
 		else {
 			out.Cat(dig);
@@ -332,9 +332,9 @@ String FormatDoubleFix(double d, int digits, int flags)
 	}
 	else if(exp < dig.GetLength()) {
 		out.Cat(dig, ++exp);
-		if(digits > 0 && ((flags & FD_ZERO) || dig.GetLength() > exp)) {
+		if(digits > 0 && ((flags & FD_ZEROS) || dig.GetLength() > exp)) {
 			out.Cat(pointchar);
-			if(!(flags & FD_ZERO) || dig.GetLength() - exp >= digits)
+			if(!(flags & FD_ZEROS) || dig.GetLength() - exp >= digits)
 				out.Cat(dig.Begin() + exp, min(dig.GetLength() - exp, digits));
 			else {
 				out.Cat(dig.Begin() + exp, dig.GetLength() - exp);
@@ -346,7 +346,7 @@ String FormatDoubleFix(double d, int digits, int flags)
 	{
 		out.Cat(dig);
 		out.Cat('0', exp - dig.GetLength() + 1);
-		if(digits > 0 && (flags & FD_ZERO))
+		if(digits > 0 && (flags & FD_ZEROS))
 		{
 			out.Cat(pointchar);
 			out.Cat('0', digits);
@@ -363,7 +363,7 @@ String FormatDoubleExp(double d, int digits, int flags, int fill_exp)
 	int pointchar = (flags & FD_COMMA) ? ',' : '.';
 	String dig = FormatDoubleDigits(d, digits, flags | FD_REL, exp);
 	exp = Nvl(exp, 0);
-	String out;
+	StringBuffer out;
 	if(flags & FD_SIGN || d < 0 && !IsNull(exp))
 		out.Cat(d >= 0 ? '+' : '-');
 	out.Cat(dig[0]);
@@ -620,7 +620,7 @@ String RealFormatter(const Formatting& f)
 	}
 	if(*s == '@') { s++; flags |= FD_NOTHSEPS; }
 	if(*s == ',') { s++; flags |= FD_COMMA; }
-	if(*s == '!') { s++; flags |= FD_ZERO; }
+	if(*s == '!') { s++; flags |= FD_ZEROS; }
 	if(*s == '^') {
 		if(*++s == '+') {
 			flags |= FD_SIGN_EXP;
@@ -676,28 +676,16 @@ String StringFormatter(const Formatting& f)
 	if(!lpad)
 		r.Cat(q);
 	return r;
+}
 
-/*	
-	if(f.format.GetCount())
-	String fmt = '%' + f.format + f.id;
-	char h[256];
-#ifdef COMPILER_MSC
-	int n = _snprintf(h, 256, fmt, ~s);
-	if(n < 0)
-#else
-	int n = snprintf(h, 255, fmt, ~s);
-	if(n >= 254)
-#endif
-	{
-#ifdef COMPILER_MSC
-		n = _scprintf(fmt, ~s);
-#endif
-		Buffer<char> ah(n + 1);
-		sprintf(ah, fmt, ~s);
-		return String(ah, n);
+static inline
+void sFixPoint(char *s) // We do not want locale to affect decimal point, convert ',' to '.'
+{
+	while(*s) {
+		if(*s == ',')
+			*s = '.';
+		s++;
 	}
-	return String(h, n);
-*/
 }
 
 String FloatFormatter(const Formatting& f)
@@ -718,8 +706,12 @@ String FloatFormatter(const Formatting& f)
 #endif
 		Buffer<char> ah(n + 1);
 		sprintf(ah, fmt, d);
+		sFixPoint(ah);
 		return String(ah, n);
 	}
+	if(n < 0)
+		return String();
+	sFixPoint(h);
 	return String(h, n);
 }
 
@@ -976,7 +968,7 @@ String NFormat0(int language, const char *s, const Value **v, int count)
 		f.id.Clear();
 		b = s;
 		int pad = -1;
-		int padn;
+		int padn = 0;
 		String nvl_value = String::GetVoid();
 		for(;;) {
 			if(*s == '$') {
@@ -1042,7 +1034,8 @@ String NFormat0(int language, const char *s, const Value **v, int count)
 			if(!*s || *s == '`' || IsAlpha(*s))
 				break;
 			else {
-				ASSERT(*s);
+				if(!*s)
+					return result + "<unexpected end>";
 				if(IsDigit(*s))
 					n = 10 * n + *s - '0';
 				else
@@ -1055,15 +1048,13 @@ String NFormat0(int language, const char *s, const Value **v, int count)
 		while(IsAlpha(*s))
 			s++;
 		f.id = String(b, s);
-#ifndef _DEBUG
 		if(pos < 0 || pos >= count)
 		{
-			result << "!!ARGPOS=" << pos;
+			result << "<invalid pos=" << pos << ">";
 			if(*s == '`')
 				s++;
 			continue;
 		}
-#endif
 		f.arg = *v[pos++];
 		String r;
 		if(!nvl_value.IsVoid() && IsNull(f.arg))
@@ -1074,17 +1065,8 @@ String NFormat0(int language, const char *s, const Value **v, int count)
 #ifdef _DEBUG
 			int fi = formatmap().Find(FormId(f.id, f.arg.GetType()));
 			if(fi < 0) fi = formatmap().Find(FormId(f.id, VALUE_V));
-			if(fi < 0)
-			{
-				LOG("Missing formatter '" << f.id << "' for type " << f.arg.GetType());
-				String fmt_types;
-				for(int fm = 0; fm < formatmap().GetCount(); fm++)
-					if(formatmap().GetKey(fm).id == f.id)
-						fmt_types << ' ' << formatmap().GetKey(fm).type;
-				LOG("Formatter available for type(s): " << fmt_types);
-				NEVER();
-			}
-			ft = formatmap()[fi];
+			if(fi >= 0)
+				ft = formatmap()[fi];
 #else
 			for(;;) {
 				int fi = formatmap().Find(FormId(f.id, f.arg.GetType()));
@@ -1105,10 +1087,11 @@ String NFormat0(int language, const char *s, const Value **v, int count)
 				r << "<N/A '" << f.id << "' for type " << (int)f.arg.GetType() << ">";
 		}
 		int len;
-		switch(pad)
-		{
+		if(padn < 0 || padn > 1000)
+			r << "<invalid padding>";
+		else
+		switch(pad) {
 		case ALIGN_LEFT:
-			ASSERT(padn >= 0);
 			len = r.GetCharCount();
 			if(len < padn)
 				r.Cat(' ', padn - len);
@@ -1116,7 +1099,6 @@ String NFormat0(int language, const char *s, const Value **v, int count)
 				TrimChar(r, padn);
 			break;
 		case ALIGN_RIGHT:
-			ASSERT(padn >= 0);
 			len = r.GetCharCount();
 			if(len < padn) {
 				String fill(' ', padn - len);
@@ -1126,7 +1108,6 @@ String NFormat0(int language, const char *s, const Value **v, int count)
 				TrimChar(r, padn);
 			break;
 		case ALIGN_CENTER:
-			ASSERT(padn >= 0);
 			len = r.GetCharCount();
 			if(len < padn) {
 				int ll = (padn - len) / 2;
@@ -1233,4 +1214,4 @@ String DeFormat(const char *text)
 	return x;
 }
 
-END_UPP_NAMESPACE
+}

@@ -4,7 +4,7 @@
 #include <CtrlLib/CtrlLib.h>
 #include <GridCtrl/GridCtrl.h>
 
-NAMESPACE_UPP
+namespace Upp {
 
 class DropGrid : public Convert, public GridDisplay, public Ctrl
 {
@@ -117,7 +117,7 @@ class DropGrid : public Convert, public GridDisplay, public Ctrl
 		DropGrid& DropEnter(bool b = true);
 		DropGrid& DataAction(bool b = true);
 		DropGrid& Searching(bool b = true);
-		DropGrid& MustChange(bool b = true, const char* s = NULL);
+		DropGrid& MustChange(bool b = true, const char* s = "");
 		DropGrid& NullAction(bool b = true);
 		DropGrid& ClearButton(bool b = true);
 		DropGrid& NoDrop(bool b = true);
@@ -126,7 +126,7 @@ class DropGrid : public Convert, public GridDisplay, public Ctrl
 
 		GridCtrl::ItemRect& AddColumn(const char *name, int width = -1, bool idx = false);
 		GridCtrl::ItemRect& AddColumn(Id id, const char *name, int width = -1, bool idx = false);
-		GridCtrl::ItemRect& AddIndex(const char *name = NULL);
+		GridCtrl::ItemRect& AddIndex(const char *name = "");
 		GridCtrl::ItemRect& AddIndex(Id id);
 
 		MultiButton::SubButton& AddButton(int type, const Callback &cb);
@@ -179,6 +179,8 @@ class DropGrid : public Convert, public GridDisplay, public Ctrl
 		Value Get(Id id) const;
 		Value Get(int r, int c) const;
 		Value Get(int r, Id id) const;
+		Value GetPrev(int c) const;
+		Value GetPrev(Id id) const;
 		void  Set(int c, const Value& v);
 		void  Set(Id id, const Value& v);
 		void  Set(int r, int c, const Value& v);
@@ -233,6 +235,6 @@ class DropGrid : public Convert, public GridDisplay, public Ctrl
 
 };
 
-END_UPP_NAMESPACE
+}
 
 #endif

@@ -18,6 +18,9 @@ structure `- each XmlNode can contain any number of child XmlNodes.
 XmlNode is mutable and U`+`+ provides function to parse XML and 
 store it to XmlNode and also to take XmlNode and create corresponding 
 XML document.&]
+[s9;%% XmlNode is [*/^topic`:`/`/Core`/srcdoc`/Moveable`$en`-us^ moveable][*/  
+]type with [*/^topic`:`/`/Core`/srcdoc`/pick`_`$en`-us^ pick and 
+optional deep copy] transfer semantics&]
 [s3; &]
 [s0; &]
 [ {{10000F(128)G(128)@1 [s0;%% [* Public Member List]]}}&]
@@ -134,6 +137,10 @@ If no such node is found, returns Void().&]
 [s5;:XmlNode`:`:Add`(`): [_^XmlNode^ XmlNode][@(0.0.255) `&]_[* Add]()&]
 [s2;%% Adds a new sub`-node.&]
 [s3;%% &]
+[s4; &]
+[s5;:XmlNode`:`:Remove`(int`): [@(0.0.255) void]_[* Remove]([@(0.0.255) int]_[*@3 i])&]
+[s2;%% Removes subnode at [%-*@3 i].&]
+[s3;%% &]
 [s4;%% &]
 [s5;:XmlNode`:`:AddText`(const String`&`): [@(0.0.255) void]_[* AddText]([@(0.0.255) const]_
 [_^String^ String][@(0.0.255) `&]_[*@3 txt])&]
@@ -172,6 +179,10 @@ no such sub`-node, nothing happens.&]
 [s2;%% Concatenates all XML`_TEXT sub`-nodes in order of increasing 
 indicies.&]
 [s3;%% &]
+[s4; &]
+[s5;:Upp`:`:XmlNode`:`:HasTags`(`)const: [@(0.0.255) bool]_[* HasTags]()_[@(0.0.255) const]&]
+[s2;%% Returns true if the node has subtags.&]
+[s3; &]
 [s4;%% &]
 [s5;:XmlNode`:`:GetAttrCount`(`)const: [@(0.0.255) int]_[* GetAttrCount]()_[@(0.0.255) cons
 t]&]
@@ -212,6 +223,12 @@ If no such attribute exists, returns [%-*@3 def].&]
 r]([@(0.0.255) const]_[@(0.0.255) char]_`*[*@3 id], [@(0.0.255) int]_[*@3 val])&]
 [s2;%% Sets the attribute [%-*@3 id] to have integer value [%-*@3 val].&]
 [s3;%% &]
+[s4; &]
+[s5;:Upp`:`:XmlNode`:`:SetAttrs`(Upp`:`:VectorMap`<Upp`:`:String`,Upp`:`:String`>`&`&`): [@(0.0.255) v
+oid]_[* SetAttrs]([_^Upp`:`:VectorMap^ VectorMap]<[_^Upp`:`:String^ String], 
+[_^Upp`:`:String^ String]>`&`&_[*@3 a])&]
+[s2;%% Replaces all attributes with picked [%-*@3 a].&]
+[s3;%% &]
 [s4;%% &]
 [s5;:XmlNode`:`:SetAttrsPick`(pick`_ VectorMap`<String`,String`>`&`): [@(0.0.255) void]_
 [* SetAttrsPick]([@(0.128.128) pick`_]_[_^VectorMap^ VectorMap]<[_^String^ String], 
@@ -219,16 +236,28 @@ r]([@(0.0.255) const]_[@(0.0.255) char]_`*[*@3 id], [@(0.0.255) int]_[*@3 val])&
 [s2;%% Replaces all attributes to [%-*@3 a] using pick operation ([%-*@3 a] 
 is destroyed in operation).&]
 [s3; &]
+[s4; &]
+[s5;:XmlNode`:`:Shrink`(`): [@(0.0.255) void]_[* Shrink]()&]
+[s2;%% Attempts to minimize memory footprint.&]
+[s3; &]
+[s4; &]
+[s5;:XmlNode`:`:IsPicked`(`)const: [@(0.0.255) bool]_[* IsPicked]()_[@(0.0.255) const]&]
+[s2;%% Returns true if picked&]
 [s0; &]
 [ {{10000F(128)G(128)@1 [s0;%% [* Constructor detail]]}}&]
 [s3;%% &]
 [s0; [* XmlNode]()&]
 [s2;%% Construct an empty XmlNode.&]
 [s3; &]
+[s4; &]
+[s5;:XmlNode`:`:XmlNode`(const XmlNode`&`,int`): [* XmlNode]([@(0.0.255) const]_[* XmlNode][@(0.0.255) `&
+]_[*@3 n], [@(0.0.255) int])&]
+[s2;%% Deep copy constructor.&]
+[s3;%% &]
 [s0; &]
 [s0; &]
-[s0; &]
-[ {{10000@(113.42.0) [s0;%% [*@7;4 XmlNode `- parser and output functions]]}}&]
+[ {{10000@(113.42.0) [s0;%% [*@7;4 XmlNode `- parse and output functions]]}}&]
+[s3;%% &]
 [s4;H0; &]
 [s5;:ParseXML`(XmlParser`&`,dword`): [_^XmlNode^ XmlNode]_[* ParseXML]([_^XmlParser^ XmlPar
 ser][@(0.0.255) `&]_[*@3 p], [_^dword^ dword]_[*@3 style]_`=_XML`_IGNORE`_DECLS[@(0.0.255) `|
@@ -236,8 +265,32 @@ ser][@(0.0.255) `&]_[*@3 p], [_^dword^ dword]_[*@3 style]_`=_XML`_IGNORE`_DECLS[
 [s5;:ParseXML`(const char`*`,dword`): [_^XmlNode^ XmlNode]_[* ParseXML]([@(0.0.255) const]_
 [@(0.0.255) char]_`*[*@3 s], [_^dword^ dword]_[*@3 style]_`=_XML`_IGNORE`_DECLS[@(0.0.255) `|
 ]XML`_IGNORE`_PIS[@(0.0.255) `|]XML`_IGNORE`_COMMENTS)&]
-[s2;%% Creates XmlNode parsing XML document supplied either as string 
-or XmlParser. [%-*@3 style] can be a combination of&]
+[s5;:ParseXML`(XmlParser`&`,ParseXmlFilter`&`,dword`): [_^XmlNode^ XmlNode]_[* ParseXML](
+[_^XmlParser^ XmlParser][@(0.0.255) `&]_[*@3 p], [_^ParseXmlFilter^ ParseXmlFilter][@(0.0.255) `&
+]_[*@3 filter], [_^dword^ dword]_[*@3 style]_`=_XML`_IGNORE`_DECLS[@(0.0.255) `|]XML`_IGN
+ORE`_PIS[@(0.0.255) `|]XML`_IGNORE`_COMMENTS)&]
+[s5;:ParseXML`(const char`*`,ParseXmlFilter`&`,dword`): [_^XmlNode^ XmlNode]_[* ParseXML](
+[@(0.0.255) const]_[@(0.0.255) char]_`*[*@3 s], [_^ParseXmlFilter^ ParseXmlFilter][@(0.0.255) `&
+]_[*@3 filter], [_^dword^ dword]_[*@3 style]_`=_XML`_IGNORE`_DECLS[@(0.0.255) `|]XML`_IGN
+ORE`_PIS[@(0.0.255) `|]XML`_IGNORE`_COMMENTS)&]
+[s5;:ParseXML`(Stream`&`,dword`): [_^XmlNode^ XmlNode]_[* ParseXML]([_^Stream^ Stream][@(0.0.255) `&
+]_[*@3 in], [_^dword^ dword]_[*@3 style]_`=_XML`_IGNORE`_DECLS[@(0.0.255) `|]XML`_IGNORE`_
+PIS[@(0.0.255) `|]XML`_IGNORE`_COMMENTS)&]
+[s5;:ParseXMLFile`(const char`*`,dword`): [_^XmlNode^ XmlNode]_[* ParseXMLFile]([@(0.0.255) c
+onst]_[@(0.0.255) char]_`*[*@3 path], [_^dword^ dword]_[*@3 style]_`=_XML`_IGNORE`_DECLS[@(0.0.255) `|
+]XML`_IGNORE`_PIS[@(0.0.255) `|]XML`_IGNORE`_COMMENTS)&]
+[s5;:ParseXML`(Stream`&`,ParseXmlFilter`&`,dword`): [_^XmlNode^ XmlNode]_[* ParseXML]([_^Stream^ S
+tream][@(0.0.255) `&]_[*@3 in], [_^ParseXmlFilter^ ParseXmlFilter][@(0.0.255) `&]_[*@3 filt
+er], [_^dword^ dword]_[*@3 style]_`=_XML`_IGNORE`_DECLS[@(0.0.255) `|]XML`_IGNORE`_PIS[@(0.0.255) `|
+]XML`_IGNORE`_COMMENTS)&]
+[s5;:ParseXMLFile`(const char`*`,ParseXmlFilter`&`,dword`): [_^XmlNode^ XmlNode]_[* Parse
+XMLFile]([@(0.0.255) const]_[@(0.0.255) char]_`*[*@3 path], [_^ParseXmlFilter^ ParseXmlFi
+lter][@(0.0.255) `&]_[*@3 filter], [_^dword^ dword]_[*@3 style]_`=_XML`_IGNORE`_DECLS[@(0.0.255) `|
+]XML`_IGNORE`_PIS[@(0.0.255) `|]XML`_IGNORE`_COMMENTS)&]
+[s0; &]
+[s2;%% Creates XmlNode parsing XML document supplied either as XmlParser, 
+string, input stream or file path. [%-*@3 style] can be a combination 
+of&]
 [s2;%% &]
 [ {{3581:6419<288;^ [s2;l32;%% XML`_IGNORE`_DECLS]
 ::= [s2;l64;%% Declaration elements are ignored.]
@@ -246,18 +299,38 @@ or XmlParser. [%-*@3 style] can be a combination of&]
 ::^ [s2;l32;%% XML`_IGNORE`_COMMENTS]
 ::= [s2;l64;%% Comments are ignored.]}}&]
 [s3;%% &]
+[s2;%% Variants with [%-*@3 filter] allow to speficy a [^topic`:`/`/Core`/src`/ParseXmlFilter`$en`-us`#ParseXmlFilter`:`:struct^ f
+ilter class] to exclude some parts of XML, usually to preserve 
+memory. Can throw XmlError.&]
+[s3;%% &]
 [s4; &]
+[s5;:AsXML`(Stream`&`,const XmlNode`&`,dword`): [@(0.0.255) void]_[* AsXML]([_^Stream^ Stre
+am][@(0.0.255) `&]_[*@3 out], [@(0.0.255) const]_[_^XmlNode^ XmlNode][@(0.0.255) `&]_[*@3 n],
+ [_^dword^ dword]_[*@3 style]_`=_XML`_HEADER[@(0.0.255) `|]XML`_DOCTYPE[@(0.0.255) `|]XML
+`_PRETTY)&]
 [s5;:AsXML`(const XmlNode`&`,dword`): [_^String^ String]_[* AsXML]([@(0.0.255) const]_[_^XmlNode^ X
 mlNode][@(0.0.255) `&]_[*@3 n], [_^dword^ dword]_[*@3 style]_`=_XML`_HEADER[@(0.0.255) `|]X
-ML`_DOCTYPE)&]
+ML`_DOCTYPE[@(0.0.255) `|]XML`_PRETTY)&]
+[s5;:AsXMLFile`(const char`*`,const XmlNode`&`,dword`): [@(0.0.255) bool]_[* AsXMLFile]([@(0.0.255) c
+onst]_[@(0.0.255) char]_`*[*@3 path], [@(0.0.255) const]_[_^XmlNode^ XmlNode][@(0.0.255) `&
+]_[*@3 n], [_^dword^ dword]_[*@3 style]_`=_XML`_HEADER[@(0.0.255) `|]XML`_DOCTYPE[@(0.0.255) `|
+]XML`_PRETTY)&]
+[s0; &]
 [s2;%% Creates a XML document from XmlNode [%-*@3 n]. [%-*@3 style] can 
-be a combination &]
+be a combination of&]
 [s2;%% &]
 [ {{3581:6419<288;^ [s2;l32; XML`_HEADER]
 ::= [s2;l64;%% Adds standard XML header at the beginning of the document.]
 ::^ [s2;l32; XML`_DOCTYPE]
 ::= [s2;l64;%% Adds DOCTYPE declaration at the beginning of the document 
 with type taken as id of first XML`_TAG sub`-node (which represents 
-the root element).]}}&]
-[s3;%% &]
-[s0; ]
+the root element).]
+::^ [s2;l32; XML`_PRETTY]
+::= [s2;l64;%% XML document is formatted as multiline document with nice 
+indentation. If not active, everything is in sigle line with 
+no identantion.]}}&]
+[s2; &]
+[s2; Output is stored to Stream, returned as String or (with AsXMLFile) 
+stored to file. AsXMLFile returns true if output file was successfully 
+created.&]
+[s2; ]]

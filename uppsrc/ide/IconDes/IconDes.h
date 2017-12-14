@@ -8,6 +8,7 @@ struct IdeIconDes : IdeDesigner, IconDes {
 	virtual String GetFileName() const;
 	virtual void   Save();
 	virtual void   SaveEditPos();
+	virtual void   RestoreEditPos();
 	virtual void   EditMenu(Bar& menu);
 	virtual Ctrl&  DesignerCtrl()             { return *this; }
 
@@ -23,10 +24,19 @@ struct IdeIconDes : IdeDesigner, IconDes {
 	bool   Load(const char *filename);
 	void   FileProperties();
 	void   CopyId(const String& n);
+	void   FindId(const String& id);
 
 	typedef IdeIconDes CLASSNAME;
 
 	IdeIconDes()                              { format = 0; }
 };
+
+struct IdeIconEditPos : IconDes::EditPos, Moveable<IdeIconEditPos> {
+	Time filetime;
+
+	IdeIconEditPos() { filetime = Null; }
+};
+
+INITIALIZE(IconDes);
 
 #endif

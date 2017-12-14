@@ -7,6 +7,7 @@ using namespace LayoutKeys;
 #include <Draw/iml_source.h>
 
 #define LTIMING(x) // TIMING(x)
+#define LLOG(x)
 
 #define MARGIN 8
 
@@ -73,7 +74,7 @@ Point LayDes::ZPoint(Point p)
 void LayDes::SetSb()
 {
 	Size sz = Size(0, 0);
-	if(currentlayout >= 0) {
+	if(!IsNull(currentlayout)) {
 		LayoutData& l = CurrentLayout();
 		sz = l.size;
 		for(int i = 0; i < l.item.GetCount(); i++)
@@ -98,12 +99,12 @@ void LayDes::Scroll()
 void LayDes::Layout()
 {
 	SetSb();
-	layoutlist.ScrollIntoCursor();
+	list.ScrollIntoCursor();
 }
 
 void LayDes::GetSprings(Rect& l, Rect& t, Rect& r, Rect& b)
 {
-	if(currentlayout < 0 || !cursor.GetCount()) {
+	if(IsNull(currentlayout) || !cursor.GetCount()) {
 		l = t = r = b = Null;
 		return;
 	}
@@ -194,8 +195,8 @@ void LayDes::Paint(Draw& w)
 	Size sz = GetSize();
 	w.DrawRect(sz, SColorPaper);
 	if(!IsNull(fileerror))
-		w.DrawText(16, 16, "ФАЙЛОВАЯ ОШИБКА: " + fileerror, Arial(14).Bold(), Red);
-	if(currentlayout < 0)
+		w.DrawText(16, 16, "FILE ERROR: " + fileerror, Arial(14).Bold(), Red);
+	if(IsNull(currentlayout))
 		return;
 	w.Offset(-sb.Get());
 	LayoutData& l = CurrentLayout();
@@ -259,7 +260,7 @@ void LayDes::Paint(Draw& w)
 
 void  LayDes::SaveState()
 {
-	if(currentlayout < 0)
+	if(IsNull(currentlayout))
 		return;
 	CurrentLayout().SaveState();
 	SetBar();
@@ -268,7 +269,7 @@ void  LayDes::SaveState()
 void  LayDes::SetStatus(bool down)
 {
 	String s;
-	if(currentlayout >= 0) {
+	if(!IsNull(currentlayout)) {
 		Size sz = CurrentLayout().size;
 		s << sz;
 		if(cursor.GetCount()) {
@@ -294,7 +295,7 @@ int   LayDes::FindHandle(Point p)
 
 int   LayDes::FindItem(Point p)
 {
-	if(currentlayout < 0)
+	if(IsNull(currentlayout))
 		return -1;
 	LayoutData& l = CurrentLayout();
 	int ii = -1;
@@ -321,7 +322,7 @@ Image LayDes::CursorImage(Point p, dword keyflags)
 	if(HasCapture())
 		hi = draghandle;
 	else
-	 	hi = FindHandle(Normalize(p));
+		hi = FindHandle(Normalize(p));
 	Image (*id[11])() = {
 		Image::SizeHorz, Image::SizeVert, Image::SizeBottomRight,
 		Image::SizeTopLeft, Image::SizeVert, Image::SizeTopRight,
@@ -415,7 +416,7 @@ struct TDisplayH : public Display {
 void LayDes::SyncItems()
 {
 	LTIMING("SyncItems");
-	if(currentlayout < 0)
+	if(IsNull(currentlayout))
 		return;
 	int i;
 	for(i = 0; i < item.GetCount(); i++)
@@ -524,7 +525,7 @@ void LayDes::SelectOne(int ii, dword flags)
 
 void LayDes::StoreItemRects()
 {
-	if(currentlayout < 0)
+	if(IsNull(currentlayout))
 		return;
 	LayoutData& l = CurrentLayout();
 	itemrect.SetCount(cursor.GetCount());
@@ -534,7 +535,7 @@ void LayDes::StoreItemRects()
 
 void  LayDes::LeftDown(Point p, dword keyflags)
 {
-	if(currentlayout < 0)
+	if(IsNull(currentlayout))
 		return;
 	SaveState();
 	SetFocus();
@@ -601,7 +602,7 @@ void  LayDes::LeftRepeat(Point p, dword keyflags)
 
 void  LayDes::MouseMove(Point p, dword keyflags)
 {
-	if(!HasCapture() || currentlayout < 0)
+	if(!HasCapture() || IsNull(currentlayout))
 		return;
 	Point pz = Normalize(p);
 	p = ZPoint(pz);
@@ -717,9 +718,8 @@ void  LayDes::LeftUp(Point p, dword keyflags)
 
 void LayDes::CreateCtrl(const String& _type)
 {
-	if(currentlayout < 0)
+	if(IsNull(currentlayout))
 		return;
-	LOG("CreateCtrl");
 	LayoutData& l = CurrentLayout();
 	int c = l.item.GetCount();
 	if(cursor.GetCount())
@@ -742,17 +742,17 @@ void LayDes::CreateCtrl(const String& _type)
 	cursor.Clear();
 	cursor.Add(c);
 	ReloadItems();
-	if(IsNull(_type))
-		type.SetFocus();
-	else {
-		int q = m.FindProperty("SetLabel");
-		if(q >= 0)
-			m.property[q].SetFocus();
-		else
-			variable.SetFocus();
+	if(!search.HasFocus()) {
+		if(IsNull(_type))
+			type.SetFocus();
+		else {
+			int q = m.FindProperty("SetLabel");
+			if(q >= 0 && findarg(_type, "Label", "LabelBox") >= 0)
+				m.property[q].PlaceFocus(0, 0);
+			else
+				variable.SetFocus();
+		}
 	}
-	LOG("Create " << ::Name(GetFocusCtrl()));
-
 }
 
 void LayDes::Group(Bar& bar, const String& group)
@@ -775,7 +775,6 @@ void LayDes::Group(Bar& bar, const String& group)
 		if((q++ + 2) % 16 == 0)
 			bar.Break();
 	}
-	LOG("End " << ::Name(GetFocusCtrl()));
 }
 
 void LayDes::TemplateGroup(Bar& bar, TempGroup tg)
@@ -854,7 +853,7 @@ void LayDes::Templates(Bar& bar)
 
 void LayDes::RightDown(Point p, dword keyflags)
 {
-	if(currentlayout < 0 || HasCapture()) return;
+	if(IsNull(currentlayout) || HasCapture()) return;
 	dragbase = Normalize(p);
 	MenuBar menu;
 	menu.MaxIconSize(Size(64, 64));
@@ -938,7 +937,7 @@ void  LayDes::ReloadItems()
 
 void  LayDes::Undo()
 {
-	if(currentlayout < 0)
+	if(IsNull(currentlayout))
 		return;
 	if(CurrentLayout().IsUndo()) {
 		CurrentLayout().Undo();
@@ -949,7 +948,7 @@ void  LayDes::Undo()
 
 void LayDes::Redo()
 {
-	if(currentlayout < 0)
+	if(IsNull(currentlayout))
 		return;
 	if(CurrentLayout().IsRedo()) {
 		CurrentLayout().Redo();
@@ -960,7 +959,7 @@ void LayDes::Redo()
 
 void LayDes::Cut()
 {
-	if(currentlayout < 0 || cursor.GetCount() == 0)
+	if(IsNull(currentlayout) || cursor.GetCount() == 0)
 		return;
 	Copy();
 	Delete();
@@ -976,9 +975,9 @@ void LayDes::Delete()
 	ReloadItems();
 }
 
-String LayDes::SaveSelection()
+String LayDes::SaveSelection(bool scrolled)
 {
-	return CurrentLayout().Save(cursor) + "\r\n";
+	return CurrentLayout().Save(cursor, scrolled * ZPoint(sb).y) + "\r\n";
 }
 
 LayoutData LayDes::LoadLayoutData(const String& s)
@@ -996,14 +995,14 @@ LayoutData LayDes::LoadLayoutData(const String& s)
 
 void LayDes::Copy()
 {
-	if(currentlayout < 0 || cursor.GetCount() == 0)
+	if(IsNull(currentlayout) || cursor.GetCount() == 0)
 		return;
 	WriteClipboardUnicodeText(ToUnicode(SaveSelection(), charset));
 }
 
 void LayDes::SelectAll()
 {
-	if(currentlayout < 0)
+	if(IsNull(currentlayout))
 		return;
 	LayoutData& l = CurrentLayout();
 	int q = cursor.GetCount() ? cursor.Top() : -1;
@@ -1018,25 +1017,25 @@ void LayDes::SelectAll()
 
 void LayDes::Duplicate()
 {
-	if(currentlayout < 0 || cursor.GetCount() == 0)
+	if(IsNull(currentlayout) || cursor.GetCount() == 0)
 		return;
 	SaveState();
 	LayoutData& l = CurrentLayout();
-	LayoutData d = LoadLayoutData(SaveSelection());
+	LayoutData d = LoadLayoutData(SaveSelection(false));
 	int q = Max(cursor) + 1;
 	cursor.Clear();
 	for(int i = 0; i < d.item.GetCount(); i++) {
 		LayoutItem& m = d.item[i];
-		d.item[i].pos = MakeLogPos(m.pos, CtrlRect(m.pos, l.size).Offseted(20, 20), l.size);
+		d.item[i].pos = MakeLogPos(m.pos, CtrlRect(m.pos, l.size).Offseted(0, 24), l.size);
 		cursor.Add(q + i);
 	}
-	CurrentLayout().item.InsertPick(q, d.item);
+	CurrentLayout().item.InsertPick(q, pick(d.item));
 	ReloadItems();
 }
 
 void LayDes::Matrix()
 {
-	if(currentlayout < 0 || cursor.GetCount() == 0)
+	if(IsNull(currentlayout) || cursor.GetCount() == 0)
 		return;
 	SaveState();
 	if(matrix.Execute() != IDOK)
@@ -1060,7 +1059,7 @@ void LayDes::Matrix()
 					cursor.Add(q + i);
 				}
 				int w = d.item.GetCount();
-				CurrentLayout().item.InsertPick(q, d.item);
+				CurrentLayout().item.InsertPick(q, pick(d.item));
 				q += w;
 			}
 	ReloadItems();
@@ -1068,7 +1067,7 @@ void LayDes::Matrix()
 
 void LayDes::Paste()
 {
-	if(currentlayout < 0)
+	if(IsNull(currentlayout))
 		return;
 	SaveState();
 	try {
@@ -1083,7 +1082,7 @@ void LayDes::Paste()
 		cursor.Clear();
 		for(int i = 0; i < l.item.GetCount(); i++)
 			cursor.Add(i + q);
-		CurrentLayout().item.InsertPick(q, l.item);
+		CurrentLayout().item.InsertPick(q, pick(l.item));
 		ReloadItems();
 	}
 	catch(CParser::Error) {}
@@ -1091,7 +1090,7 @@ void LayDes::Paste()
 
 void LayDes::Align(int type)
 {
-	if(currentlayout < 0 || cursor.GetCount() == 0)
+	if(IsNull(currentlayout) || cursor.GetCount() == 0)
 		return;
 	SaveState();
 	LayoutData& l = CurrentLayout();
@@ -1171,7 +1170,7 @@ void LayDes::Align(int type)
 
 void LayDes::SetSprings(dword s)
 {
-	if(currentlayout < 0)
+	if(IsNull(currentlayout))
 		return;
 	LayoutData& l = CurrentLayout();
 	SaveState();
@@ -1198,7 +1197,7 @@ void LayDes::SetSprings(dword s)
 
 void LayDes::ShowSelection(bool s)
 {
-	if(currentlayout < 0 || cursor.GetCount() == 0)
+	if(IsNull(currentlayout) || cursor.GetCount() == 0)
 		return;
 	LayoutData& l = CurrentLayout();
 	for(int i = 0; i < cursor.GetCount(); i++)
@@ -1210,7 +1209,7 @@ void LayDes::ShowSelection(bool s)
 void LayDes::MoveUp()
 {
 	SaveState();
-	if(currentlayout < 0 || cursor.GetCount() == 0)
+	if(IsNull(currentlayout) || cursor.GetCount() == 0)
 		return;
 	LayoutData& l = CurrentLayout();
 	Vector<int> sc(cursor, 1);
@@ -1232,7 +1231,7 @@ void LayDes::MoveUp()
 void LayDes::MoveDown()
 {
 	SaveState();
-	if(currentlayout < 0 || cursor.GetCount() == 0)
+	if(IsNull(currentlayout) || cursor.GetCount() == 0)
 		return;
 	LayoutData& l = CurrentLayout();
 	Vector<int> sc(cursor, 1);
@@ -1252,9 +1251,91 @@ void LayDes::MoveDown()
 	ReloadItems();
 }
 
+void LayDes::DnDInsert(int line, PasteClip& d)
+{
+	if(GetInternalPtr<ArrayCtrl>(d, "layout-item") == &item && item.IsCursor() &&
+	   !IsNull(currentlayout) && cursor.GetCount() && d.Accept()) {
+		SaveState();
+		LayoutData& l = CurrentLayout();
+		Buffer<bool> sel(l.item.GetCount(), false);
+		int n = l.item.GetCount();
+		l.item.InsertN(n, n);
+		for(int i = 0; i < cursor.GetCount(); i++)
+			sel[cursor[i]] = true;
+		cursor.Clear();
+		int j = n;
+		for(int i = 0; i < line; i++)
+			if(!sel[i])
+				l.item.Swap(j++, i);
+		for(int i = 0; i < n; i++)
+			if(sel[i]) {
+				cursor.Add(j - n);
+				l.item.Swap(j++, i);
+			}
+		for(int i = line; i < n; i++)
+			if(!sel[i])
+				l.item.Swap(j++, i);
+		l.item.Remove(0, n);
+		ReloadItems();
+	}
+}
+
+void LayDes::Drag()
+{
+	item.DoDragAndDrop(InternalClip(item, "layout-item"), item.GetDragSample(), DND_MOVE);
+}
+
+
+bool RectLess(const Rect& a, const Rect& b)
+{
+	int d = min(a.bottom, b.bottom) - max(a.top, b.top);
+	int w = min(a.GetHeight(), b.GetHeight());
+	return d > w / 2 ? a.left < b.left : a.top < b.top;
+}
+
+void LayDes::SortItems()
+{
+	SaveState();
+	if(IsNull(currentlayout) || cursor.GetCount() < 2)
+		return;
+	LayoutData& l = CurrentLayout();
+
+	Sort(cursor);
+	int count = cursor.GetCount();
+
+	Array<LayoutItem> item;
+	Vector<Rect> rect;
+	for(int i = 0; i < count; ++i) {
+		rect.Add(CtrlRect(l.item[cursor[i]].pos, l.size));
+		item.Add() = pick(l.item[cursor[i]]);
+	}
+	l.item.Remove(cursor);
+
+	bool swap = false;
+	do {
+		swap = false;
+		for(int i = 0; i < count - 1; i++)
+			if(RectLess(rect[i + 1], rect[i])) {
+				Swap(rect[i], rect[i + 1]);
+				Swap(item[i], item[i + 1]);
+				swap = true;
+			}
+	}
+	while(swap);
+	
+	int ii = cursor[0];
+	l.item.InsertPick(ii, pick(item));
+	
+	cursor.Clear();
+	for(int i = 0; i < count; i++)
+		cursor.Add(i + ii);
+
+	ReloadItems();
+}
+
 void LayDes::Flush()
 {
-	currentlayout = -1;
+	currentlayout = Null;
 }
 
 LayoutData& LayDes::CurrentLayout()
@@ -1266,112 +1347,198 @@ void LayDes::LayoutCursor()
 {
 	Flush();
 	draghandle = -1;
-	currentlayout = layoutlist.GetCursor();
+	currentlayout = list.GetKey();
 	cursor.Clear();
 	type.Disable();
 	variable.Disable();
 	property.Clear();
-	if(currentlayout < 0)
+	if(IsNull(currentlayout))
 		return;
 	LoadItems();
 	SyncItems();
 	SetSb();
-	SetFocus();
+	if(!search.HasFocus())
+		SetFocus();
 }
 
 void LayDes::PrevLayout()
 {
-	layoutlist.Key(K_UP, 0);
+	list.Key(K_UP, 0);
 }
 
 void LayDes::NextLayout()
 {
-	layoutlist.Key(K_DOWN, 0);
+	list.Key(K_DOWN, 0);
 }
 
 void LayDes::SyncLayoutList()
 {
-	layoutlist.Clear();
-	int i;
-	for(i = 0; i < layout.GetCount(); i++)
-		layoutlist.Add(layout[i].name);
+	int sc = list.GetScroll();
+	int c = list.GetKey();
+	list.Clear();
+	String s = ToUpper((String)~search);
+	for(int i = 0; i < layout.GetCount(); i++)
+		if(ToUpper(layout[i].name).Find(s) >= 0)
+			list.Add(i, layout[i].name);
+	list.ScrollTo(sc);
+	if(!IsNull(c))
+		list.FindSetCursor(c);
 	LayoutCursor();
 }
 
-void LayDes::AddLayout()
+void LayDes::Search()
+{
+	SyncLayoutList();
+	if(!list.IsCursor())
+		list.GoBegin();
+}
+
+void LayDes::GoTo(int key)
+{
+	if(list.FindSetCursor(key))
+		return;
+	search <<= Null;
+	SyncLayoutList();
+	list.FindSetCursor(key);
+}
+
+void LayDes::AddLayout(bool insert)
 {
 	String name;
 	for(;;) {
-		if(!EditText(name, "Добавить новую разметку", "Разметка", CharFilterCid))
+		if(!EditText(name, "Add new layout", "Layout", CharFilterCid))
 			return;
 		CParser p(name);
 		if(p.IsId())
 			break;
-		Exclamation("Неверное  название!");
+		Exclamation("Invalid name!");
 	}
-	int q = layout.GetCount();
-	layout.Add().name = name;
+	int q = list.GetKey();
+	if(!insert || IsNull(q) || !(q >= 0 && q < layout.GetCount()))
+		q = layout.GetCount();
+	layout.Insert(q).name = name;
 	SyncLayoutList();
-	layoutlist.SetCursor(q);
+	GoTo(q);
+	LayoutCursor();
+}
+
+void LayDes::DuplicateLayout()
+{
+	if(IsNull(currentlayout))
+		return;
+	LayoutData& c = CurrentLayout();
+	String name = c.name;
+	for(;;) {
+		if(!EditText(name, "Duplicate layout", "Layout", CharFilterCid))
+			return;
+		CParser p(name);
+		if(p.IsId())
+			break;
+		Exclamation("Invalid name!");
+	}
+	String data = c.Save(0);
+	CParser p(data);
+	int next = currentlayout + 1;
+	LayoutData& d = layout.Insert(next);
+	d.Read(p);
+	d.name = name;
+	SyncLayoutList();
+	GoTo(next);
 	LayoutCursor();
 }
 
 void LayDes::RenameLayout()
 {
-	if(currentlayout < 0)
+	if(IsNull(currentlayout))
 		return;
 	String name = layout[currentlayout].name;
-	if(!EditText(name, "Переименовать разметку", "Разметка", CharFilterCid))
+	if(!EditText(name, "Rename layout", "Layout", CharFilterCid))
 		return;
-	int q = layoutlist.GetCursor();
-	layout[currentlayout].name = name;;
+	int q = list.GetKey();
+	layout[currentlayout].name = name;
 	SyncLayoutList();
-	layoutlist.SetCursor(q);
+	GoTo(q);
 	LayoutCursor();
 }
 
 void LayDes::RemoveLayout()
 {
-	if(currentlayout < 0 || !PromptYesNo("Удалить [* " + DeQtf(layout[currentlayout].name) + "] ?"))
+	if(IsNull(currentlayout) || !PromptYesNo("Remove [* " + DeQtf(layout[currentlayout].name) + "] ?"))
 		return;
-	int q = layoutlist.GetCursor();
+	int q = list.GetKey();
 	layout.Remove(currentlayout);
 	SyncLayoutList();
-	if(q < layoutlist.GetCount())
-		layoutlist.SetCursor(q);
-	else
-	if(layoutlist.GetCount())
-		layoutlist.SetCursor(layoutlist.GetCount() - 1);
+	if(!IsNull(q)) {
+		GoTo(q + 1);
+		if(!list.IsCursor())
+			list.GoEnd();
+	}
 	LayoutCursor();
 }
 
 void LayDes::MoveLayoutUp()
 {
-	int q = layoutlist.GetCursor();
-	if(layoutlist.GetCursor() > 0) {
+	if(!IsNull(search)) {
+		search <<= Null;
+		SyncLayoutList();
+	}
+	int q = list.GetKey();
+	if(q > 0) {
 		layout.Swap(q, q - 1);
-		layoutlist.SwapUp();
+		SyncLayoutList();
+		GoTo(q - 1);
 	}
 }
 
 void LayDes::MoveLayoutDown()
 {
-	int q = layoutlist.GetCursor();
-	if(q >= 0 && q < layoutlist.GetCount() - 1) {
-		layout.Swap(q, q + 1);
-		layoutlist.SwapDown();
+	if(!IsNull(search)) {
+		search <<= Null;
+		SyncLayoutList();
 	}
+	int q = list.GetKey();
+	if(q >= 0 && q < layout.GetCount() - 1) {
+		layout.Swap(q, q + 1);
+		SyncLayoutList();
+		GoTo(q + 1);
+	}
+}
+
+void LayDes::DnDInsertLayout(int line, PasteClip& d)
+{
+	if(GetInternalPtr<ArrayCtrl>(d, "layout") == &list && list.IsCursor() &&
+	   line >= 0 && line <= layout.GetCount() && d.Accept()) {
+		if(!IsNull(search)) {
+			search <<= Null;
+			SyncLayoutList();
+		}
+		int c = list.GetKey();
+		layout.Move(c, line);
+		if(c <= line)
+			line--;
+		SyncLayoutList();
+		GoTo(line);
+	}
+}
+
+void LayDes::DragLayout()
+{
+	list.DoDragAndDrop(InternalClip(list, "layout"), list.GetDragSample(), DND_MOVE);
 }
 
 void LayDes::LayoutMenu(Bar& bar)
 {
-	bar.Add("Добавить новую разметку..", THISBACK(AddLayout));
-	bar.Add("Переименовать разметку..", THISBACK(RenameLayout));
-	bar.Add("Удалить разметку..", THISBACK(RemoveLayout));
+	bool iscursor = list.IsCursor();
+	bar.Add("Add new layout..", THISBACK1(AddLayout, false));
+	bar.Add("Insert new layout..", THISBACK1(AddLayout, true));
+	bar.Add(iscursor, "Duplicate layout..", THISBACK(DuplicateLayout));
+	bar.Add(iscursor, "Rename layout..", THISBACK(RenameLayout));
+	bar.Add(iscursor, "Remove layout..", THISBACK(RemoveLayout));
 	bar.Separator();
-	bar.Add(layoutlist.IsCursor() && layoutlist.GetCursor() > 0,
+	int q = list.GetKey();
+	bar.Add(iscursor && q > 0,
 	        AK_MOVELAYOUTUP, LayImg::MoveUp(), THISBACK(MoveLayoutUp));
-	bar.Add(layoutlist.IsCursor() && layoutlist.GetCursor() < layoutlist.GetCount() - 1,
+	bar.Add(iscursor && q < layout.GetCount() - 1,
 	        AK_MOVELAYOUTDOWN, LayImg::MoveDown(), THISBACK(MoveLayoutDown));
 }
 
@@ -1403,7 +1570,7 @@ void LayDes::FrameFocus()
 
 void LayDes::ItemClick()
 {
-	if(currentlayout < 0)
+	if(IsNull(currentlayout))
 		return;
 	SaveState();
 	if(GetShift()) {
@@ -1419,7 +1586,12 @@ void LayDes::ItemClick()
 	else if(item.IsCursor()) {
 		if(!GetCtrl())
 			cursor.Clear();
-		cursor.Add(item.GetCursor());
+		int c = item.GetCursor();
+		int q = FindIndex(cursor, c);
+		if(q >= 0)
+			cursor.Remove(q);
+		else
+			cursor.Add(c);
 	}
 	SetFocus();
 	SyncItems();
@@ -1429,8 +1601,9 @@ void LayDes::SyncUsc()
 {
 	type.ClearList();
 	for(int i = 0; i < LayoutTypes().GetCount(); i++)
-		type.AddList(LayoutTypes().GetKey(i));
-	if(currentlayout >= 0) {
+		if(LayoutTypes()[i].kind != LAYOUT_SUBCTRL)
+			type.AddList(LayoutTypes().GetKey(i));
+	if(!IsNull(currentlayout)) {
 		LayoutData& d = CurrentLayout();
 		for(int i = 0; i < d.item.GetCount(); i++)
 			d.item[i].Invalidate();
@@ -1440,7 +1613,7 @@ void LayDes::SyncUsc()
 
 void LayDes::TypeEdit()
 {
-	if(currentlayout < 0 || cursor.GetCount() == 0)
+	if(IsNull(currentlayout) || cursor.GetCount() == 0)
 		return;
 	LayoutData& l = CurrentLayout();
 	for(int i = 0; i < cursor.GetCount(); i++) {
@@ -1461,7 +1634,7 @@ void LayDes::TypeEdit()
 
 void LayDes::VariableEdit()
 {
-	if(currentlayout < 0 || cursor.GetCount() == 0)
+	if(IsNull(currentlayout) || cursor.GetCount() == 0)
 		return;
 	LayoutData& l = CurrentLayout();
 	LayoutItem& m = l.item[cursor.Top()];
@@ -1478,11 +1651,20 @@ static int RoundStep(int org, int d, int g)
 	return d ? itimesfloor(org + d * g + (d > 0 ? 0 : g - 1), g) - org : 0;
 }
 
+bool LayDes::DoHotKey(dword key)
+{
+	if(key == K_CTRL_F) {
+		search.SetFocus();
+		return true;
+	}
+	return false;
+}
+
 bool LayDes::DoKey(dword key, int count)
 {
 	SaveState();
 	Point move(0, 0);
-	if(currentlayout >= 0 && !cursor.IsEmpty()) {
+	if(!IsNull(currentlayout) && !cursor.IsEmpty()) {
 		switch(key & ~K_CTRL) {
 		case K_SHIFT_LEFT:   move.x = -1; break;
 		case K_SHIFT_RIGHT:  move.x = +1; break;
@@ -1538,7 +1720,7 @@ bool LayDes::DoKey(dword key, int count)
 		return true;
 	default:
 		if(key >= ' ' && key < 65536) {
-			if(currentlayout < 0 || cursor.GetCount() == 0)
+			if(IsNull(currentlayout) || cursor.GetCount() == 0)
 				return false;
 			LayoutItem& m = CurrentItem();
 			for(int i = 0; i < m.property.GetCount(); i++)

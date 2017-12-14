@@ -1,4 +1,4 @@
-//$ class TopWindow {
+//$ class Upp::TopWindow {
 public:
 	virtual LRESULT  WindowProc(UINT message, WPARAM wParam, LPARAM lParam);
 
@@ -7,7 +7,6 @@ private:
 	dword       exstyle;
 	HICON       ico, lico;
 
-	void        DeleteIco0();
 	void        DeleteIco();
 	void        CenterRect(HWND owner, int center);
 

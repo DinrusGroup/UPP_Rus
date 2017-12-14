@@ -1,3 +1,5 @@
+#ifdef _WIN32
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //
 // File: MAPIObject.cpp
@@ -14,8 +16,8 @@
 
 // Ported to U++ Framework by Koldo. See License.txt file
 
-#include <MapiUtil.h>
 #include "MAPIEx.h"
+#include <winnls.h>
 
 /////////////////////////////////////////////////////////////
 // MAPIObject
@@ -454,7 +456,7 @@ int MAPIObject::GetAttachmentCount() {
 						}
 						cRows = pRows->cRows;
 						ulCount += cRows;
-						FreeProws(pRows);
+						MAPIEx::FreeProws(pRows);
 					} while(cRows);
 				}
 #endif
@@ -514,7 +516,7 @@ bool MAPIObject::SaveAttachment(LPCTSTR szFolder, int nIndex, LPCTSTR szFileName
 					bResult = attachment.SaveAttachment(strPath);
 				}
 			}
-			FreeProws(pRows);
+			MAPIEx::FreeProws(pRows);
 			if(nIndex >= 0) 
 				break;
 		}
@@ -546,7 +548,7 @@ bool MAPIObject::DeleteAttachment(int nIndex)
 				} else
 					bResult = (Message()->DeleteAttach(pRows->aRow[0].lpProps[PROP_ATTACH_NUM].Value.ul, 
 																		0, NULL, 0) == S_OK);
-				FreeProws(pRows);
+				MAPIEx::FreeProws(pRows);
 				if(!bResult || nIndex == i) 
 					break;
 			}
@@ -627,7 +629,7 @@ bool MAPIObject::SetHTML(const String &strHTML) {
 	} else {
 		// otherwise lets encode it into RTF 
 		const char *szCodePage = "1252"; // default codepage is ANSI - Latin I
-		GetLocaleInfo(LOCALE_SYSTEM_DEFAULT, LOCALE_IDEFAULTANSICODEPAGE, (CHAR*)szCodePage, strlen(szCodePage));
+		GetLocaleInfo(LOCALE_SYSTEM_DEFAULT, LOCALE_IDEFAULTANSICODEPAGE, (CHAR*)szCodePage, (int)strlen(szCodePage));
 
 		String strRTF;
 		strRTF = Format("{\\rtf1\\ansi\\ansicpg%s\\fromhtml1 {\\*\\htmltag1 ", szCodePage);
@@ -741,3 +743,5 @@ bool MAPIObject::SetLastModified(const Time &tm) {
 	SystemTimeToFileTime(&st, &prop.Value.ft);
 	return (m_pItem && m_pItem->SetProps(1, &prop, NULL) == S_OK);
 }
+
+#endif

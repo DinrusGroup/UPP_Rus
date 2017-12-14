@@ -1,9 +1,17 @@
-TOPIC("Controls4U$en-us")
-#include "Controls4U$en-us.tppi"
+TOPIC("About$en-us")
+#include "About$en-us.tppi"
 END_TOPIC
 
-TOPIC("dd$en-us")
-#include "dd$en-us.tppi"
+TOPIC("AboutUpp$en-us")
+#include "AboutUpp$en-us.tppi"
+END_TOPIC
+
+TOPIC("AboutUpp1$en-us")
+#include "AboutUpp1$en-us.tppi"
+END_TOPIC
+
+TOPIC("Controls4U$en-us")
+#include "Controls4U$en-us.tppi"
 END_TOPIC
 
 TOPIC("EditFile$en-us")
@@ -12,10 +20,6 @@ END_TOPIC
 
 TOPIC("EditFileFolder$en-us")
 #include "EditFileFolder$en-us.tppi"
-END_TOPIC
-
-TOPIC("EditFileFolder1$en-us")
-#include "EditFileFolder1$en-us.tppi"
 END_TOPIC
 
 TOPIC("EditFolder$en-us")
@@ -36,6 +40,26 @@ END_TOPIC
 
 TOPIC("Meter$en-us")
 #include "Meter$en-us.tppi"
+END_TOPIC
+
+TOPIC("SliderCtrlX$en-us")
+#include "SliderCtrlX$en-us.tppi"
+END_TOPIC
+
+TOPIC("SliderCtrlX$fr-fr")
+#include "SliderCtrlX$fr-fr.tppi"
+END_TOPIC
+
+TOPIC("SplitterButton$en-us")
+#include "SplitterButton$en-us.tppi"
+END_TOPIC
+
+TOPIC("StarIndicator$en-us")
+#include "StarIndicator$en-us.tppi"
+END_TOPIC
+
+TOPIC("StarIndicator$fr-fr")
+#include "StarIndicator$fr-fr.tppi"
 END_TOPIC
 
 TOPIC("StaticArrow$en-us")

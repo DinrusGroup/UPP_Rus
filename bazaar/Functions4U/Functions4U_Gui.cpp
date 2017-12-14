@@ -1,12 +1,14 @@
 #ifdef flagGUI
 
 #include <CtrlLib/CtrlLib.h>
-
-#include "Functions4U.h"
-#include <plugin/jpg/jpg.h>
 #include <plugin/tif/tif.h>
+#include <plugin/jpg/jpg.h>
 #include <plugin/gif/gif.h>
 #include <plugin/bmp/bmp.h>
+
+#include "Functions4U.h"
+
+NAMESPACE_UPP
 
 Image NativePathIconX(const char *path, bool folder, int flags)
 {
@@ -63,8 +65,10 @@ bool SaveImage(const Image &img, int qualityBpp, const String &fileName, String 
 	    JPGEncoder jpg;	    
 	    if (IsNull(qualityBpp))
 	        qualityBpp = 85;
-	    else if (qualityBpp > 100)
-	        qualityBpp = 100;		// Max 100
+	    else {
+	    	if (qualityBpp > 100)
+	        	qualityBpp = 100;		// Max 100
+	    }
 		jpg.Quality(qualityBpp);	
 		jpg.SaveFile(fileName, img);
 	} else if (ext == ".gif") {
@@ -132,5 +136,16 @@ void DrawRectLine(Draw& w, Rect &r, int lineWidth, const Color &color) {
 	w.DrawLine(r.right, r.bottom, r.left, r.bottom, lineWidth, color);
 	w.DrawLine(r.left, r.bottom, r.left, r.top, lineWidth, color);
 }
+
+int GetEditWidth(const String str) {
+	Font font = StdFont();
+	
+	int ret = 0;
+	for (int i = 0; i < str.GetCount(); ++i)
+		ret += font.GetWidth(str[i]);
+	return ret;
+}
+
+END_UPP_NAMESPACE
 
 #endif

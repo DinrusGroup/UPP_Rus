@@ -1,9 +1,11 @@
 #include "RichEdit.h"
 
-NAMESPACE_UPP
+namespace Upp {
 
 void RichEdit::FinishNF()
 {
+	cursor = clamp(cursor, 0, text.GetLength());
+	anchor = clamp(anchor, 0, text.GetLength());
 	anchorp = text.GetRichPos(anchor);
 	cursorp = text.GetRichPos(cursor);
 	tablesel = 0;
@@ -16,7 +18,9 @@ void RichEdit::FinishNF()
 		}
 		else
 		if(p.table != anchorp.table) {
-			if(text.GetRichPos(anchor, 1).table == 1 && anchor < cursor) {
+			if(anchor == 0 && anchorp.level == 1 && text.GetRichPos(anchor, 1).table == 1 && anchor < cursor) {
+				while(cursor > 0 && cursorp.level) // selection must at at plain text
+					cursorp = text.GetRichPos(--cursor);
 				begtabsel = true;
 				anchor = 0;
 			}
@@ -55,6 +59,7 @@ void RichEdit::FinishNF()
 		sb = 0;
 	else
 		sb.ScrollInto(r.top, r.Height());
+	sb.ScrollInto(r.bottom, 1); // if r.Height is bigger than view height, make sure we rather see the bottom
 	SetZsc();
 	PageY top, bottom;
 	int sell = min(cursor, anchor);
@@ -76,7 +81,7 @@ void RichEdit::FinishNF()
 	SetupRuler();
 	if(modified) {
 		if(useraction)
-			WhenAction();
+			Action();
 	}
 	useraction = modified = false;
 }
@@ -113,7 +118,6 @@ void RichEdit::Move(int newpos, bool select)
 void RichEdit::MoveUpDown(int dir, bool select, int pg)
 {
 	Rect page = pagesz;
-	PageY h = text.GetHeight(pagesz);
 	if(dir > 0 && cursor >= GetLength() && select) {
 		Move(GetLength() + 1, true);
 		return;
@@ -420,14 +424,15 @@ void RichEdit::GotoEntry()
 	GotoType(RichText::INDEXENTRIES, indexentry);
 }
 
-void RichEdit::GotoLabel(const String& lbl)
+bool RichEdit::GotoLabel(const String& lbl)
 {
 	Vector<RichValPos> f = text.GetValPos(pagesz, RichText::LABELS);
 	for(int i = 0; i < f.GetCount(); i++)
 		if(f[i].data == WString(lbl)) {
 			Move(f[i].pos);
-			break;
+			return true;
 		}
+	return false;
 }
 
 void RichEdit::BeginPara()
@@ -449,4 +454,4 @@ void RichEdit::PrevPara()
 	BeginPara();
 }
 
-END_UPP_NAMESPACE
+}

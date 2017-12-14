@@ -1,6 +1,6 @@
 #include "Painter.h"
 
-NAMESPACE_UPP
+namespace Upp {
 
 void BufferPainter::BeginMaskOp()
 {
@@ -41,8 +41,6 @@ void BufferPainter::FinishMask()
 	Buffer<ClippingLine>& cl = clip.Top();
 	for(int y = 0; y < ib.GetHeight(); y++)
 		if(creating || !cl[y].IsEmpty()) {
-			bool full = true;
-			bool empty = true;
 			int  c0 = 0;
 			int  c256 = 0;
 			const RGBA *s = ib[y];
@@ -55,7 +53,6 @@ void BufferPainter::FinishMask()
 					c0++;
 					if(mode == MODE_SUBPIXEL)
 						c0 += 2;
-					full = false;
 				}
 				else
 				if(val == 256) {
@@ -63,7 +60,6 @@ void BufferPainter::FinishMask()
 					c256++;
 					if(mode == MODE_SUBPIXEL)
 						c256 += 2;
-					empty = false;
 				}
 				else {
 					if(c256) t = sSpan(t, 128, c256);
@@ -73,18 +69,17 @@ void BufferPainter::FinishMask()
 						*t++ = val;
 						*t++ = val;
 					}
-					full = empty = false;
 				}
 				s++;
 			}
 			if(c256) t = sSpan(t, 128, c256);
 			if(c0) t = sSpan(t, 0, c0);
 			cl[y].Clear();
-			cl[y].Set(~wb, t - ~wb);
+			cl[y].Set(~wb, int(t - ~wb));
 		}
 	ib = mask.Top();
 	mask.Drop();
 	attr.mask = false;
 }
 
-END_UPP_NAMESPACE
+}

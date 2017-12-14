@@ -1,14 +1,10 @@
 #ifndef __tweb_util__
 #define __tweb_util__
 
-String        WwwFormat(Time tm);
+String        FormatIP(dword _ip);
+String        UrlEncode(const String& s, const char *specials);
 bool          IsSameTextFile(const char *p, const char *q);
 String        StringSample(const char *s, int limit);
-String        FormatIP(dword _ip);
-String        UrlEncode(const String& s);
-String        UrlEncode(const String& s, const char *specials);
-String        UrlDecode(const char *b, const char *e);
-inline String UrlDecode(const String& s)          { return UrlDecode(s.Begin(), s.End() ); }
 String        GetRandomIdent(int length);
 String        OtpEncode(const String& password, const String& otp_key);
 String        EncryptString(const String& password, const String& otp_key);
@@ -18,10 +14,6 @@ String        BinhexEncode(const char *b, const char *e);
 inline String BinhexEncode(const String& data)    { return BinhexEncode(data.Begin(), data.End()); }
 String        BinHexDecode(const char *b, const char *e);
 inline String BinHexDecode(const String& data)    { return BinHexDecode(data.Begin(), data.End()); }
-String        Base64Encode(const char *b, const char *e);
-inline String Base64Encode(const String& data)    { return Base64Encode(data.Begin(), data.End()); }
-String        Base64Decode(const char *b, const char *e);
-inline String Base64Decode(const String& data)    { return Base64Decode(data.Begin(), data.End()); }
 String        ASCII85Encode(const byte *p, int length);
 inline String ASCII85Encode(const String& s)      { return ASCII85Encode(s, s.GetLength()); }
 String        ASCII85Decode(const byte *p, int length);
@@ -61,9 +53,9 @@ public:
 		ASSERT(refcount == 0);
 	}
 
-	void           AddRef() const      { if(this) AtomicInc(refcount); }
-	int            GetRefCount() const { return AtomicXAdd(refcount, 0); }
-	void           Release() const     { if(this && !AtomicDec(refcount)) delete this; }
+	void           AddRef() const      { AtomicInc(refcount); }
+	int            GetRefCount() const { return refcount; }
+	void           Release() const     { if(!AtomicDec(refcount)) delete this; }
 #ifdef REF_DEBUG
 	int            GetAllocIndex() const { return allocindex; }
 #endif//REF_DEBUG
@@ -216,10 +208,14 @@ private:
 
 		VectorMap<String, String> map;
 	};
+	
+	bool case_sensitive;
 
 public:
-	HttpQuery(const Nuller& = Null) : data(Empty())    {}
-	explicit HttpQuery(String url) { data = Empty(); SetURL(url); }
+	HttpQuery(const Nuller& = Null) : data(Empty())    { case_sensitive = false; }
+	explicit HttpQuery(String url) { data = Empty(); case_sensitive = false; SetURL(url); case_sensitive = false; }
+
+	void                   CaseSensitive(bool b = true) { case_sensitive = b; }
 
 	void                   Serialize(Stream& stream);
 

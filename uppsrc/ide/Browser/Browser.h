@@ -16,21 +16,38 @@
 
 class Browser;
 
-void           GC_Cache();
-
 CppBase&       CodeBase();
-void           StartCodeBase();
-void           CodeBaseScan(Stream& s, const String& fn);
+
+struct SourceFileInfo {
+	Time                      time;
+	String                    dependencies_md5sum; // dependencies from other files - usings, initial namespace, macros
+	String                    md5sum; // preprocessing 'fingerprint' to detect changes
+	Vector<int>               depends; // indicies of file this files depends on, for time-check
+	Time                      depends_time;
+	
+	void Serialize(Stream& s);
+
+	SourceFileInfo() { time = Null; depends_time = Null; }
+};
+
+void           NewCodeBase();
+void           ParseSrc(Stream& in, int file, Event<int, const String&> error);
+void           CodeBaseScanFile(Stream& in, const String& fn);
+void           CodeBaseScanFile(const String& fn, bool auto_check);
 void           ClearCodeBase();
+// void           CheckCodeBase();
 void           RescanCodeBase();
 void           SyncCodeBase();
 void           SaveCodeBase();
 bool           ExistsBrowserItem(const String& item);
-void           ReQualifyCodeBase();
+void           FinishCodeBase();
 
-void           CodeBaseScanLay(const String& fn);
-void           ScanLayFile(const char *fn);
-void           ScanSchFile(const char *fn);
+String         PreprocessLayFile(const char *fn);
+Vector<String> PreprocessSchFile(const char *fn);
+String         PreprocessImlFile(const char *fn);
+
+int            GetSourceFileIndex(const String& path);
+String         GetSourceFilePath(int file);
 
 String         MakeCodeRef(const String& scope, const String& item);
 void           SplitCodeRef(const String& ref, String& scope, String& item);
@@ -40,15 +57,10 @@ const CppItem *GetCodeRefItem(const String& ref);
 
 int            GetMatchLen(const char *s, const char *t);
 
-enum { WITHBODY = 33 };
 
-inline Font BrowserFont()
-#ifdef PLATFORM_WIN32
-{ return StdFont(); }
-//{ return Arial(Ctrl::VertLayoutZoom(11)); }
-#else
-{ return Arial(Ctrl::VertLayoutZoom(9)); }
-#endif
+enum WithBodyEnum { WITHBODY = 33 };
+
+inline Font BrowserFont() { return StdFont(); }
 
 struct CppItemInfo : CppItem {
 	String scope;
@@ -56,7 +68,7 @@ struct CppItemInfo : CppItem {
 	bool   overed;
 	int    inherited;
 	int    typei;
-
+	
 	CppItemInfo() { over = overed = virt = false; inherited = line = 0; }
 };
 
@@ -83,19 +95,12 @@ struct ItemTextPart : Moveable<ItemTextPart> {
 	int pari;
 };
 
+Vector<ItemTextPart> ParseItemNatural(const String& name, const String& natural, const String& ptype,
+                                      const String& pname, const String& type, const String& tname,
+                                      const String& ctname, const char *s);
 Vector<ItemTextPart> ParseItemNatural(const String& name, const CppItem& m, const char *natural);
 Vector<ItemTextPart> ParseItemNatural(const CppItemInfo& m);
 Vector<ItemTextPart> ParseItemNatural(const CppItemInfo& m);
-
-struct BrowserFileInfo {
-	Time     time;
-	String   package;
-	String   file;
-
-	BrowserFileInfo() { time = Null; }
-};
-
-ArrayMap<String, BrowserFileInfo>& FileSet();
 
 int GetItemHeight(const CppItem& m, int cx);
 
@@ -104,6 +109,11 @@ enum AdditionalKinds {
 	KIND_INCLUDEFILE_ANY,
 	KIND_INCLUDEFOLDER,
 };
+
+void PaintText(Draw& w, int& x, int y, const char *text,
+               const Vector<ItemTextPart>& n, int starti, int count, bool focuscursor,
+               Color _ink, bool italic);
+void PaintCppItemImage(Draw& w, int& x, int ry, int access, int kind, bool focuscursor);
 
 struct CppItemInfoDisplay : public Display
 {
@@ -133,8 +143,8 @@ struct CodeBrowser {
 	int                    range;
 	ButtonOption           rangebutton[3];
 	ButtonOption           sort;
-	Callback               WhenKeyItem;
-	Callback               WhenClear;
+	Event<>                WhenKeyItem;
+	Event<>                WhenClear;
 	
 	String             GetPm();
 	void               Load();
@@ -160,10 +170,17 @@ struct TopicInfo : Moveable<TopicInfo> {
 	String         path;
 	String         title;
 	Vector<int>    words;
+
+	TopicInfo() {}
+
+	rval_default(TopicInfo);
 };
 
 String          GetTopicPath(const TopicLink& link);
 String          GetTopicPath(const String& link);
+
+extern bool SyncRefsFinished;
+extern bool SyncRefsShowProgress;
 
 void            SyncRefs();
 void            SyncTopicFile(const RichText& text, const String& link, const String& path,
@@ -171,6 +188,8 @@ void            SyncTopicFile(const RichText& text, const String& link, const St
 void            SyncTopicFile(const String& link);
 String          GetTopicTitle(const String& link);
 void            InvalidateTopicInfoPath(const String& path);
+
+bool LegacyRef(String& ref);
 
 Vector<String>  GetRefLinks(const String& ref);
 
@@ -246,6 +265,8 @@ public:
 	virtual void   EditMenu(Bar& menu);
 	virtual Ctrl&  DesignerCtrl()                                   { return *this; }
 	virtual void   SetFocus();
+	virtual void   RestoreEditPos()                                 { editor.SetFocus(); }
+
 
 	virtual bool Key(dword key, int);
 
@@ -262,6 +283,7 @@ protected:
 
 	String            grouppath;
 	String            topicpath;
+	String            singlefilepath;
 
 	static String     lasttemplate;
 	static int        lastlang;
@@ -330,7 +352,7 @@ protected:
 	void   FixTopic();
 
 public:
-	Callback1<Bar&> WhenTemplatesMenu;
+	Event<Bar&> WhenTemplatesMenu;
 
 	enum {
 		TIMEID_AUTOSAVE = Ctrl::TIMEID_COUNT,
@@ -350,7 +372,9 @@ public:
 	void ShowEditor(bool b)                          { editor.Show(b); }
 	bool NewTopicEx(const String& name, const String& create);
 	void Open(const String& grouppath);
+	void OpenFile(const String& path);
 	void GoTo(const String& topic, const String& link, const String& create, bool before);
+	void PersistentFindReplace(bool b)               { editor.PersistentFindReplace(b); }
 	
 	static int  GetSerial();
 

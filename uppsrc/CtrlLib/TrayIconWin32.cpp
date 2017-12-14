@@ -5,12 +5,12 @@
 
 #include <commdlg.h>
 #include <cderr.h>
-#include <ShellApi.h>
+#include <shellapi.h>
 
 #endif
 #endif
 
-NAMESPACE_UPP
+namespace Upp {
 
 
 #ifdef GUI_WIN
@@ -53,12 +53,12 @@ void TrayIcon::Notify(dword msg)
 		nid.flags = NIF_ICON|NIF_MESSAGE|NIF_TIP;
 		if(nid.icon)
 			DestroyIcon(nid.icon);
-		nid.icon = IconWin32(icon);
+		nid.icon = SystemDraw::IconWin32(icon);
 		String stip = ToSystemCharset(tip);
 		int len = min(stip.GetLength(), 125);
 		memcpy(nid.tip, stip, len);
 		nid.tip[len] = 0;
-		BOOL Status = Shell_NotifyIcon(msg, (NOTIFYICONDATA *)&nid);		
+		BOOL Status = Shell_NotifyIcon(msg, (NOTIFYICONDATA *)&nid);
 		// To prevent from Shell_NotifyIcon bugs...
 		// discussed here : http://msdn.microsoft.com/en-us/library/bb762159(v=vs.85).aspx
 		// and here : http://issuetracker.delphi-jedi.org/bug_view_advanced_page.php?bug_id=3747
@@ -172,6 +172,10 @@ void TrayIcon::BalloonTimeout()
 
 LRESULT TrayIcon::WindowProc(UINT message, WPARAM wParam, LPARAM lParam)
 {
+	if(message == WM_QUERYENDSESSION) {
+		Shutdown();
+		return true;
+	}
 	if(message == UM_TASKBAR_)
 		switch(lParam) {
 		case WM_LBUTTONDOWN:
@@ -213,4 +217,4 @@ LRESULT TrayIcon::WindowProc(UINT message, WPARAM wParam, LPARAM lParam)
 #endif
 #endif
 
-END_UPP_NAMESPACE
+}

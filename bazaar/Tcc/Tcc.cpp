@@ -4,7 +4,7 @@ using namespace Upp;
 
 #include "Tcc.h"
 
-#if __unix__
+#if __GNUC__
 #define T_tcc_new				tcc_new
 #define T_tcc_delete			tcc_delete
 #define T_tcc_set_output_type	tcc_set_output_type
@@ -18,6 +18,7 @@ using namespace Upp;
 #define T_tcc_output_file		tcc_output_file
 #endif
 
+int Tcc::numInstances = 0;
 
 #if defined(PLATFORM_WIN32)
 Tcc::Tcc(const char *dllName) {
@@ -29,13 +30,14 @@ Tcc::Tcc(const char *libPath) {
 }
 #endif
 
-#if defined(PLATFORM_WIN32)
+#if defined(COMPILER_MSC)
 void Tcc::Init(const char *dllName)
 #else
 void Tcc::Init(const char *libPath)
 #endif
 {
-#if defined(PLATFORM_WIN32)
+	numInstances++;
+#if defined(COMPILER_MSC)
 	if (dllName == NULL || *dllName == '\0')
 		dllName = "libtcc.dll";
 	hinstLib = LoadLibrary(TEXT(dllName));
@@ -109,13 +111,13 @@ void Tcc::Init(const char *libPath)
     stateTcc = T_tcc_new();
     if (!stateTcc) 
         throw Exc("Tcc can not initialize");
-#if !defined(PLATFORM_WIN32)
+#if __GNUC__
 	if (libPath != NULL)
-		if (*libPath != '\0')
+		if (*libPath != '\0' && GetFileExt(libPath) != ".dll")
 			SetLibPath(libPath);
 #endif
 
-	T_tcc_set_error_func(stateTcc, NULL, Tcc::DefaultErrorHandler);
+	T_tcc_set_error_func(stateTcc, this, Tcc::DefaultErrorHandler);
     errorMsg = "";
     
     SetOutputMemory();
@@ -123,66 +125,69 @@ void Tcc::Init(const char *libPath)
 
 void Tcc::SetOutputExe()			
 {
+	ASSERT(stateTcc);
 	T_tcc_set_output_type(stateTcc, TCC_OUTPUT_EXE);
 	outputMemory = false;
 };
 
 void Tcc::SetOutputMemory()		 
 {
+	ASSERT(stateTcc);
 	T_tcc_set_output_type(stateTcc, TCC_OUTPUT_MEMORY);
 	outputMemory = true;
 };
 	
-
-String Tcc::errorMsg = "";
-int Tcc::initialProgramLines;
-
 void Tcc::DefaultErrorHandler(void* opaque, const char* msg)
 {
-	if (!errorMsg.IsEmpty())
-		errorMsg.Cat('\n');		// When calling Relocate this handle can get more than one error
+	Tcc &tcc = *(Tcc *)opaque;
+	if (!tcc.errorMsg.IsEmpty())
+		tcc.errorMsg.Cat('\n');		// When calling Relocate this handle can get more than one error
 	String message = msg;
 	int linePos = sizeof("Line ")-1;
 	if (message.Left(linePos) == "Line ") {		// Fix the line number in the error message
 		int endLinePos = message.Find(':', linePos+1);
 		int line = atoi(message.Mid(linePos, endLinePos-linePos));
-		message = Format(t_("Line %d"), line-initialProgramLines) + ":" + message.Mid(endLinePos+1);
+		message = Format(t_("Line %d"), line - tcc.initProgramLines) + ":" + message.Mid(endLinePos+1);
 	}
-	errorMsg.Cat(message);
+	tcc.errorMsg.Cat(message);
 }
 
 Tcc::~Tcc()
 {
-	if (stateTcc)
+	numInstances--;
+	if (numInstances == 0 && stateTcc)
 		T_tcc_delete(stateTcc);
-#if defined(PLATFORM_WIN32)	
+
+#if defined(COMPILER_MSC)	
 	if (hinstLib)
 		FreeLibrary(hinstLib);
 #endif
 }
 
-void tcc_throw(char *str)
+void tcc_throw(const char *str)
 {
 	 throw Exc(str);
 }
 
 void Tcc::Compile(const char *my_program)
 {
-	program << 	"// Basic declarations\n"	
-				"typedef int bool;\n"
-				"#define true  1\n"
-				"#define false 0\n"	
-				"#define M_PI	3.1415926535897932\n"		// It does not seem to be in math.h
-				"\n"
-				"void throw(char *str);\n"
-				"\n";
-	initialProgramLines = 0;
+	ASSERT(stateTcc);
+	String initString = "// Basic declarations\n"	
+						"typedef int bool;\n"
+						"#define true  1\n"
+						"#define false 0\n"	
+						"#define M_PI	3.1415926535897932\n"// It does not seem to be in math.h
+						"\n"
+						"void throw(char *str);\n"
+						"\n";
+	initLen = initString.GetCount();
+	initProgramLines = 0;
 	int pos = 0;
-	while((pos = program.Find('\n', pos)) >= 0) {
-		initialProgramLines++;
+	while((pos = initString.Find('\n', pos)) >= 0) {
+		initProgramLines++;
 		pos++;
 	}
-	program << my_program;
+	program = initString + my_program;
 		
     if (T_tcc_compile_string(stateTcc, program) != 0) 
         throw Exc(errorMsg);
@@ -192,6 +197,7 @@ void Tcc::Compile(const char *my_program)
 
 void Tcc::AddSymbol(const char *funName, void *fun)
 {
+	ASSERT(stateTcc);
 	if (!outputMemory) 
 		throw Exc(t_("Not possible to add symbols if output to file is defined"));
 	T_tcc_add_symbol(stateTcc, funName, (unsigned long)fun);
@@ -201,6 +207,7 @@ void Tcc::AddSymbol(const char *funName, void *fun)
 
 void Tcc::Link(const char *fileName)
 {
+	ASSERT(stateTcc);
 	if (outputMemory) {
 		if (fileName)
 			throw Exc(t_("Not possible to get file if output to memory is defined"));
@@ -216,6 +223,7 @@ void Tcc::Link(const char *fileName)
 
 void *Tcc::GetSymbol(const char *funName)
 {
+	ASSERT(stateTcc);
 	if (!outputMemory) 
 		throw Exc(t_("Not possible to get symbols if output to file is defined"));
 	unsigned long val = 0;
@@ -228,15 +236,22 @@ void *Tcc::GetSymbol(const char *funName)
 
 bool Tcc::AddIncludePath(const char *path)
 {
+	ASSERT(stateTcc);
 	bool ret = T_tcc_add_include_path(stateTcc, path) == 0? true: false;
 	if (!errorMsg.IsEmpty())
     	throw Exc(errorMsg);
 	return ret;
 }
+
 bool Tcc::AddLibraryPath(const char *path)
 {
+	ASSERT(stateTcc);
 	bool ret = T_tcc_add_library_path(stateTcc, path) == 0? true: false;
 	if (!errorMsg.IsEmpty())
     	throw Exc(errorMsg);
     return ret;	
+}
+
+String Tcc::GetProgram() {
+	return program.Mid(initLen);
 }

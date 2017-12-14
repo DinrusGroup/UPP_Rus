@@ -2,7 +2,7 @@
 
 #ifdef GUI_WIN
 
-NAMESPACE_UPP
+namespace Upp {
 
 #define LLOG(x)      // LOG(x)
 #define LTIMING(x)   // RTIMING(x)
@@ -144,12 +144,6 @@ void SystemDraw::DrawLineOp(int x1, int y1, int x2, int y2, int width, Color col
 	::LineTo(handle, x2, y2);
 }
 
-void SystemDraw::DrawImageOp(int x, int y, int cx, int cy, const Image& img, const Rect& src, Color color)
-{
-	GuiLock __;
-	StdDrawImage(*this, x, y, cx, cy, img, src, color);
-}
-
 #ifndef PLATFORM_WINCE
 
 void SystemDraw::DrawPolyPolylineOp(const Point *vertices, int vertex_count,
@@ -158,7 +152,7 @@ void SystemDraw::DrawPolyPolylineOp(const Point *vertices, int vertex_count,
 {
 	GuiLock __;
 	ASSERT(count_count > 0 && vertex_count > 0);
-	if(vertex_count < 2 || IsNull(color))
+	if(vertex_count < 2 || IsNull(color) || IsNull(width))
 		return;
 	bool is_xor = !IsNull(doxor);
 	if(is_xor)
@@ -296,6 +290,6 @@ void SystemDraw::DrawEllipseOp(const Rect& r, Color color, int width, Color penc
 	::Ellipse(GetHandle(), r.left, r.top, r.right, r.bottom);
 }
 
-END_UPP_NAMESPACE
+}
 
 #endif

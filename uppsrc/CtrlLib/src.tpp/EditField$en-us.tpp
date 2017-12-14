@@ -17,9 +17,7 @@ trl][3 , ][@(0.0.255)3 private][3 _][*@3;3 TextArrayOps]&]
 [s0;%% &]
 [s2;%% 
 @@image:406&143
-ÄÉ¡ÄóÄÄÄÄÄÄÄÄÄÄ¯ØúÌó¡âÄ∞§êÑØÛ´±ê‚ª±Ö°ΩËÀ∂«Ó‚·ÇÜ›Òÿ·ü°‰±√¸Ö±ÂÿãÇëÜÂ›ËíïŒ™Î§‡∞≥èªΩ
-‡ƒäéÃÖ◊ ÍÓöªÄä±≠î€«ó©≠´˙áßêÏÛ©¥Ôè◊”·øô–»ΩÊ¬°êî§–›»ßÇ©‡æ°§÷ìœÄ™Ù¢ùÖ±Ùßä¿”›ÅÆÛﬂ∂ í
-òã≤≈±ˇ
+(A0EAFwAAAAAAAAAAAHic7ZfBCYAwEASvcyuxEDuxBSE96MtH7uJhgoZd2GEfIeSxwwUx5diLgpFl3egSFU4qpOAwsw+7vUQKDkwF18pumjuACrGtW0eXKa0reqeQ7HMpNG/X0+G/GVBI5kKhkJSkUMgngqngPqFWE88AKvQihTH0p4pAU4Eu89+2SpILMkWx/w==)
 &]
 [s0; &]
 [s9;%% This widget is used whenever there is a type of value that 
@@ -44,9 +42,36 @@ t]([_^Font^ Font]_[*@3 font]_`=_StdFont())&]
 used for edited text, including the standard static frame.&]
 [s3; &]
 [s4; &]
+[s5;:EditField`:`:HighlightText`(Vector`<EditField`:`:Highlight`>`&`): [@(0.0.255) virt
+ual] [@(0.0.255) void]_[* HighlightText]([_^Vector^ Vector]<[_^EditField`:`:Highlight^ Hi
+ghlight]>`&_[*@3 hl])&]
+[s2;%% Provides a chance to change the text color and background 
+for individual characters.&]
+[s3; &]
+[s4; &]
 [s5;:EditField`:`:WhenBar: [_^Callback1^ Callback1]<Bar[@(0.0.255) `&]>_[* WhenBar]&]
 [s2;%% This callback represents the context menu of EditField. The 
 default is StdBar.&]
+[s3; &]
+[s4; &]
+[s5;:EditField`:`:WhenEnter: [_^Callback^ Callback]_[* WhenEnter]&]
+[s2;%% This callback is invoked if user presses Enter key while in 
+EditField. If not empty, EditField also consumes Enter key (so 
+that it is not passed up in Ctrl hierarchy). Default is empty.&]
+[s3; &]
+[s4; &]
+[s5;:EditField`:`:WhenPasteFilter: [_^Callback1^ Callback1]<WString[@(0.0.255) `&]>_[* When
+PasteFilter]&]
+[s2;%% This callback is invoked when Paste operation is performed 
+and can be used to alter the text to be pasted. Default is no 
+change to the text.&]
+[s3; &]
+[s4; &]
+[s5;:EditField`:`:WhenHighlight: [_^Callback1^ Callback1]<[_^Vector^ Vector]<[_^EditField`:`:Highlight^ H
+ighlight]>`&>_[* WhenHighlight]&]
+[s2;%% Called by default implementation of HighlightText. Provides 
+a chance to change the text color and background for individual 
+characters.&]
 [s3; &]
 [s4; &]
 [s5;:EditField`:`:Insert`(int`,const WString`&`): [@(0.0.255) int]_[* Insert]([@(0.0.255) i
@@ -150,8 +175,6 @@ enu])&]
 [s4; &]
 [s5;:EditField`:`:SetText`(const WString`&`): [@(0.0.255) void]_[* SetText]([@(0.0.255) con
 st]_[_^WString^ WString][@(0.0.255) `&]_[*@3 text])&]
-[s5;:EditField`:`:operator`=`(const WString`&`): [@(0.0.255) void]_[* operator`=]([@(0.0.255) c
-onst]_[_^WString^ WString][@(0.0.255) `&]_[*@3 s])&]
 [s2;%% [%- Sets the] [%-*@3 text].&]
 [s3; &]
 [s4; &]
@@ -165,14 +188,7 @@ charset.&]
 [s4; &]
 [s5;:EditField`:`:GetText`(`)const: [@(0.0.255) const]_[_^WString^ WString][@(0.0.255) `&]_
 [* GetText]()_[@(0.0.255) const]&]
-[s5;:EditField`:`:operator const WString`&`(`)const: [* operator_const_WString`&]()_[@(0.0.255) c
-onst]&]
 [s2; Returns the text.&]
-[s3; &]
-[s4; &]
-[s5;:EditField`:`:operator String`(`)const: [* operator_String]()_[@(0.0.255) const]&]
-[s2;%% [%- Returns the text. ]Text is converted to unicode using the 
-default charset.&]
 [s3; &]
 [s4; &]
 [s5;:EditField`:`:GetLength`(`)const: [@(0.0.255) virtual] [@(0.0.255) int]_[* GetLength]()
@@ -197,6 +213,11 @@ _[@(0.0.255) const]&]
 ool]_[*@3 pwd]_`=_[@(0.0.255) true])&]
 [s2;%% Sets the password mode. In password mode all characters are 
 displayed as asterisk. Returns `*this.&]
+[s3; &]
+[s4; &]
+[s5;:EditField`:`:IsPassword`(`)const: [@(0.0.255) bool]_[* IsPassword]()_[@(0.0.255) const
+]&]
+[s2;%% Returns true if password mode is active.&]
 [s3; &]
 [s4; &]
 [s5;:EditField`:`:SetFilter`(int`(`*`)`(int`)`): [_^EditField^ EditField][@(0.0.255) `&]_
@@ -243,10 +264,20 @@ Returns `*this.&]
 [s2; Same as AutoFormat(false).&]
 [s3; &]
 [s4; &]
+[s5;:EditField`:`:IsAutoFormat`(`)const: [@(0.0.255) bool]_[* IsAutoFormat]()_[@(0.0.255) c
+onst]&]
+[s2;%% Returns true is AutoFormat is active.&]
+[s3; &]
+[s4; &]
 [s5;:EditField`:`:SetFont`(Font`): [_^EditField^ EditField][@(0.0.255) `&]_[* SetFont]([_^Font^ F
 ont]_[*@3 `_font])&]
-[s2;%% [%- Sets the ][%-*@3 font]. Returns `*this.&]
+[s2;%% [%- Sets the ][%-*@3 font] of displayed text. Returns `*this.&]
 [s3; &]
+[s4; &]
+[s5;:EditField`:`:SetColor`(Color`): [_^EditField^ EditField][@(0.0.255) `&]_[* SetColor]([_^Color^ C
+olor]_[*@3 c])&]
+[s2;%% [%- Sets the color] of displayed text. Returns `*this.&]
+[s3;%% &]
 [s4; &]
 [s5;:EditField`:`:ClickSelect`(bool`): [_^EditField^ EditField][@(0.0.255) `&]_[* ClickSele
 ct]([@(0.0.255) bool]_[*@3 b]_`=_[@(0.0.255) true])&]
@@ -254,10 +285,20 @@ ct]([@(0.0.255) bool]_[*@3 b]_`=_[@(0.0.255) true])&]
 clicked by mouse. Returns `*this.&]
 [s3; &]
 [s4; &]
+[s5;:EditField`:`:IsClickSelect`(`)const: [@(0.0.255) bool]_[* IsClickSelect]()_[@(0.0.255) c
+onst]&]
+[s2;%% Returns true if ClickSelect is active.&]
+[s3; &]
+[s4; &]
 [s5;:EditField`:`:InitCaps`(bool`): [_^EditField^ EditField][@(0.0.255) `&]_[* InitCaps]([@(0.0.255) b
 ool]_[*@3 b]_`=_[@(0.0.255) true])&]
 [s2; In InitCaps mode, initial letters of entered text are uppercased. 
 Returns `*this.&]
+[s3; &]
+[s4; &]
+[s5;:EditField`:`:IsInitCaps`(`)const: [@(0.0.255) bool]_[* IsInitCaps]()_[@(0.0.255) const
+]&]
+[s2;%% Returns true if InitCaps is active.&]
 [s3; &]
 [s4; &]
 [s5;:EditField`:`:NullText`(const Image`&`,const char`*`,Color`): [_^EditField^ EditFie
@@ -283,6 +324,11 @@ Returns `*this.&]
 nt]_[*@3 mc])&]
 [s2; Limits maximum number of characters to[%%  ][*@3 mc][%% .] Returns 
 `*this.&]
+[s3; &]
+[s4; &]
+[s5;:EditField`:`:GetMaxChars`(`)const: [@(0.0.255) int]_[* GetMaxChars]()_[@(0.0.255) cons
+t]&]
+[s2;%% Returns the maximum number of characters limit set by MaxChars.&]
 [s3; &]
 [s4; &]
 [s5;:EditField`:`:AutoSize`(int`): [_^EditField^ EditField][@(0.0.255) `&]_[* AutoSize]([@(0.0.255) i
@@ -319,10 +365,43 @@ onst]&]
 the right. Left alignment is default.&]
 [s3;%% &]
 [s4; &]
+[s5;:EditField`:`:IsNoBackground`(`)const: [@(0.0.255) bool]_[* IsNoBackground]()_[@(0.0.255) c
+onst]&]
+[s2;%% Returns true if NoBackground is active.&]
+[s3; &]
+[s4; &]
+[s5;:EditField`:`:IsAlignRight`(`)const: [@(0.0.255) bool]_[* IsAlignRight]()_[@(0.0.255) c
+onst]&]
+[s2;%% Returns true if AlignRight is active.&]
+[s3; &]
+[s4; &]
+[s5;:EditField`:`:ShowSpaces`(bool`): [@(0.0.255) bool]_[* ShowSpaces]([@(0.0.255) bool]_[*@3 b
+]_`=_[@(0.0.255) true])&]
+[s2;%% When active, EditField paints blue dots to show spaces.&]
+[s3;%% &]
+[s4; &]
+[s5;:EditField`:`:NoInternalMargin`(bool`): [_^EditField^ EditField][@(0.0.255) `&]_[* NoIn
+ternalMargin]([@(0.0.255) bool]_[*@3 b]_`=_[@(0.0.255) true])&]
+[s2;%% Normally, EditField has small internal margin between frame 
+and edited text. Calling this method with [%-@(0.0.255) true] removes 
+it.&]
+[s3;%% &]
+[s4; &]
 [s5;:EditField`:`:GetChar`(int`)const: [@(0.0.255) virtual] [@(0.0.255) int]_[* GetChar]([@(0.0.255) i
 nt]_[*@3 i])_[@(0.0.255) const]&]
 [s2;%% Returns the character at [%-*@3 i] index.&]
 [s3;%% &]
+[s4; &]
+[s5;:EditField`:`:GetCaretRect`(int`)const: [_^Rect^ Rect]_[* GetCaretRect]([@(0.0.255) int
+]_[*@3 pos])_[@(0.0.255) const]&]
+[s2;%% Returns the caret placement for character [%-*@3 pos] in EditField 
+view coordinates.&]
+[s3;%% &]
+[s4; &]
+[s5;:EditField`:`:GetCaretRect`(`)const: [_^Rect^ Rect]_[* GetCaretRect]()_[@(0.0.255) cons
+t]&]
+[s2;%% Same as GetCaretRect(cursor).&]
+[s3; &]
 [s4; &]
 [s5;:EditField`:`:StyleDefault`(`): [@(0.0.255) static] [@(0.0.255) const]_[_^EditField`:`:Style^ S
 tyle][@(0.0.255) `&]_[* StyleDefault]()&]
@@ -339,5 +418,4 @@ tyle][@(0.0.255) `&]_[* StyleDefault]()&]
 [s1;:EditField`:`:Style`:`:struct: [@(0.0.255)3 struct][3 _][*3 Style][3 _:_][@(0.0.255)3 public
 ][3 _][*@3;3 ChStyle][@(0.0.255)3 <][*3 Style][@(0.0.255)3 >][3 _]&]
 [s9;%% This structure defines the visual style of an EditField.&]
-[s3; &]
-[s0; ]
+[s0; ]]

@@ -1,7 +1,7 @@
-description "Игра \"Пазл\"\377";
+description "Puzzle game\377";
 
 uses
-	Color;
+	CtrlLib;
 
 file
 	Puzzle.cpp,

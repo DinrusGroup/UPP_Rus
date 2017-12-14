@@ -2,9 +2,9 @@
 
 #ifdef GUI_WIN
 
-NAMESPACE_UPP
+namespace Upp {
 
-#define LLOG(x) // LOG(x)
+#define LLOG(x)  // DLOG(x)
 
 int  GetClipboardFormatCode(const char *format_id);
 
@@ -170,6 +170,7 @@ STDMETHODIMP UDropTarget::DragEnter(LPDATAOBJECT pDataObj, DWORD grfKeyState, PO
 		if(fmtetc.ptd)
 			CoTaskMemFree(fmtetc.ptd);
 	}
+	LLOG("DragEnter fmt: " << fmt);
 	fe->Release();
 	DnD(pt, false, pdwEffect, grfKeyState);
 	return NOERROR;
@@ -501,11 +502,11 @@ int Ctrl::DoDragAndDrop(const char *fmts, const Image& sample, dword actions,
 	if(actions & DND_MOVE)
 		dsrc->move = actions & DND_EXACTIMAGE ? sample : MakeDragImage(CtrlCoreImg::DndMove(), CtrlCoreImg::DndMove98(), sample);
 	sDnDSource = this;
-	int level = LeaveGMutexAll();
+	int level = LeaveGuiMutexAll();
 	HRESULT r = DoDragDrop(obj, dsrc,
 	                       (actions & DND_COPY ? DROPEFFECT_COPY : 0) |
 	                       (actions & DND_MOVE ? DROPEFFECT_MOVE : 0), &result);
-	EnterGMutex(level);
+	EnterGuiMutex(level);
 	DWORD re = obj->effect;
 	obj->Release();
 	dsrc->Release();
@@ -537,6 +538,6 @@ UDropTarget *NewUDropTarget(Ctrl *ctrl)
 
 void Ctrl::SetSelectionSource(const char *fmts) {}
 
-END_UPP_NAMESPACE
+}
 
 #endif

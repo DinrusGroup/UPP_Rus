@@ -1,7 +1,7 @@
 #include <Esc/Esc.h>
 
 
-NAMESPACE_UPP
+namespace Upp {
 
 #define LTIMING(x)  // RTIMING(x)
 
@@ -43,8 +43,15 @@ void ESC_to_string(EscEscape& e)
 
 void ESC_to_number(EscEscape& e)
 {
-	if(e[0].IsArray())
-		e = ScanDouble((String)e[0]);
+	if(e[0].IsArray()) {
+		double d = ScanDouble((String)e[0]);
+		if(!IsNull(d)) {
+			if(d <= INT64_MAX && d >= INT64_MIN)
+				e = ScanInt64((String)e[0]);
+			else
+				e = d;
+		}
+	}
 }
 
 void ESC_rand(EscEscape& e)
@@ -126,7 +133,7 @@ void ESC_mid(EscEscape& e)
 	int pos = e.Int(1);
 	int count = e.Int(2);
 	if(pos < 0 || pos + count > e[0].GetCount())
-		e.ThrowError("вне пределов при вызове к 'mid'");
+		e.ThrowError("out of bounds in call to 'mid'");
 	e.ret_val = e[0].ArrayGet(pos, count);
 }
 
@@ -196,17 +203,6 @@ void ESC_OpenFileIn(EscEscape& e)
 
 // ---------------------------
 
-void ESC_sin(EscEscape& e)
-{
-	e = sin(e[0].GetNumber());
-}
-
-void ESC_cos(EscEscape& e)
-{
-	e = cos(e[0].GetNumber());
-}
-
-
 bool IsDate(const EscValue& v)
 {
 	return v.HasNumberField("year") && v.HasNumberField("month") && v.HasNumberField("day");
@@ -240,6 +236,29 @@ void SIC_GetSysTime(EscEscape& e)
 	e = v;
 }
 
+void ESC_ToLower(EscEscape& e)
+{
+	String s = e[0];
+	e = ToLower(s);
+}
+
+void ESC_ToUpper(EscEscape& e)
+{
+	String s = e[0];
+	e = ToUpper(s);
+}
+
+// ---------------------------
+
+void ESC_replace(EscEscape& e)
+{
+	String str = e[0];
+	str.Replace(e[1], e[2]);
+	e = str;
+}
+
+// ---------------------------
+
 void StdLib(ArrayMap<String, EscValue>& global)
 {
 	Escape(global, "is_number(value)", ESC_is_number);
@@ -256,7 +275,12 @@ void StdLib(ArrayMap<String, EscValue>& global)
 	Escape(global, "reverse(array)", ESC_reverse);
 	Escape(global, "sort(array)", ESC_sort);
 	Escape(global, "order(array)", ESC_order);
-
+	
+	Escape(global, "replace(str, find, replace)", ESC_replace);
+	
+	Escape(global, "ToUpper(value)", ESC_ToUpper);
+	Escape(global, "ToLower(value)", ESC_ToLower);
+	
 	Escape(global, "len(x)", ESC_count);
 	Escape(global, "mid(array, pos, count)", ESC_mid);
 	Escape(global, "exists(map, key)", ESC_exists);
@@ -269,8 +293,34 @@ void StdLib(ArrayMap<String, EscValue>& global)
 	Escape(global, "IsDate(x)", SIC_IsDate);
 	Escape(global, "IsTime(x)", SIC_IsTime);
 
-	Escape(global, "sin(value)", ESC_sin);
-	Escape(global, "cos(value)", ESC_cos);
+	#define FN(fn) Escfn(global, #fn "(value)", [](EscEscape& e) { e = fn(e[0].GetNumber()); });
+	
+	FN(sin)
+	FN(cos)
+	FN(tan)
+	FN(asin)
+	FN(acos)
+	FN(atan)
+
+	FN(sinh)
+	FN(cosh)
+	FN(tanh)
+	FN(asinh)
+	FN(acosh)
+	FN(atanh)
+	
+	FN(exp)
+	FN(log)
+	FN(log10)
+	FN(exp2)
+	FN(log2)
+	FN(sqrt)
+	FN(cbrt)
+	
+	#undef FN
+	
+	Escfn(global, "pow(base, exponent)", [](EscEscape& e) { e = pow(e[0].GetNumber(), e[1].GetNumber()); });
+	Escfn(global, "atan2(a, b)", [](EscEscape& e) { e = atan2(e[0].GetNumber(), e[1].GetNumber()); });
 }
 
-END_UPP_NAMESPACE
+}

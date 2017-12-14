@@ -3,49 +3,194 @@
 
 #include <Core/Core.h>
 
-NAMESPACE_UPP
+namespace Upp {
 
-int           GetCppFileIndex(const String& path);
-const String& GetCppFile(int i);
+bool IsCPPFile(const String& file);
+bool IsHFile(const String& path);
 
-enum {
+const char *SkipString(const char *s);
+
+void RemoveComments(String& l, bool& incomment);
+
+String GetStdDefs();
+
+void   SetPPDefs(const String& defs);
+
+const VectorMap<String, String>& GetNamespaceMacros();
+const Index<String>&             GetNamespaceEndMacros();
+
+struct CppMacro : Moveable<CppMacro> {
+	String        param;
+	String        body;
+	byte          md5[16];
+	
+	String Define(const char *s);
+	void   SetUndef()                { body = "\x7f"; }
+	bool   IsUndef() const           { return body[0] == '\x7f' && body[1] == '\0'; }
+
+	String Expand(const Vector<String>& p, const Vector<String>& ep) const;
+
+	void   Serialize(Stream& s);
+	
+	String ToString() const;
+};
+
+enum PPItemType {
+	PP_DEFINES,
+	PP_INCLUDE,
+	PP_USING,
+	PP_NAMESPACE,
+	PP_NAMESPACE_END
+};
+
+struct PPItem {
+	int      type;
+	String   text;
+	int      segment_id;
+	
+	void     Serialize(Stream& s) { s % type % text % segment_id; }
+};
+
+struct PPMacro : Moveable<PPMacro> {
+	CppMacro  macro;
+	int       segment_id;        // a group of macros in single file, between other elements (include, namespace. using, undef...)
+	int       line;              // line in file
+	int       undef_segment_id;  // macro has matching undef in the same file within this segment
+	
+	void   Serialize(Stream& s) { s % macro % segment_id % line % undef_segment_id; }
+	String ToString() const     { return AsString(macro) + " " + AsString(segment_id); }
+	
+	PPMacro()                   { undef_segment_id = 0; }
+};
+
+struct PPFile { // contains "macro extract" of file, only info about macros defined and namespaces
+	Time           filetime;
+	Array<PPItem>  item;
+	Index<String>  includes;
+	Vector<String> keywords;
+	String         md5sum;
+
+	void Parse(Stream& in);
+	void Serialize(Stream& s) { s % filetime % item % includes % keywords % md5sum; }
+	void Dump() const;
+
+private:
+	Vector<int>    ppmacro;   // indicies of macros in sAllMacros
+
+	void CheckEndNamespace(Vector<int>& namespace_block, int level, Md5Stream& md5);
+};
+
+PPMacro            *FindPPMacro(const String& id, Index<int>& segment_id, int& segmenti);
+const     CppMacro *FindMacro(const String& id, Index<int>& segment_id, int& segmenti);
+
+void   PPSync(const String& include_path);
+String GetIncludePath();
+
+void   CleanPP();
+void   SerializePPFiles(Stream& s);
+void   SweepPPFiles(const Index<String>& keep);
+
+String GetSegmentFile(int segment_id);
+
+const PPFile& GetPPFile(const char *path);
+
+void InvalidateFileTimeCache();
+void InvalidateFileTimeCache(const String& path);
+Time GetFileTimeCached(const String& path);
+
+String GetIncludePath(const String& s, const String& filedir);
+bool   IncludesFile(const String& parent_path, const String& header_path);
+
+struct FlatPP {
+	Index<int>    segment_id;
+	Index<String> usings;
+};
+
+const FlatPP& GetFlatPPFile(const char *path); // with #includes resolved
+
+String               NormalizeSourcePath(const String& path, const String& currdir);
+String               NormalizeSourcePath(const String& path);
+
+void                 ClearSources();
+const Index<String>& GetAllSources();
+void                 GatherSources(const String& master_path, const String& path_);
+String               GetMasterFile(const String& file);
+const VectorMap<String, String>& GetAllSourceMasters();
+
+struct Cpp {
+	static Index<String>        kw;
+
+	bool                        incomment;
+	bool                        done;
+	
+	Index<String>               visited;
+
+	Index<int>                  segment_id; // segments of included macros
+	VectorMap<String, PPMacro>  macro; // macros defined
+	int                         std_macros; // standard macros (keywords and trick - fixed)
+	Index<String>               notmacro; // accelerator / expanding helper
+	String                      prefix_macro; // for handling multiline macros
+
+	String                      output; // preprocessed file
+//	Index<String>               usedmacro;
+	Index<String>               namespace_using; // 'using namespace' up to start of file
+	Vector<String>              namespace_stack; // namspace up to start of file
+	
+	Md5Stream                   md5;
+	
+	void   Define(const char *s);
+
+	void   ParamAdd(Vector<String>& param, const char *b, const char *e);
+	String Expand(const char *s);
+	void   DoFlatInclude(const String& header_path);
+	void   Do(const String& sourcefile, Stream& in, const String& currentfile, bool get_macros);
+
+	bool   Preprocess(const String& sourcefile, Stream& in, const String& currentfile,
+	                  bool just_get_macros = false);
+
+	String GetDependeciesMd5(const Vector<String>& m);
+	
+	typedef Cpp CLASSNAME;
+};
+
+enum tk_Keywords {
 	Tmarker_before_first = 255,
 #define CPPID(x)   tk_##x,
 #include "keyword.i"
 #undef  CPPID
 };
 
-enum {
+enum t_Terms {
 	t_eof,
 	t_string = -200,
 	t_integer,
 	t_double,
 	t_character,
-	t_dblcolon,
-	t_mulass,
-	t_divass,
-	t_modass,
-	t_xorass,
-	t_neq,
-	t_dot_asteriks,
-	t_elipsis,
-	t_inc,
-	t_addass,
-	t_dec,
-	t_arrow_asteriks,
-	t_arrow,
-	t_subass,
-	t_and,
-	t_andass,
-	t_or,
-	t_orass,
-	t_eq,
-	t_shl,
-	t_shlass,
-	t_le,
-	t_shr,
-	t_shrass,
-	t_ge,
+	t_dblcolon,       // ::
+	t_mulass,         // *=
+	t_divass,         // /=
+	t_modass,         // %=
+	t_xorass,         // ^=
+	t_neq,            // <>
+	t_dot_asteriks,   // .*
+	t_elipsis,        // ...
+	t_inc,            // ++
+	t_addass,         // +=
+	t_dec,            // -
+	t_arrow_asteriks, // ->*
+	t_arrow,          // ->
+	t_subass,         // -=
+	t_and,            // &
+	t_andass,         // &=
+	t_or,             // |
+	t_orass,          // |=
+	t_eq,             // ==
+	t_shl,            // <<
+	t_shlass,         // <<=
+	t_le,             // <=
+	t_shr,            // >>
+	t_shrass,         // >>=
+	t_ge,             // >=
 	te_integeroverflow,
 	te_badcharacter,
 	te_badstring,
@@ -77,10 +222,8 @@ class Lex {
 	const char *pos;
 
 	Index<String> id;
-	Index<int>    ignore;
 	int           endkey;
 	int           braceslevel;
-	int           ignore_low, ignore_high;
 
 	struct Term  : Moveable<Term>{
 		const  char *ptr;
@@ -104,8 +247,11 @@ class Lex {
 	void Next();
 	bool Prepare(int pos);
 	int  GetCharacter();
+	void ThrowError(const char *e);
 
 public:
+	Event<const String&> WhenError;
+
 	struct Grounding {};
 
 	int         Code(int pos = 0);
@@ -133,14 +279,17 @@ public:
 	void        EndBody()                   { body--; }
 	void        ClearBody()                 { body = 0; }
 	bool        IsBody() const              { return body; }
+	bool        IsGrounded()                { Code(); return term.GetCount() && term[0].grounding; }
 	void        SkipToGrounding();
 
 	const char *Pos(int pos = 0);
 	int         operator[](int pos)         { return Code(pos); }
 	operator    int()                       { return Code(0); }
-	void        operator++()                { Get(); }
+	void        operator++()                { return Get(); }
+	
+	void        Dump(int pos);
 
-	void        Init(const char *s, const Vector<String>& ignore);
+	void        Init(const char *s);
 	void        StartStatCollection();
 	const LexSymbolStat & FinishStatCollection();
 
@@ -149,6 +298,8 @@ public:
 
 struct SrcFile {
 	SrcFile();
+	rval_default(SrcFile);
+
 	String      text;
 	Vector<int> linepos;
 	int preprocessorLinesRemoved;
@@ -156,7 +307,9 @@ struct SrcFile {
 	int commentLinesRemoved;
 };
 
-SrcFile PreProcess(Stream& in);
+struct Parser;
+
+SrcFile PreProcess(Stream& in, Parser& parser);
 
 enum Kind {
 	STRUCT,
@@ -177,6 +330,7 @@ enum Kind {
 	ENUM,
 	MACRO,
 	FRIENDCLASS,
+	NAMESPACE,
 };
 
 inline bool IsCppType(int i)
@@ -200,13 +354,13 @@ inline bool IsCppTemplate(int i) {
 	return i == STRUCTTEMPLATE || i >= FUNCTIONTEMPLATE && i <= CLASSFUNCTIONTEMPLATE;
 }
 
-enum {
+enum CppAccess {
 	PUBLIC,
 	PROTECTED,
 	PRIVATE,
 };
 
-enum {
+enum FileTypeEnum {
 	FILE_H,
 	FILE_HPP,
 	FILE_CPP,
@@ -222,17 +376,19 @@ struct CppItem {
 	String         natural;
 	String         type;
 	String         qtype;
-	String         tparam;
+	String         tparam; // complete template parameters list, like '<class T>'
 	String         param;
 	String         pname;
-	String         ptype;
+	String         ptype; // fn: types of parameters, struct: base classes
 	String         qptype;
 	String         tname;
 	String         ctname;
+	String         using_namespaces;
 	byte           access;
 	byte           kind;
 	int16          at;
 	bool           virt;
+
 	bool           decla;
 	bool           lvalue;
 	bool           isptr;
@@ -242,8 +398,7 @@ struct CppItem {
 	int            file;
 	int            line;
 
-	byte           qualify_type, qualify_param;
-	int            serial;
+	bool           qualify;
 
 	bool           IsType() const      { return IsCppType(kind); }
 	bool           IsCode() const      { return IsCppCode(kind); }
@@ -252,42 +407,52 @@ struct CppItem {
 	bool           IsTemplate() const  { return IsCppTemplate(kind); }
 	
 	void           Serialize(Stream& s);
+	
+	void           Dump(Stream& s) const;
+	String         ToString() const;
 
-	CppItem()      { at = decla = virt = false; qualify_type = qualify_param = true; serial = -1; isptr = false; }
+	CppItem()      { at = decla = virt = false; qualify = true; isptr = false; }
 };
 
+String CppItemKindAsString(int kind);
+
 int FindItem(const Array<CppItem>& x, const String& qitem);
-int GetCount(const Array<CppItem>& x, int i);
-int FindNext(const Array<CppItem>& x, int i);
 int FindName(const Array<CppItem>& x, const String& name, int i = 0);
 
 struct CppBase : ArrayMap<String, Array<CppItem> > {
-	int            serial;
-	String         serial_md5;
+	String         types_md5;
+	Index<String>  namespaces;
 
 	bool           IsType(int i) const;
-	
-	CppBase() { serial = 0; }
+	void           Sweep(const Index<int>& keep_file);
+	void           RemoveFiles(const Index<int>& remove_file);
+	void           RemoveFile(int filei);
+
+	void           Dump(Stream& s);
 };
 
-class Parser {
+struct Parser {
 	struct Context {
-		String      scope;
-		String      ctname;
-		Vector<int> tparam;
-		Index<int>  typenames;
-		int         access;
+		String         ns;
+		String         scope;
+		String         ctname;
+		Vector<int>    tparam;
+		Index<int>     typenames;
+		int            access;
+		String         namespace_using;
 
 		void operator<<=(const Context& t);
 
 		String  Dump() const;
+		
+		Context() {}
+		rval_default(Context);
 	};
 
 	struct Decla {
 		bool    s_static;
 		bool    s_extern;
 		bool    s_register;
-		bool    s_auto;
 		bool    s_mutable;
 		bool    s_explicit;
 		bool    s_virtual;
@@ -300,6 +465,7 @@ class Parser {
 		bool    isdestructor;
 		bool    isptr;
 		bool    nofn;
+		bool    oper;
 		bool    castoper;
 
 		String  tnames;
@@ -311,6 +477,9 @@ class Parser {
 
 	struct Decl : Decla {
 		Array<Decl> param;
+		
+		rval_default(Decl);
+		Decl() {}
 	};
 
 	struct RecursionCounter
@@ -330,9 +499,11 @@ class Parser {
 	Lex         lex;
 	int         filei;
 	byte        filetype;
+	String      title;
 	bool        inbody;
+	int         struct_level;
 
-	Callback2<int, const String&> err;
+	Event<int, const String&> err;
 
 	int     lpos, line;
 
@@ -342,28 +513,32 @@ class Parser {
 
 	bool   Key(int code);
 	bool   EatBody();
+	String ResolveAutoType();
+	void   TryLambda();
+	bool   Skipars(int& q);
 
 	void   Cv();
 	String TType();
-	String SimpleType(Decla& d);
-	void   Qualifier();
+	String ReadType(Decla& d, const String& tname, const String& tparam);
+	void   Qualifier(bool override_final = false);
 	void   ParamList(Decl& d);
 	void   Declarator(Decl& d, const char *p);
 	void   EatInitializers();
-	Decl   Type();
 	void   Vars(Array<Decl>& r, const char *p, bool type_def, bool more);
-	Array<Decl> Declaration0(bool l0 = false, bool more = false);
-	Array<Decl> Declaration(bool l0 = false, bool more = false);
+	void   ReadMods(Decla& d);
+	Array<Decl> Declaration0(bool l0, bool more, const String& tname, const String& tparam);
+	Array<Decl> Declaration(bool l0/* = false*/, bool more/* = false*/, const String& tname, const String& tparam);
 	bool   IsParamList(int q);
 	void   Elipsis(Decl& d);
 	Decl&  Finish(Decl& d, const char *p);
+	void   AddNamespace(const String& n, const String& name);
 	bool   Scope(const String& tp, const String& tn);
 
 	String TemplateParams(String& pnames);
 	String TemplateParams();
 	String TemplatePnames();
-	String Name(String& h, bool& castoper);
-	String Name(bool& castoper);
+	String Name(String& h, bool& castoper, bool& oper);
+	String Name(bool& castoper, bool& oper);
 	String Constant();
 	String ReadOper(bool& castoper);
 
@@ -372,12 +547,21 @@ class Parser {
 	void   Check(bool b, const char *err);
 	void   CheckKey(int c);
 
+	void   ClassEnum();
+	bool   IsEnum(int i);
+	bool   UsingNamespace();
 	void   SetScopeCurrent();
 	void   ScopeBody();
+	void   DoNamespace();
 	void   Do();
+	String AnonymousName();
+	String StructDeclaration(const String& tp, const String& tn);
+	void   Enum(bool vars);
 
-	CppItem& Item(const String& scope, const String& item, const String& name, bool impl);
-	CppItem& Item(const String& scope, const String& item, const String& name);
+	CppItem& Item(const String& scope, const String& using_namespace, const String& item,
+	              const String& name, bool impl);
+	CppItem& Item(const String& scope, const String& using_namespace, const String& item,
+	              const String& name);
 
 	CppItem& Fn(const Decl& d, const String& templ, bool body,
 	            const String& tname, const String& tparam);
@@ -388,12 +572,20 @@ class Parser {
 	void   Resume(int bl);
 
 	void   MatchPars();
+	bool   VCAttribute();
 	bool   TryDecl();
 	void   Statement();
 	void   Locals(const String& type);
 	String Tparam(int& q);
+	bool   IsNamespace(const String& scope);
+	
+	friend class Lex; // Fix to make Lex::ThrowError
+
+	typedef Parser CLASSNAME;
 
 public:
+	void AddMacro(int lineno, const String& macro);
+
 	struct FunctionStat
 	{
 		FunctionStat(const String & scope,
@@ -408,7 +600,7 @@ public:
 
 	bool                      IsInBody() const                   { return inbody; }
 
-	typedef Callback1<const FunctionStat &> FnEndCallback;
+	typedef Event<const FunctionStat &> FnEndCallback;
 
 	bool                      dobody;
 	String                    current_scope;
@@ -417,10 +609,13 @@ public:
 	CppItem                   current;
 	int                       currentScopeDepth;
 	int                       maxScopeDepth;
+	
+	String                    namespace_info;
 
 	struct Local : Moveable<Local> {
 		String type;
 		bool   isptr;
+		int    line;
 	};
 
 	VectorMap<String, Local>  local;
@@ -429,19 +624,27 @@ public:
 
 	const SrcFile &getPreprocessedFile() { return file; }
 
-	void   Do(Stream& s, const Vector<String>& ignore, CppBase& base, const String& fn,
-	          Callback2<int, const String&> err, const Vector<String>& typenames = Vector<String>());
+	Vector<String> GetNamespaces() const;
 
-	Parser() : dobody(false) {}
+	void  Do(Stream& in, CppBase& _base, int file, int filetype,
+	         const String& title, Event<int, const String&> _err,
+	         const Vector<String>& typenames,
+	         const Vector<String>& namespace_stack,
+	         const Index<String>& namespace_using);
+
+	Parser() : dobody(false) { 	lex.WhenError = THISBACK(ThrowError); }
 };
 
 String NoTemplatePars(const String& type);
 
-class Scopefo {
-	bool           bvalid, nvalid;
-	Vector<String> baselist;
-	Vector<String> scopes;
-	int            scopei;
+class ScopeInfo { // information about scope
+	bool           bvalid; // baselist is valid
+	bool           nvalid; // scopes is valid
+	Vector<String> baselist; // list of all base classes of scope
+	Vector<String> scopes; // list of scopes (Upp::String::Init::, Upp::String::, Upp::)
+	int            scopei; // index of this scope in base
+	String         usings; // using namespaces contained in scopes
+	
 	void           Bases(int i, Vector<int>& g);
 	void           Init();
 
@@ -450,26 +653,30 @@ public:
 	VectorMap<String, String> cache;
 
 	const Vector<String>& GetBases();
-	const Vector<String>& GetScopes();
-	int                   GetScope() const               { return scopei; }
+	const Vector<String>& GetScopes(const String& usings);
+	int                   GetScope() const              { return scopei; }
 	void                  NoBases()                     { baselist.Clear(); bvalid = true; }
 
-	Scopefo(const CppBase& base, int scopei = -1);
-	Scopefo(int scopei, const CppBase& base);
-	Scopefo(const CppBase& base, const String& scope);
-	Scopefo(const Scopefo& f);
+	ScopeInfo(const CppBase& base, int scopei = -1);
+	ScopeInfo(int scopei, const CppBase& base);
+	ScopeInfo(const CppBase& base, const String& scope);
+	ScopeInfo(const ScopeInfo& f);
 };
 
-String Qualify(const CppBase& base, const String& scope, const String& type);
+String Qualify(const CppBase& base, const String& scope, const String& type, const String& usings);
 void   QualifyTypes(CppBase& base, const String& scope, CppItem& m);
-String QualifyKey(const CppBase& base, const String& scope, const String& type);
+String QualifyKey(const CppBase& base, const String& scope, const String& type, const String& usings);
 
 void   Qualify(CppBase& base);
 
-void Parse(Stream& s, const Vector<String>& ignore, CppBase& base, const String& fn,
-           Callback2<int, const String&> err);
-void Remove(CppBase& base, const Vector<String>& fn);
+const Array<CppItem>& GetTypeItems(const CppBase& codebase, const String& type);
+String                ParseTemplatedType(const String& type, Vector<String>& tparam);
+String                ResolveTParam(const CppBase& codebase, const String& type, const Vector<String>& tparam);
+void                  ResolveTParam(const CppBase& codebase, Vector<String>& type, const Vector<String>& tparam);
 
-END_UPP_NAMESPACE
+Index<String> GetExpressionType(const CppBase& codebase, const Parser& parser, const Vector<String>& xp);
+Vector<String> MakeXP(const char *s);
+
+}
 
 #endif

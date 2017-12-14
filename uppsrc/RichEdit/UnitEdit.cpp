@@ -1,6 +1,6 @@
 #include "RichEdit.h"
 
-NAMESPACE_UPP
+namespace Upp {
 
 double UnitMultiplier(int unit) {
 	static double m[] =
@@ -34,7 +34,7 @@ void UnitEdit::Read(double& d, int& u) const
 	u = unit;
 	d = Null;
 	if(s && *s) {
-		char *e;
+		const char *e;
 		int sign = 1;
 		for(;;) {
 			if(*s == '-' && sgn)
@@ -44,7 +44,10 @@ void UnitEdit::Read(double& d, int& u) const
 				break;
 			s++;
 		}
-		d = sign * strtod(s, &e);
+		d = ScanDouble(s, &e);
+		if(IsNull(d))
+			return;
+		d *= sign;
 		if(e == s) {
 			d = Null;
 			return;
@@ -77,7 +80,7 @@ String UnitEdit::AsText(double d, int unit)
 		return Null;
 	String utxt = UnitText(unit);
 	if(unit == UNIT_POINT)
-		d = floor(4 * d + 0.5) / 4;
+		d = floor(10 * d + 0.5) / 10;
 	return AsString(d, unit == UNIT_DOT ? 0 : unit == UNIT_MM ? 1 : 2) + ' ' + utxt;
 }
 
@@ -104,6 +107,11 @@ bool UnitEdit::Key(dword key, int repcnt)
 	return EditField::Key(key, repcnt);
 }
 
+void UnitEdit::MouseWheel(Point p, int zdelta, dword keyflags)
+{
+	Spin(zdelta < 0 ? -1 : 1);
+}
+
 void UnitEdit::Spin(int delta)
 {
 	double q;
@@ -112,7 +120,7 @@ void UnitEdit::Spin(int delta)
 	if(IsNull(q))
 		q = 0;
 	else {
-		double h;
+		double h = 10;
 		switch(u) {
 		case UNIT_DOT:   h = 10; break;
 		case UNIT_POINT: h = 0.5; break;
@@ -156,4 +164,4 @@ UnitEdit::UnitEdit()
 	WithSgn(false);
 }
 
-END_UPP_NAMESPACE
+}

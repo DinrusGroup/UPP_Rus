@@ -1,6 +1,6 @@
 #include "Sql.h"
 
-NAMESPACE_UPP
+namespace Upp {
 
 void SqlSchema::FlushColumn() {
 	if(column.IsEmpty()) return;
@@ -22,9 +22,16 @@ void SqlSchema::FlushColumn() {
 				Upgrade() << Expand("alter table @t add ") << cn << ";\n";
 				Upgrade() << Expand("alter table @t alter column ") << cd << ";\n";
 			}
-			else if (dialect == SQLITE3)
+			else
+			if(dialect == MY_SQL) {
+				Upgrade() << Expand("alter table @t add ") << cn << ";\n";
+				Upgrade() << Expand("alter table @t modify ") << cd << ";\n";
+			}
+			else
+			if (dialect == SQLITE3 || dialect == MY_SQL)
 				Upgrade() << Expand("alter table @t add ") << cd << ";\n";
-			else if (dialect == PGSQL)
+			else
+			if (dialect == PGSQL)
 				Upgrade() << Expand("alter table @t add \n") << cd << "\n;\n\n";
 			else
 				Upgrade() << Expand("alter table @t add (\n") << cd << "\n);\n\n";
@@ -207,4 +214,4 @@ void operator*(SqlSchema& schema, const SqlInsert& insert) {
 	                    << ";\n";
 }
 
-END_UPP_NAMESPACE
+}

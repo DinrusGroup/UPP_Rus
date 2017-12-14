@@ -6,7 +6,7 @@ struct LngEntry__ {
 void    AddModule(const LngEntry__ *entry, const char *modulename = NULL);
 
 
-const char *t_GetLngString(const char *id);
+const char *t_GetLngString(const char *id);  // Only works with string literals because of caching !
 
 #define     LNG_enUS LNG_('E','N','U','S')
 
@@ -42,7 +42,7 @@ const char *GetENUS(const char *id);
 #define tt_(x)         x
 */
 
-String     GetLngString(const char *id);
+String     GetLngString(const char *id); // Only works with string literals because of caching !
 
 String     GetLngString(int lang, const char *id);
 
@@ -52,5 +52,6 @@ void       SaveLngFile(FileOut& out, int lang, int lang2 = 0);
 bool       LoadLngFile(const char *file);
 
 void       SetCurrentLanguage(int lang);
+int        GetCurrentLanguage();
 
 void       LngSetAdd(const char *id, int lang, const char *txt, bool addid);

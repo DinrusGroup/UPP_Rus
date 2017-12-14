@@ -181,8 +181,10 @@ no_return nasm_assert_failed(const char *, int, const char *);
  * `strcasecmp'.
  */
 #if defined(HAVE_STRCASECMP)
+#undef strcasecmp
 #define nasm_stricmp strcasecmp
 #elif defined(HAVE_STRICMP)
+#undef stricmp
 #define nasm_stricmp stricmp
 #else
 int nasm_stricmp(const char *, const char *);

@@ -14,8 +14,8 @@ TopicEditor::TopicEditor()
 	int dcy = EditField::GetStdHeight(tf);
 	title.SetFont(tf);
 	right.Add(title.HSizePos(2, 2).TopPos(0, dcy));
-	title.Tip("Заголовок Тематики");
-	title.NullText("Заголовок тематики", tf().Italic(), SColorDisabled());
+	title.Tip("Topic title");
+	title.NullText("Topic title", tf().Italic(), SColorDisabled());
 	right.Add(editor.VSizePos(dcy + 4, 0).HSizePos());
 	Add(left_right.Horz(topic, right));
 	left_right.SetPos(1200);
@@ -94,10 +94,10 @@ void TopicEditor::SerializeEditPos(Stream& s)
 void TopicEditor::ExportPdf()
 {
 	FileSel fs;
-	fs.Type("Файлы PDF", "*.pdf")
+	fs.Type("PDF files", "*.pdf")
 	  .AllFilesType()
 	  .DefaultExt("pdf");
-	if(!fs.ExecuteSaveAs("Выходной PDF файл"))
+	if(!fs.ExecuteSaveAs("Output PDF file"))
 		return;
 	Size page = Size(3968, 6074);
 	PdfDraw pdf(page + 400);
@@ -127,16 +127,32 @@ void TopicEditor::ExportGroupPdf()
 	}	
 }
 
+String MakeHtml(const char *title, String css, String body)
+{
+	String h =
+		"<HTML>\r\n"
+	    "<HEAD>\t\n"
+	    "<META HTTP-EQUIV=\"Content-Type\" CONTENT=\"text/html; charset=utf-8\">\t\n"
+	    "<META NAME=\"Generator\" CONTENT=\"U++ HTML Package\">\t\n"
+	    "<TITLE>" + String(title) + "</TITLE>\r\n"
+	;
+	if(!IsNull(css))
+		h << "<STYLE TYPE=\"text/css\"><!--\r\n"
+		  << css << "\r\n-->\r\n</STYLE>\r\n";
+	h << "</HEAD><BODY>" << body << "</BODY>";
+	return h;
+}
+
 void TopicEditor::ExportHTML()
 {
-	String path = SelectFileSaveAs("Файлы HTML\t*.html\nAll files\t*.*");
+	String path = SelectFileSaveAs("HTML files\t*.html\nAll files\t*.*");
 	if(IsNull(path))
 		return;
 	Index<String> css;
 	String html = EncodeHtml(editor.Get(), css,
 	                         VectorMap<String, String>(), VectorMap<String, String>(),
 	                         GetFileFolder(path));
-	SaveFile(path, HtmlHeader((String)~title, AsCss(css)) / html);
+	SaveFile(path, MakeHtml((String)~title, AsCss(css), html));
 //	SaveFile(ForceExt(path, ".css"), AsCss(css));
 }
 
@@ -154,7 +170,7 @@ void TopicEditor::ExportGroupHTML()
 			String html = EncodeHtml(ParseQTF(t.text), css,
 			                         VectorMap<String, String>(), VectorMap<String, String>(),
 			                         dir);
-			html = HtmlHeader(t.title, AsCss(css)) / html;
+			html = MakeHtml(t.title, AsCss(css), html);
 			String path = AppendFileName(dir, GetFileTitle(ff.GetName()) + ".html");
 			if(LoadFile(path) != html)
 				SaveFile(path, html);
@@ -189,29 +205,33 @@ void TopicEditor::AllFonts()
 
 void TopicEditor::TopicMenu(Bar& bar)
 {
-	bar.Add("Новая тематика..", THISBACK(NewTopic))
+	if(IsNull(grouppath))
+		return;
+	bar.Add("New topic..", THISBACK(NewTopic))
 	   .Key(K_CTRL_N).Key(K_ALT_INSERT);
-	bar.Add(topic.IsCursor(), "Переместить тематику..", THISBACK(MoveTopic));
-	bar.Add(topic.IsCursor(), "Удалить тематику", THISBACK(RemoveTopic))
+	bar.Add(topic.IsCursor(), "Move topic..", THISBACK(MoveTopic));
+	bar.Add(topic.IsCursor(), "Delete topic", THISBACK(RemoveTopic))
 	   .Key(K_ALT_DELETE);
 	bar.Separator();
 	bar.Add(topic.IsCursor() && GetFileTitle(topicpath) != "$.tpp",
-	        "Сохранить как шаблон..", THISBACK(SaveAsTemplate));
-	bar.Add(topic.IsCursor(), "Применить шаблонную стилистику..", THISBACK(ApplyStylesheet));
-	bar.Add("Применить к группе шаблонную стилистику..", THISBACK(ApplyStylesheetGroup));
+	        "Save as template..", THISBACK(SaveAsTemplate));
+	bar.Add(topic.IsCursor(), "Apply template stylesheet..", THISBACK(ApplyStylesheet));
+	bar.Add("Apply template stylesheet to group..", THISBACK(ApplyStylesheetGroup));
 	editor.StyleKeysTool(bar);
 }
 
 void TopicEditor::FileBar(Bar& bar)
 {
-	TopicMenu(bar);
-	bar.Separator();
-	bar.Add("Печать", CtrlImg::print(), THISBACK(Print))
+	if(!IsNull(grouppath)) {
+		TopicMenu(bar);
+		bar.Separator();
+	}
+	bar.Add("Print", CtrlImg::print(), THISBACK(Print))
 	   .Key(K_CTRL_P);
-	bar.Add("Вывести в PDF..", THISBACK(ExportPdf));
-	bar.Add("Вывести группу в PDF..", THISBACK(ExportGroupPdf));
-	bar.Add("Вывести в HTML..", THISBACK(ExportHTML));
-	bar.Add("Вывести группу в HTML..", THISBACK(ExportGroupHTML));
+	bar.Add("Export to PDF..", THISBACK(ExportPdf));
+	bar.Add("Export group  to PDF..", THISBACK(ExportGroupPdf));
+	bar.Add("Export to HTML..", THISBACK(ExportHTML));
+	bar.Add("Export group  to HTML..", THISBACK(ExportGroupHTML));
 }
 
 void TopicEditor::EditMenu(Bar& bar)
@@ -228,10 +248,10 @@ void TopicEditor::EditMenu(Bar& bar)
 	bar.Separator();
 	editor.FindReplaceTool(bar);
 	bar.Separator();
-	bar.Add("Все шрифты", THISBACK(AllFonts))
+	bar.Add("All fonts", THISBACK(AllFonts))
 	   .Check(allfonts);
 	bar.Separator();
-	bar.Add("Таблица", THISBACK(TableMenu));
+	bar.Add("Table", THISBACK(TableMenu));
 }
 
 void TopicEditor::FormatMenu(Bar& bar)
@@ -265,7 +285,7 @@ void CreateTopic(const char *fn, int lang, const String& ss)
 
 bool TopicEditor::NewTopicEx(const String& iname, const String& create)
 {
-	TopicDlg<WithNewTopicLayout<TopWindow> > d("Новая тематика");
+	TopicDlg<WithNewTopicLayout<TopWindow> > d("New topic");
 	d.lang <<= lastlang;
 	if(iname.GetCount()) {
 		int i = 0;
@@ -281,7 +301,7 @@ bool TopicEditor::NewTopicEx(const String& iname, const String& create)
 
 	Vector<String> path, name;
 	ListTemplates(path, name);
-	d.tmpl.Add(Null, "<нет>");
+	d.tmpl.Add(Null, "<none>");
 	for(int i = 0; i < path.GetCount(); i++)
 		d.tmpl.Add(path[i], name[i]);
 
@@ -298,7 +318,7 @@ bool TopicEditor::NewTopicEx(const String& iname, const String& create)
 		fn = AppendFileName(grouppath, d.GetName());
 		if(!FileExists(fn))
 			break;
-		if(PromptYesNo("Тематика уже существует.&Хотите переписать её?"))
+		if(PromptYesNo("Topic already exists.&Do you want to rewrite it?"))
 			break;
 	}
 	lasttemplate = ~d.tmpl;
@@ -324,7 +344,7 @@ void TopicEditor::NewTopic()
 void TopicEditor::RemoveTopic()
 {
 	if(!topic.IsCursor() ||
-	   !PromptYesNo("Удалить тематику [* " + DeQtf(topic.GetCurrentName()) + "] ?"))
+	   !PromptYesNo("Delete topic [* " + DeQtf(topic.GetCurrentName()) + "] ?"))
 		return;
 	String p = GetCurrentTopicPath();
 	int q = topic.GetCursor();
@@ -340,7 +360,7 @@ void TopicEditor::RemoveTopic()
 
 void TopicEditor::SaveAsTemplate()
 {
-	TopicDlg<WithSaveTemplateLayout<TopWindow> > d("Сохранить как шаблон");
+	TopicDlg<WithSaveTemplateLayout<TopWindow> > d("Save as template");
 	d.lang <<= lastlang;
 	Vector<String> ud = GetUppDirs();
 	String p = GetCurrentTopicPath();

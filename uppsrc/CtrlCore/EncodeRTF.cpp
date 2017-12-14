@@ -4,7 +4,7 @@
 
 #include <plugin/png/png.h>
 
-NAMESPACE_UPP
+namespace Upp {
 
 static int GetParaHeight(const Array<RichPara::Part>& parts)
 {
@@ -79,7 +79,6 @@ private:
 	byte                  charset;
 	Size                  dot_page_size;
 	Rect                  dot_margins;
-	void                  *context;
 
 	RichPara::CharFormat  charfmt;
 	RichPara::Format      parafmt;
@@ -130,7 +129,6 @@ RTFEncoder::RTFEncoder(Stream& stream_, const RichText& richtext_, byte charset_
 , charset(charset_)
 , dot_page_size(dot_page_size_)
 , dot_margins(dot_margins_)
-, context(context_)
 {
 	for(int i = 0; i < richtext.GetStyleCount(); i++)
 		styleid.Add(richtext.GetStyleId(i));
@@ -191,7 +189,7 @@ void RTFEncoder::GetTxtFaces(const RichTxt& rt)
 			phys_colors.FindAdd(tfmt.gridcolor);
 			for(int r = 0; r < table.GetRows(); r++)
 				for(int c = 0; c < table.GetColumns(); c++) {
-					const RichCell& cell = table.cell[r][c];
+					const RichCell& cell = table[r][c];
 					phys_colors.FindAdd(cell.format.color);
 					phys_colors.FindAdd(cell.format.bordercolor);
 					GetTxtFaces(cell.text);
@@ -254,9 +252,9 @@ bool RTFEncoder::PutCharFormat(const RichPara::CharFormat& cf, const RichPara::C
 	bool f;
 	int t;
 	if(cf.GetFace() != difcf.GetFace())
-		Command("pnf" + pn2, used_faces.Find(cf.GetFace()));
+		Command(("pnf") + pn2, used_faces.Find(cf.GetFace()));
 	if((t = DotPoints(2 * tabs(cf.GetHeight()))) != DotPoints(2 * tabs(difcf.GetHeight())))
-		Command("pnfs" + pn2, t);
+		Command(("pnfs") + pn2, t);
 	if(!pn && dword(t = cf.sscript) != difcf.sscript)
 		Command(t == 0 ? "nosupersub" : t == 1 ? "super" : "sub");
 	if((f = cf.IsBold())          != difcf.IsBold())          Command((f ? "pnb" : "pnb0") + pn2);
@@ -264,9 +262,9 @@ bool RTFEncoder::PutCharFormat(const RichPara::CharFormat& cf, const RichPara::C
 	if((f = cf.IsUnderline())     != difcf.IsUnderline())     Command((f ? "pnul" : "pnul0") + pn2);
 	if((f = cf.IsStrikeout())     != difcf.IsStrikeout())     Command((f ? "pnstrike" : "pnstrike0") + pn2);
 	if((f = cf.capitals)          != difcf.capitals)          Command((f ? "pncaps" : "pncaps0") + pn2);
-	if((t = used_ink.Get(cf.ink)) != used_ink.Get(difcf.ink)) Command("pncf" + pn2, t);
-	if((t = used_paper.Get(cf.paper)) != used_paper.Get(difcf.paper)) Command("pncb" + pn2, t);
-#ifdef PLATFORM_WIN32 //zapoznamkoval Fidler kdyz chtel zkompilovat pod Linuxem...
+	if((t = used_ink.Get(cf.ink)) != used_ink.Get(difcf.ink)) Command(("pncf") + pn2, t);
+	if((t = used_paper.Get(cf.paper)) != used_paper.Get(difcf.paper)) Command(("pncb") + pn2, t);
+#ifdef PLATFORM_WIN32
 	if(!pn && cf.language         != difcf.language)          Command("lang", GetLanguageLCID(cf.language));
 #endif
 	// todo: link
@@ -275,40 +273,17 @@ bool RTFEncoder::PutCharFormat(const RichPara::CharFormat& cf, const RichPara::C
 
 void RTFEncoder::PutObject(const RichObject& object)
 {
-#ifdef GUI_WIN
-#ifndef PLATFORM_WINCE
 	Size log_size = object.GetPhysicalSize(); // / 6;
 	Size out_size = object.GetSize();
 	Size out_size_01mm = iscale(out_size, 254, 60);
 	if(log_size.cx <= 0 || log_size.cy <= 0) log_size = out_size / 6;
-//	Size scale = out_size * 100 / log_size;
 	Group pict_grp(this, "pict");
 	Command("picw", out_size_01mm.cx);
 	Command("pich", out_size_01mm.cy);
 	Command("picwgoal", DotTwips(out_size.cx));
 	Command("pichgoal", DotTwips(out_size.cy));
-//	Command("picscalex", scale.cx);
-//	Command("picscaley", scale.cy);
-
-	if(object.GetTypeName() == "PING") {
-		Command("pngblip");
-		PutBinHex(object.GetData());
-	}
-	else {
-		Command("wmetafile", 8);
-		WinMetaFileDraw wmd(log_size.cx, log_size.cy);
-		object.Paint(wmd, log_size, context);
-		WinMetaFile wmf = wmd.Close();
-		HENHMETAFILE hemf = wmf.GetHEMF();
-		int size = GetWinMetaFileBits(hemf, 0, 0, MM_ANISOTROPIC, ScreenHDC());
-		if(size > 0) {
-			Buffer<byte> buffer(size);
-			GetWinMetaFileBits(hemf, size, buffer, MM_ANISOTROPIC, ScreenHDC());
-			PutBinHex(buffer, size);
-		}
-	}
-#endif
-#endif
+	Command("pngblip");
+	PutBinHex(PNGEncoder().SaveString(object.ToImage(out_size)));
 }
 
 bool RTFEncoder::PutParaFormat(const RichPara::Format& pf, const RichPara::Format& difpf)
@@ -523,7 +498,7 @@ void RTFEncoder::PutTable(const RichTable& table, int nesting, int dot_width)
 		Vector<int> cellindex;
 		Rect dflt_margin(600, 600, 600, 600);
 		for(int c = 0; c < table.GetColumns(); c++) {
-			const RichCell& cell = table.cell[r][c];
+			const RichCell& cell = table[r][c];
 			dflt_margin.left = min(dflt_margin.left, cell.format.margin.left);
 			dflt_margin.top = min(dflt_margin.top, cell.format.margin.top);
 			dflt_margin.right = min(dflt_margin.right, cell.format.margin.right);
@@ -540,7 +515,7 @@ void RTFEncoder::PutTable(const RichTable& table, int nesting, int dot_width)
 		bool istop = (r == 0);
 		bool isbottom = (r == table.GetRows() - 1);
 		for(int c = 0; c < table.GetColumns(); c++) {
-			const RichCell& cell = table.cell[r][c];
+			const RichCell& cell = table[r][c];
 /*
 			if(cell.format.margin.left != dflt_margin.left)
 				rowfmt << "\\clpadl" << DotTwips(cell.format.margin.left) << "\\clpadfl3";
@@ -573,24 +548,25 @@ void RTFEncoder::PutTable(const RichTable& table, int nesting, int dot_width)
 				rowfmt << "\\clcbpat" << phys_colors.Find(cell.format.color);
 			int lb, tb, rb, bb;
 			Color lc, tc, rc, bc;
-			lc = tc = rc = bc = table.format.gridcolor;
-			lb = tb = rb = bb = (!IsNull(table.format.gridcolor) ? table.format.grid : 0);
-			int fw = (!IsNull(table.format.framecolor) ? table.format.frame : 0);
+			const RichTable::Format& tf = table.GetFormat();
+			lc = tc = rc = bc = tf.gridcolor;
+			lb = tb = rb = bb = (!IsNull(tf.gridcolor) ? tf.grid : 0);
+			int fw = (!IsNull(tf.framecolor) ? tf.frame : 0);
 			if(isleft) {
 				lb = fw;
-				lc = table.format.framecolor;
+				lc = tf.framecolor;
 			}
 			if(isright) {
 				rb = fw;
-				rc = table.format.framecolor;
+				rc = tf.framecolor;
 			}
 			if(istop) {
 				tb = fw;
-				tc = table.format.framecolor;
+				tc = tf.framecolor;
 			}
 			if(isbottom) {
 				bb = fw;
-				bc = table.format.framecolor;
+				bc = tf.framecolor;
 			}
 			if(!IsNull(cell.format.bordercolor)) {
 				if(cell.format.border.left >= max(lb, 1)) {
@@ -628,7 +604,7 @@ void RTFEncoder::PutTable(const RichTable& table, int nesting, int dot_width)
 			stream.Put(fmtstr);
 		for(int c = 0; c < cellindex.GetCount(); c++) {
 			int cx = cellindex[c];
-			const RichCell& cell = table.cell[r][cx];
+			const RichCell& cell = table[r][cx];
 			int cell_wd = column_pos[cx + cell.hspan + 1] - column_pos[cx];
 			PutTxt(cell.text, nesting + 1, cell_wd);
 			Command(nesting ? "nestcell" : "cell");
@@ -764,4 +740,4 @@ void RTFEncoder::PutDocument()
 	PutTxt(richtext, 0, dot_page_size.cx - dot_margins.left - dot_margins.right);
 }
 
-END_UPP_NAMESPACE
+}

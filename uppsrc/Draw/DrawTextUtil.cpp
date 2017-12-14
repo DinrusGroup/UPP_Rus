@@ -1,6 +1,6 @@
 #include "Draw.h"
 
-NAMESPACE_UPP
+namespace Upp {
 
 void DrawTextEllipsis(Draw& w, int x, int y, int cx, const wchar *text, const char *ellipsis,
 				      Font font, Color ink, int n)
@@ -11,7 +11,7 @@ void DrawTextEllipsis(Draw& w, int x, int y, int cx, const wchar *text, const ch
 	int dtl = 0;
 	int el = 0;
 	for(s = ellipsis; *s; s++) {
-		dtl += f[(byte)*s];
+		dtl += f[*s];
 		el++;
 	}
 	int l = 0;
@@ -20,7 +20,7 @@ void DrawTextEllipsis(Draw& w, int x, int y, int cx, const wchar *text, const ch
 		l += f[(byte) text[i]];
 		if(l > cx) {
 			while(l + dtl > cx && i > 0) {
-				l -= f[(byte) text[i]];
+				l -= f[text[i]];
 				i--;
 			}
 			i++;
@@ -125,4 +125,4 @@ void DrawTLText(Draw& draw, int x, int y, int cx, const wchar *text,
 	}
 }
 
-END_UPP_NAMESPACE
+}

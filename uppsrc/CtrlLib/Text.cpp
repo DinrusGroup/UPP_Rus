@@ -1,11 +1,13 @@
 #include <CtrlLib/CtrlLib.h>
 
-NAMESPACE_UPP
+#define LTIMING(x)  // RTIMING(x)
+
+namespace Upp {
 
 TextCtrl::TextCtrl()
 {
 	Unicode();
-	undosteps = 10;
+	undosteps = 1000;
 	Clear();
 	undoserial = 0;
 	incundoserial = false;
@@ -18,9 +20,23 @@ TextCtrl::TextCtrl()
 	color[PAPER_NORMAL] = SColorPaper;
 	color[PAPER_READONLY] = SColorFace;
 	color[PAPER_SELECTED] = SColorHighlight;
+	color[WHITESPACE] = Blend(SColorLight, SColorHighlight);
+	color[WARN_WHITESPACE] = Blend(SColorLight, SRed);
 	processtab = true;
 	processenter = true;
 	nobg = false;
+	rectsel = false;
+#ifdef CPU_64
+	max_total = 2047 * 1024 * 1024;
+#else
+#ifdef _DEBUG
+	max_total = 100 * 1024 * 1024;
+#else
+	max_total = 200 * 1024 * 1024;
+#endif
+#endif
+	max_line_len = 100000;
+	truncated = false;
 }
 
 TextCtrl::~TextCtrl() {}
@@ -49,21 +65,22 @@ void TextCtrl::Clear()
 {
 	cline = cpos = 0;
 	total = 0;
+	truncated = false;
 	line.Clear();
 	line.Shrink();
 	ClearLines();
 	line.Add();
 	InsertLines(0, 1);
 	DirtyFrom(0);
-	anchor = -1;
-	cursor = 0;
-	SelectionChanged();
-	Refresh();
 	undo.Clear();
 	redo.Clear();
 	ClearDirty();
+	anchor = -1;
+	cursor = 0;
 	SetSb();
 	PlaceCaret(0);
+	SelectionChanged();
+	Refresh();
 }
 
 void TextCtrl::DirtyFrom(int line) {}
@@ -80,66 +97,230 @@ void TextCtrl::InvalidateLine(int i) {}
 void TextCtrl::SetSb() {}
 void TextCtrl::PlaceCaret(int newcursor, bool sel) {}
 
-void   TextCtrl::CachePos(int pos) {
+int TextCtrl::RemoveRectSelection() { return 0; }
+WString TextCtrl::CopyRectSelection() { return Null; }
+int TextCtrl::PasteRectSelection(const WString& s) { return 0; }
+
+void   TextCtrl::CachePos(int pos)
+{
 	int p = pos;
 	cline = GetLinePos(p);
 	cpos = pos - p;
 }
 
-void   TextCtrl::Load(Stream& s, byte charset) {
+void   TextCtrl::CacheLinePos(int linei)
+{
+	if(linei >= 0 && linei < GetLineCount()) {
+		cpos = GetPos(linei);
+		cline = linei;
+	}
+}
+
+bool   TextCtrl::IsUnicodeCharset(byte charset)
+{
+	return findarg(charset, CHARSET_UTF8, CHARSET_UTF8_BOM, CHARSET_UTF16_LE, CHARSET_UTF16_BE,
+	                        CHARSET_UTF16_LE_BOM, CHARSET_UTF16_BE_BOM) >= 0;
+}
+
+int   TextCtrl::Load(Stream& in, byte charset) {
 	Clear();
 	line.Clear();
 	ClearLines();
-	String ln;
+	StringBuffer ln;
 	total = 0;
 	SetCharset(charset);
-	if(charset == CHARSET_UTF8_BOM && s.GetLeft() >= 3) {
-		int64 pos = s.GetPos();
-		char h[3];
-		if(!(s.Get(h, 3) == 3 && h[0] == 0xEF && h[1] == 0xBB && h[2] == 0xBF))
-			s.Seek(pos);
+	charset = ResolveCharset(charset);
+	truncated = false;
+	if(charset == CHARSET_UTF8_BOM && in.GetLeft() >= 3) {
+		int64 pos = in.GetPos();
+		byte h[3];
+		if(!(in.Get(h, 3) == 3 && h[0] == 0xEF && h[1] == 0xBB && h[2] == 0xBF))
+			in.Seek(pos);
 		charset = CHARSET_UTF8;
 	}
-	while(!s.IsEof()) {
-		int c = s.Get();
-		if(c == '\n') {
-			WString w = ToUnicode(ln, charset);
-			line.Add(w);
-			total += w.GetLength() + 1;
-			ln.Clear();
-			ln.Reserve(1000);
-		}
-		if(c >= ' ' || c == '\t')
-			ln.Cat(c);
+	int be16 = findarg(charset, CHARSET_UTF16_LE_BOM, CHARSET_UTF16_BE_BOM);
+	if(be16 >= 0 && in.GetLeft() >= 2) {
+		int64 pos = in.GetPos();
+		dword h = in.Get16le();
+		if(h != (be16 ? 0xfffe : 0xfeff))
+			in.Seek(pos);
+		charset = be16 ? CHARSET_UTF16_BE : CHARSET_UTF16_LE;
 	}
-	ln.Shrink();
-	WString w = ToUnicode(ln, charset);
-	line.Add(w);
-	total += w.GetLength();
+	bool cr = false;
+	byte b8 = 0;
+	if(charset == CHARSET_UTF16_LE || charset == CHARSET_UTF16_BE) {
+		WStringBuffer wln;
+		for(;;) {
+			int c = charset == CHARSET_UTF16_LE ? in.Get16le() : in.Get16be();
+			if(c < 0) {
+				WString l = wln;
+				line.Add(l);
+				total += l.GetCount();
+				goto finish;
+			}
+			if(c == '\r')
+				cr = true;
+			else
+			if(c == '\n') {
+			truncate_line:
+				WString l = wln;
+				line.Add(l);
+				total += l.GetCount() + 1;
+				wln.Clear();
+			}
+			else {
+				wln.Cat(c);
+				if(wln.GetCount() >= max_line_len)
+					goto truncate_line;
+			}
+		}
+	}
+	else
+		for(;;) {
+			byte h[200];
+			int size;
+			const byte *s = in.GetSzPtr(size);
+			if(size == 0)  {
+				size = in.Get(h, 200);
+				s = h;
+				if(size == 0)
+					break;
+			}
+			const byte *e = s + size;
+			while(s < e) {
+				const byte *b = s;
+				const byte *ee = s + min(size_t(e - s), size_t(max_line_len - ln.GetCount()));
+				{
+					while(s < ee && *s != '\r' && *s != '\n') {
+						b8 |= *s++;
+						while(s < ee && *s >= ' ' && *s < 128) // Interestingly, this speeds things up
+							s++;
+						while(s < ee && *s >= ' ')
+							b8 |= *s++;
+					}
+				}
+				if(b < s) {
+					if(s - b + ln.GetCount() > max_total)
+						ln.Cat((const char *)b, max_total - ln.GetCount());
+					else
+						ln.Cat((const char *)b, (const char *)s);
+				}
+				auto put_ln = [&]() -> bool {
+					int len = charset == CHARSET_UTF8 && (b8 & 0x80) ? utf8len(~ln, ln.GetCount()) : ln.GetCount();
+					if(total + len + 1 > max_total) {
+						truncated = true;
+						return false;
+					}
+					total += len + 1;
+					Ln& l = line.Add();
+					l.len = len;
+					if(charset == CHARSET_UTF8)
+						l.text = ln;
+					else {
+						String h = ln;
+						l.text = ToCharset(CHARSET_UTF8, h, charset);
+					}
+					return true;
+				};
+				while(ln.GetCount() >= max_line_len) {
+					int ei = max_line_len;
+					if(charset == CHARSET_UTF8)
+						while(ei > 0 && ei > max_line_len - 6 && !((byte)ln[ei] < 128 || IsUtf8Lead((byte)ln[ei]))) // break line at whole utf8 codepoint if possible
+							ei--;
+					String nln(~ln + ei, ln.GetCount() - ei);
+					ln.SetCount(ei);
+					truncated = true;
+					if(!put_ln())
+						goto out_of_limit;
+					ln = nln;
+				}
+				if(s < e && *s == '\r') {
+					s++;
+					cr = true;
+				}
+				if(s < e && *s == '\n') {
+					if(!put_ln())
+						goto out_of_limit;
+					ln.Clear();
+					b8 = 0;
+					s++;
+				}
+			}
+		}
+
+out_of_limit:
+	{
+		WString w = ToUnicode(~ln, ln.GetCount(), charset);
+		if(total + w.GetLength() <= max_total) {
+			line.Add(w);
+			total += w.GetLength();
+		}
+	}
+finish:
 	InsertLines(0, line.GetCount());
 	Update();
 	SetSb();
 	PlaceCaret(0);
+	return line.GetCount() > 1 ? cr ? LE_CRLF : LE_LF : LE_DEFAULT;
 }
 
-void   TextCtrl::Save(Stream& s, byte charset, bool crlf) const {
+void   TextCtrl::Save(Stream& s, byte charset, int line_endings) const {
 	if(charset == CHARSET_UTF8_BOM) {
 		static byte bom[] = { 0xEF, 0xBB, 0xBF };
 		s.Put(bom, 3);
 		charset = CHARSET_UTF8;
 	}
+	if(charset == CHARSET_UTF16_LE_BOM) {
+		s.Put16le(0xfeff);
+		charset = CHARSET_UTF16_LE;
+	}
+	if(charset == CHARSET_UTF16_BE_BOM) {
+		s.Put16be(0xfeff);
+		charset = CHARSET_UTF16_BE;
+	}
 	charset = ResolveCharset(charset);
+	String le = "\n";
+#ifdef PLATFORM_WIN32
+	if(line_endings == LE_DEFAULT)
+		le = "\r\n";
+#endif
+	if(line_endings == LE_CRLF)
+		le = "\r\n";
+	int be16 = findarg(charset, CHARSET_UTF16_LE, CHARSET_UTF16_BE);
+	if(be16 >= 0) {
+		String wle;
+		for(int i = 0; i < le.GetCount(); i++) {
+			if(be16)
+				wle.Cat(0);
+			wle.Cat(le[i]);
+			if(!be16)
+				wle.Cat(0);
+		}
+		for(int i = 0; i < line.GetCount(); i++) {
+			if(i)
+				s.Put(wle);
+			WString txt = line[i];
+			const wchar *e = txt.End();
+			if(be16)
+				for(const wchar *w = txt; w != e; w++)
+					s.Put16be(*w);
+			else
+				for(const wchar *w = txt; w != e; w++)
+					s.Put16le(*w);
+		}
+		return;
+	}
 	for(int i = 0; i < line.GetCount(); i++) {
 		if(i)
-			if(crlf)
-				s.PutCrLf();
-			else
-				s.PutEol();
-		String txt = charset == CHARSET_UTF8 ? line[i].text
-		                                     : FromUnicode(line[i], charset);
-		const char *e = txt.End();
-		for(const char *w = txt; w != e; w++)
-			s.Put(*w == DEFAULTCHAR ? '?' : *w);
+			s.Put(le);
+		if(charset == CHARSET_UTF8)
+			s.Put(line[i].text);
+		else {
+			String txt = FromUnicode(line[i], charset);
+			const char *e = txt.End();
+			for(const char *w = txt; w != e; w++)
+				s.Put(*w == DEFAULTCHAR ? '?' : *w);
+		}
 	}
 }
 
@@ -158,7 +339,7 @@ String TextCtrl::Get(byte charset) const
 int TextCtrl::GetInvalidCharPos(byte charset) const
 {
 	int q = 0;
-	if(charset != CHARSET_UTF8 && charset != CHARSET_UTF8_BOM)
+	if(!IsUnicodeCharset(charset))
 		for(int i = 0; i < line.GetCount(); i++) {
 			WString txt = line[i];
 			WString ctxt = ToUnicode(FromUnicode(txt, charset), charset);
@@ -180,16 +361,16 @@ void   TextCtrl::ClearDirty()
 TextCtrl::UndoData TextCtrl::PickUndoData()
 {
 	UndoData data;
-	data.undo = undo;
-	data.redo = redo;
+	data.undo = pick(undo);
+	data.redo = pick(redo);
 	data.undoserial = undoserial;
 	return data;
 }
 
-void TextCtrl::SetPickUndoData(pick_ TextCtrl::UndoData& data)
+void TextCtrl::SetPickUndoData(TextCtrl::UndoData&& data)
 {
-	undo = data.undo;
-	redo = data.redo;
+	undo = pick(data.undo);
+	redo = pick(data.redo);
 	undoserial = data.undoserial;
 	incundoserial = true;
 }
@@ -213,7 +394,7 @@ Value TextCtrl::GetData() const
 String TextCtrl::GetEncodedLine(int i, byte charset) const
 {
 	charset = ResolveCharset(charset);
-	if(charset == CHARSET_UTF8 && charset != CHARSET_UTF8_BOM)
+	if(charset == CHARSET_UTF8)
 		return line[i].text;
 	return FromUnicode(FromUtf8(line[i].text), charset);
 }
@@ -276,12 +457,15 @@ int   TextCtrl::GetPos(int ln, int lpos) const {
 WString TextCtrl::GetW(int pos, int size) const
 {
 	int i = GetLinePos(pos);
-	WString r;
+	WStringBuffer r;
 	for(;;) {
 		if(i >= line.GetCount()) break;
 		WString ln = line[i++];
 		int sz = min(ln.GetLength() - pos, size);
-		r.Cat(ln.Mid(pos, sz));
+		if(pos == 0 && sz == ln.GetLength())
+			r.Cat(ln);
+		else
+			r.Cat(ln.Mid(pos, sz));
 		size -= sz;
 		if(size == 0) break;
 #ifdef PLATFORM_WIN32
@@ -297,10 +481,35 @@ WString TextCtrl::GetW(int pos, int size) const
 
 String TextCtrl::Get(int pos, int size, byte charset) const
 {
+	if(charset == CHARSET_UTF8) {
+		int i = GetLinePos(pos);
+		StringBuffer r;
+		for(;;) {
+			if(i >= line.GetCount()) break;
+			int sz = min(line[i].GetLength() - pos, size);
+			const String& ln = line[i++].text;
+			if(pos == 0 && sz == ln.GetLength())
+				r.Cat(ln);
+			else
+				r.Cat(ln.ToWString().Mid(pos, sz).ToString());
+			size -= sz;
+			if(size == 0) break;
+	#ifdef PLATFORM_WIN32
+			r.Cat('\r');
+	#endif
+			r.Cat('\n');
+			size--;
+			if(size == 0) break;
+			pos = 0;
+		}
+		return r;
+	}
 	return FromUnicode(GetW(pos, size), charset);
 }
 
 int  TextCtrl::GetChar(int pos) const {
+	if(pos < 0 || pos >= GetLength())
+		return 0;
 	int i = GetLinePos(pos);
 	WString ln = line[i];
 	int c = ln.GetLength() == pos ? '\n' : ln[pos];
@@ -315,19 +524,35 @@ int TextCtrl::Insert0(int pos, const WString& txt) {
 	int i = GetLinePos(pos);
 	DirtyFrom(i);
 	int size = 0;
-	WString ln;
+
+	WStringBuffer lnb;
 	Vector<Ln> iln;
-	for(const wchar *s = txt; s < txt.End(); s++)
-		if(*s >= ' ' || *s == '\t') {
-			ln.Cat(*s);
+	const wchar *s = txt;
+	while(s < txt.End())
+		if(*s >= ' ') {
+			const wchar *b = s;
+			while(*s >= ' ') // txt is zero teminated...
+				s++;
+			int sz = int(s - b);
+			lnb.Cat(b, sz);
+			size += sz;
+		}
+		else
+		if(*s == '\t') {
+			lnb.Cat(*s);
 			size++;
+			s++;
 		}
 		else
 		if(*s == '\n') {
-			iln.Add(ln);
+			iln.Add(WString(lnb));
 			size++;
-			ln.Clear();
+			lnb.Clear();
+			s++;
 		}
+		else
+			s++;
+	WString ln = lnb;
 
 	WString l = line[i];
 	if(iln.GetCount()) {
@@ -451,7 +676,7 @@ int TextCtrl::InsertU(int pos, const WString& txt, bool typing) {
 
 void TextCtrl::RemoveU(int pos, int size) {
 	if(size + pos > total)
-		size = total - pos;
+		size = int(total - pos);
 	if(size <= 0) return;
 	if(undosteps) {
 		UndoRec& u = undo.AddTail();
@@ -467,8 +692,10 @@ void TextCtrl::RemoveU(int pos, int size) {
 }
 
 int TextCtrl::Insert(int pos, const WString& _txt, bool typing) {
+	if(pos + _txt.GetCount() > max_total)
+		return 0;
 	WString txt = _txt;
-	if(charset != CHARSET_UNICODE && charset != CHARSET_UTF8_BOM)
+	if(!IsUnicodeCharset(charset))
 		for(int i = 0; i < txt.GetCount(); i++)
 			if(FromUnicode(txt[i], charset) == DEFAULTCHAR)
 				txt.Set(i, '?');
@@ -546,6 +773,7 @@ void TextCtrl::Redo() {
 void  TextCtrl::ClearSelection() {
 	anchor = -1;
 	Refresh();
+	SelectionChanged();
 	WhenSel();
 }
 
@@ -566,7 +794,7 @@ bool   TextCtrl::GetSelection(int& l, int& h) const {
 	else {
 		l = min(anchor, cursor);
 		h = max(anchor, cursor);
-		return true;
+		return !rectsel;
 	}
 }
 
@@ -587,8 +815,12 @@ WString TextCtrl::GetSelectionW() const {
 bool   TextCtrl::RemoveSelection() {
 	int l, h;
 	if(anchor < 0) return false;
-	GetSelection(l, h);
-	Remove(l, h - l);
+	if(IsRectSelection())
+		l = RemoveRectSelection();
+	else {
+		GetSelection(l, h);
+		Remove(l, h - l);
+	}
 	anchor = -1;
 	Refresh();
 	PlaceCaret(l);
@@ -603,7 +835,7 @@ void TextCtrl::RefreshLines(int l1, int l2) {
 }
 
 void TextCtrl::Cut() {
-	if(!IsReadOnly() && IsSelection()) {
+	if(!IsReadOnly() && IsAnySelection()) {
 		Copy();
 		RemoveSelection();
 	}
@@ -611,12 +843,16 @@ void TextCtrl::Cut() {
 
 void TextCtrl::Copy() {
 	int l, h;
-	if(!GetSelection(l, h)) {
+	if(!GetSelection(l, h) && !IsAnySelection()) {
 		int i = GetLine(cursor);
 		l = GetPos(i);
 		h = l + line[i].GetLength() + 1;
 	}
-	WString txt = GetW(l, h - l);
+	WString txt;
+	if(IsRectSelection())
+		txt = CopyRectSelection();
+	else
+		txt = GetW(l, h - l);
 	ClearClipboard();
 	AppendClipboardUnicodeText(txt);
 	AppendClipboardText(txt.ToString());
@@ -628,17 +864,29 @@ void TextCtrl::SelectAll() {
 
 int  TextCtrl::Paste(const WString& text) {
 	if(IsReadOnly()) return 0;
-	RemoveSelection();
-	int n = Insert(cursor, text);
-	PlaceCaret(cursor + n);
+	int n;
+	if(IsRectSelection())
+		n = PasteRectSelection(text);
+	else {
+		RemoveSelection();
+		n = Insert(cursor, text);
+		PlaceCaret(cursor + n);
+	}
 	Refresh();
 	return n;
+}
+
+String TextCtrl::GetPasteText()
+{
+	return Null;
 }
 
 void TextCtrl::Paste() {
 	WString w = ReadClipboardUnicodeText();
 	if(w.IsEmpty())
 		w = ReadClipboardText().ToWString();
+	if(w.IsEmpty())
+		w = GetPasteText().ToWString();
 	Paste(w);
 	Action();
 }
@@ -646,32 +894,41 @@ void TextCtrl::Paste() {
 void TextCtrl::StdBar(Bar& menu) {
 	NextUndo();
 	if(undosteps) {
-		menu.Add(undo.GetCount() && IsEditable(), t_("Отменить"), THISBACK(Undo))
+		menu.Add(undo.GetCount() && IsEditable(), t_("Undo"), CtrlImg::undo(), THISBACK(Undo))
 			.Key(K_ALT_BACKSPACE)
 			.Key(K_CTRL_Z);
-		menu.Add(redo.GetCount() && IsEditable(), t_("Повторить"), THISBACK(Redo))
+		menu.Add(redo.GetCount() && IsEditable(), t_("Redo"), CtrlImg::redo(), THISBACK(Redo))
 			.Key(K_SHIFT|K_ALT_BACKSPACE)
 			.Key(K_SHIFT_CTRL_Z);
 		menu.Separator();
 	}
-	menu.Add(IsEditable() && IsSelection(),
-			t_("Вырезать"), CtrlImg::cut(), THISBACK(Cut))
+	menu.Add(IsEditable() && IsAnySelection(),
+			t_("Cut"), CtrlImg::cut(), THISBACK(Cut))
 		.Key(K_SHIFT_DELETE)
 		.Key(K_CTRL_X);
-	menu.Add(IsSelection(),
-			t_("Копировать"), CtrlImg::copy(), THISBACK(Copy))
+	menu.Add(IsAnySelection(),
+			t_("Copy"), CtrlImg::copy(), THISBACK(Copy))
 		.Key(K_CTRL_INSERT)
 		.Key(K_CTRL_C);
-	menu.Add(IsEditable() && IsClipboardAvailableText(),
-			t_("Вставить"), CtrlImg::paste(), THISBACK(DoPaste))
+	bool canpaste = IsEditable() && IsClipboardAvailableText();
+	menu.Add(canpaste,
+			t_("Paste"), CtrlImg::paste(), THISBACK(DoPaste))
 		.Key(K_SHIFT_INSERT)
 		.Key(K_CTRL_V);
-	menu.Add(IsEditable() && IsSelection(),
-			t_("Стереть"), CtrlImg::remove(), THISBACK(DoRemoveSelection))
+	LineEdit *e = dynamic_cast<LineEdit *>(this);
+	if(e) {
+		menu.Add(canpaste,
+				 t_("Paste in column"), CtrlImg::paste_vert(), callback(e, &LineEdit::DoPasteColumn))
+			.Key(K_ALT_V|K_SHIFT);
+		menu.Add(e->IsRectSelection(),
+				 t_("Sort"), CtrlImg::sort(), callback(e, &LineEdit::Sort));
+	}
+	menu.Add(IsEditable() && IsAnySelection(),
+			t_("Erase"), CtrlImg::remove(), THISBACK(DoRemoveSelection))
 		.Key(K_DELETE);
 	menu.Separator();
 	menu.Add(GetLength(),
-			t_("Выбрать все"), THISBACK(SelectAll))
+			t_("Select all"), CtrlImg::select_all(), THISBACK(SelectAll))
 		.Key(K_CTRL_A);
 }
 
@@ -680,4 +937,4 @@ String TextCtrl::GetSelectionData(const String& fmt) const
 	return GetTextClip(GetSelectionW(), fmt);
 }
 
-END_UPP_NAMESPACE
+}

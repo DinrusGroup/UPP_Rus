@@ -1,15 +1,15 @@
 #ifndef _PolyXML_h_
 #define _PolyXML_h_
 
-#include "ClassFactory.h"
+#include <ClassFactory/ClassFactory.h>
 
-NAMESPACE_UPP;
+NAMESPACE_UPP
 
 template<class T> class WithPolyXML : public WithFactory<T>
 {
 	public:
 		// Xmlizer
-		virtual void Xmlize(XmlIO xml) {};
+		virtual void Xmlize(XmlIO &xml) {};
 		
 		// Check if object is marked as erased so the array don't store it on xml
 		// useful if you don't remove objects from array but just mark them as erased
@@ -32,13 +32,13 @@ template<class T> class PolyXMLUnknown : public T
 		virtual String const &IsA(void) { return CLASSFACTORY_UNKNOWN; }
 		String const &GetUnknownClassName(void) { return tag; }
 		
-		virtual void Xmlize(XmlIO xml)
+		virtual void Xmlize(XmlIO &xml)
 		{
 			if(xml.IsStoring())
 			{
 				XmlNode node = ParseXML(rawXML);
 				xml.Add();
-				xml.Node() = node;
+				xml.Node() = pick(node);
 			}
 		}
 };
@@ -49,38 +49,47 @@ template<class T> class PolyXMLArray : public Array<T>
 {
 	public:
 		// Xmlizer
-		void Xmlize(XmlIO xml);
+		void Xmlize(XmlIO &xml);
 		
-		void Add(const T &data) { Array<T>::Add(data); }
-		void Add(T *data) { Array<T>::Add(data); }
+		T& Add(const T &data) { return Array<T>::Add(data); }
+		T& Add(T *data) { return Array<T>::Add(data); }
+		
+		// progress callback
+		Callback2<int, int>Progress;
 };
 
-template<class T> void PolyXMLArray<T>::Xmlize(XmlIO xml)
+template<class T> void PolyXMLArray<T>::Xmlize(XmlIO &xml)
 {
 	if(xml.IsStoring())
 	{
-		for(int i = 0; i < PolyXMLArray::GetCount(); i++)
+		int count = PolyXMLArray::GetCount();
+		for(int i = 0; i < count; i++)
 		{
+			Progress(i, count);
 			T &data = PolyXMLArray::operator[](i);
 			if(!data.IsErased())
 			{
 				String tag = data.IsA();
-				data.Xmlize(xml.Add(tag));
+				XmlIO io = xml.Add(tag);
+				data.Xmlize(io);
 			}
 		}
 	}
 	else
 	{
 		PolyXMLArray::Clear();
-		for(int i = 0; i < xml->GetCount(); i++)
+		int count = xml->GetCount();
+		for(int i = 0; i < count; i++)
 		{
+			Progress(i, count);
 			if(xml->Node(i).IsTag())
 			{
 				String tag = xml->Node(i).GetTag();
 				T *data = T::CreatePtr(tag);
 				if(data)
 				{
-					data->Xmlize(xml.At(i));
+					XmlIO io = xml.At(i);
+					data->Xmlize(io);
 					Add(data);
 				}
 				else
@@ -105,18 +114,24 @@ template<class K, class T> class PolyXMLArrayMap : public ArrayMap<K, T>
 {
 	public:
 		// Xmlizer
-		void Xmlize(XmlIO xml);
+		void Xmlize(XmlIO &xml);
 		
-		void Add(const K &key, const T &data) { ArrayMap<K, T>::Add(key, data); }
-		void Add(const K &key, T *data) { ArrayMap<K, T>::Add(key, data); }
+		T& Add(const K &key, const T &data) { return ArrayMap<K, T>::Add(key, data); }
+		T& Add(const K &key, T *data) { return ArrayMap<K, T>::Add(key, data); }
+		
+		// progress callback
+		Callback2<int, int>Progress;
 };
 
-template<class K, class T> void PolyXMLArrayMap<K, T>::Xmlize(XmlIO xml)
+template<class K, class T> void PolyXMLArrayMap<K, T>::Xmlize(XmlIO &xml)
 {
 	if(xml.IsStoring())
 	{
-		for(int i = 0; i < PolyXMLArrayMap::GetCount(); i++)
+		int count = PolyXMLArrayMap::GetCount();
+		for(int i = 0; i < count; i++)
 		{
+			Progress(i, count);
+
 			// skip unlinked elements
 			if(ArrayMap<K, T>::IsUnlinked(i))
 				continue;
@@ -127,24 +142,32 @@ template<class K, class T> void PolyXMLArrayMap<K, T>::Xmlize(XmlIO xml)
 			if(data.IsErased())
 				continue;
 			String tag = data.IsA();
-			XmlizeStore(xml.Add("key"), key);
-			XmlizeStore(xml.Add(tag), data);
+			XmlIO ioKey = xml.Add("key");
+			XmlizeStore(ioKey, key);
+			XmlIO ioTag = xml.Add(tag);
+			XmlizeStore(ioTag, data);
 		}
 	}
 	else
 	{
 		PolyXMLArrayMap<K, T>::Clear();
-		for(int i = 0; i < xml->GetCount() - 1 && xml->Node(i).IsTag("key");)
+		int count = xml->GetCount() - 1;
+		for(int i = 0; i < count && xml->Node(i).IsTag("key");)
 		{
+			Progress(i, count);
+
 			if(xml->Node(i).IsTag())
 			{
 				K key;
-				Upp::Xmlize(xml.At(i++), key);
+
+				XmlIO io = xml.At(i++);
+				Upp::Xmlize(io, key);
 				String tag = xml->Node(i).GetTag();
 				T *data = T::CreatePtr(tag);
 				if(data)
 				{
-					data->Xmlize(xml.At(i++));
+					XmlIO io = xml.At(i++);
+					data->Xmlize(io);
 					Add(key, data);
 				}
 				else
@@ -166,17 +189,23 @@ template<class K, class T> class PolyXMLArrayMapOne : public ArrayMap<K, One<T> 
 {
 	public:
 		// Xmlizer
-		void Xmlize(XmlIO xml);
+		void Xmlize(XmlIO &xml);
 		
-		void Add(const K &key, pick_ One<T> &data) { ArrayMap<K, One<T> >::AddPick(key, data); }
+		One<T>& Add(const K &key, pick_ One<T> &data) { return ArrayMap<K, One<T> >::AddPick(key, pick(data)); }
+		
+		// progress callback
+		Callback2<int, int>Progress;
 };
 
-template<class K, class T> void PolyXMLArrayMapOne<K, T>::Xmlize(XmlIO xml)
+template<class K, class T> void PolyXMLArrayMapOne<K, T>::Xmlize(XmlIO &xml)
 {
 	if(xml.IsStoring())
 	{
-		for(int i = 0; i < PolyXMLArrayMapOne::GetCount(); i++)
+		int count = PolyXMLArrayMapOne::GetCount();
+		for(int i = 0; i < count; i++)
 		{
+			Progress(i, count);
+
 			// skip unlinked elements
 			if(ArrayMap<K, One<T> >::IsUnlinked(i))
 				continue;
@@ -187,24 +216,31 @@ template<class K, class T> void PolyXMLArrayMapOne<K, T>::Xmlize(XmlIO xml)
 			if(data->IsErased())
 				continue;
 			String tag = data->IsA();
-			XmlizeStore(xml.Add("key"), key);
-			XmlizeStore(xml.Add(tag), *data);
+			XmlIO ioKey = xml.Add("key");
+			XmlizeStore(ioKey, key);
+			XmlIO ioTag = xml.Add(tag);
+			XmlizeStore(ioTag, *data);
 		}
 	}
 	else
 	{
 		PolyXMLArrayMapOne<K, T>::Clear();
-		for(int i = 0; i < xml->GetCount() - 1 && xml->Node(i).IsTag("key");)
+		int count = xml->GetCount() - 1;
+		for(int i = 0; i < count && xml->Node(i).IsTag("key");)
 		{
+			Progress(i, count);
+
 			if(xml->Node(i).IsTag())
 			{
 				K key;
-				Upp::Xmlize(xml.At(i++), key);
+				XmlIO io = xml.At(i++);
+				Upp::Xmlize(io, key);
 				String tag = xml->Node(i).GetTag();
 				One<T> data = T::CreatePtr(tag);
 				if(data)
 				{
-					data->Xmlize(xml.At(i++));
+					XmlIO io = xml.At(i++);
+					data->Xmlize(io);
 					Add(key, data);
 				}
 				else
@@ -221,6 +257,6 @@ template<class K, class T> void PolyXMLArrayMapOne<K, T>::Xmlize(XmlIO xml)
 	}
 }
 
-END_UPP_NAMESPACE;
+END_UPP_NAMESPACE
 
 #endif

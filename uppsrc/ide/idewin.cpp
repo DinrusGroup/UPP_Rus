@@ -1,4 +1,5 @@
 #include "ide.h"
+#include "ide.h"
 
 #define IMAGECLASS IdeImg
 #define IMAGEFILE  <ide/ide.iml>
@@ -55,17 +56,27 @@ void Ide::ToggleStopOnErrors() {
 
 void Ide::SwapPackagesFiles()
 {
-	wesplit.Zoom(wesplit.GetZoom() == 1 ? -1 : 1);
+	weframe.Show(weframe.IsShown() ? false : true);
+}
+
+void IdePutErrorLine(const String& line)
+{
+	Ide *ide = dynamic_cast<Ide *>(TheIde());
+	if(ide && ide->console.verbosebuild) {
+		ide->SetBottom(Ide::BERRORS);
+		ide->ConsoleRunEnd();
+		ide->ConsoleLine(line, true);
+	}
 }
 
 void Ide::ConsoleClear()
 {
-	GetConsole() <<= Null;
+	console <<= Null;
 }
 
 void Ide::ConsoleCopy()
 {
-	GetConsole().Copy();
+	console.Copy();
 }
 
 void Ide::ConsolePaste()
@@ -74,149 +85,14 @@ void Ide::ConsolePaste()
 	if(!IsNull(s)) {
 		s.Insert(0, '\n');
 		int len = console.GetLength();
-		GetConsole().Insert(len, s.ToWString());
-		GetConsole().SetCursor(len + 1);
+		console.Insert(len, s.ToWString());
+		console.SetCursor(len + 1);
 	}
 }
 
-void Ide::Serialize(Stream& s) {
-	int version = 19;
-	s.Magic(0x1234);
-	s / version;
-	s % main;
-	SerializePlacement(s);
-	s % AnySourceFs();
-	s % BasedSourceFs();
-	s % AnyPackageFs();
-	s % pfsplit;
-	s % wesplit;
-	package.SerializeSettings(s);
-	filelist.SerializeSettings(s);
-	s % editorfont;
-	if(version >= 6)
-		s % tfont;
-	s % veditorfont;
-	s % consolefont;
-	s % font1;
-	s % font2;
-	s % show_status_bar;
-	s % toolbar_in_row;
-	if(version >= 18) {
-		s % filetabs;
-	}
-	else {
-		bool b;
-		s % b;
-		filetabs = b ? AlignedFrame::TOP : -1;
-	}
-	s % auto_enclose;
-	s % show_tabs;
-	s % tabs_icons;
-	if(version >= 18) {
-		s % tabs_crosses;
-	}
-	else {
-		bool b;
-		s % b;
-		tabs_crosses = b ? AlignedFrame::RIGHT : -1;
-	}
-		
-	if(version >= 14) {
-		s % tabs_grouping;
-		s % tabs_serialize;
-	}
-	if(version >= 18) {
-		s % tabs_stacking;
-	}	
-	if(version >= 15)
-		s % force_crlf;
-	s % no_parenthesis_indent;
-	s % hilite_scope;
-	s % hilite_if_endif;
-	s % hilite_bracket;
-	s % hilite_ifdef;
-	if(version >= 16)
-		s % barline;
-	if(version >= 17)
-		s % qtfsel;
-	s % wrap_console_text;
-	s % mute_sounds;
-	s % line_numbers;
-	s % bookmark_pos;
-	s % use_target;
-	s % default_charset;
-	s % header_guards;
-	s % insert_include;
-	String varsname = GetVarsName();
-	s % varsname;
-	s % pocfg;
-	if(s.IsLoading())
-		LoadVars(varsname);
-	SerializeGlobalConfigs(s);
-	doc.Serialize(s);
-	s % right_split;
-	s % splash_screen;
-	s % editor.auto_assist;
-	if(version >= 1)
-		s % editor.commentdp;
-	if(version >= 2) {
-		s % bordercolumn;
-		s % bordercolor;
-	}
-	if(version >= 3) {
-		s % hydra1_threads;
-		if(s.IsLoading())
-			console.SetSlots(hydra1_threads);
-	}
-	if(version >= 4) {
-		s % doc;
-	}
-	if(version >= 5) {
-		s % chstyle;
-	}
-	if(version >= 7)
-	{
-		s % astyle_BracketIndent;
-		s % astyle_NamespaceIndent;
-		s % astyle_BlockIndent;
-		s % astyle_CaseIndent;
-		s % astyle_ClassIndent;
-		s % astyle_LabelIndent;
-		s % astyle_SwitchIndent;
-		s % astyle_PreprocessorIndent;
-		s % astyle_MinInStatementIndentLength;
-		s % astyle_MaxInStatementIndentLength;
-		s % astyle_BreakClosingHeaderBracketsMode;
-		s % astyle_BreakElseIfsMode;
-		s % astyle_BreakOneLineBlocksMode;
-		s % astyle_SingleStatementsMode;
-		s % astyle_BreakBlocksMode;
-		s % astyle_BreakClosingHeaderBlocksMode;
-		s % astyle_BracketFormatMode;
-		s % astyle_ParensPaddingMode;
-		s % astyle_ParensUnPaddingMode;
-		s % astyle_OperatorPaddingMode;
-		s % astyle_EmptyLineFill;
-		s % astyle_TabSpaceConversionMode;
-		s % astyle_TestBox;
-	}
-	if(version >= 8)
-		s % LinuxHostConsole;
-	if(version >= 9)
-		editor.SerializeNavigator(s);
-	if(version >= 10)
-		s % showtime;
-	if(version >= 11) {
-		String d;
-		s % d;
-	}
-	if(version >= 12)
-		s % DiffFs();
-	if(version >= 13)
-		s % sort;
-	if(version >= 19)
-		s % output_per_assembly;
-	s.Magic();
+bool Ide::IsVerbose() const
+{
+	return console.verbosebuild;
 }
 
 void Ide::PutConsole(const char *s)
@@ -226,6 +102,7 @@ void Ide::PutConsole(const char *s)
 
 void Ide::PutVerbose(const char *s)
 {
+	LOG("VERBOSE: " << s);
 	if(console.verbosebuild) {
 		PutConsole(s);
 		console.Sync();
@@ -242,23 +119,23 @@ String Ide::IdeGetOneFile() const
 	return onefile;
 }
 
-int Ide::IdeConsoleExecute(const char *cmdline, Stream *out, const char *envptr, bool quiet)
+int Ide::IdeConsoleExecute(const char *cmdline, Stream *out, const char *envptr, bool quiet, bool noconvert)
 {
-	return console.Execute(cmdline, out, envptr, quiet);
+	return console.Execute(cmdline, out, envptr, quiet, noconvert);
 }
 
-int Ide::IdeConsoleExecuteWithInput(const char *cmdline, Stream *out, const char *envptr, bool quiet)
+int Ide::IdeConsoleExecuteWithInput(const char *cmdline, Stream *out, const char *envptr, bool quiet, bool noconvert)
 {
 	ShowConsole();
 	console.Input(true);
-	int r = console.Execute(cmdline, out, envptr, quiet);
+	int r = console.Execute(cmdline, out, envptr, quiet, noconvert);
 	console.Input(false);
 	return r;
 }
 
-int Ide::IdeConsoleExecute(One<SlaveProcess> process, const char *cmdline, Stream *out, bool quiet)
+int Ide::IdeConsoleExecute(One<AProcess> pick_ process, const char *cmdline, Stream *out, bool quiet)
 {
-	return console.Execute(process, cmdline, out, quiet);
+	return console.Execute(pick(process), cmdline, out, quiet);
 }
 
 int Ide::IdeConsoleAllocSlot()
@@ -271,9 +148,9 @@ bool Ide::IdeConsoleRun(const char *cmdline, Stream *out, const char *envptr, bo
 	return console.Run(cmdline, out, envptr, quiet, slot, key, blitz_count);
 }
 
-bool Ide::IdeConsoleRun(One<SlaveProcess> process, const char *cmdline, Stream *out, bool quiet, int slot, String key, int blitz_count)
+bool Ide::IdeConsoleRun(One<AProcess> pick_ process, const char *cmdline, Stream *out, bool quiet, int slot, String key, int blitz_count)
 {
-	return console.Run(process, cmdline, out, quiet, slot, key, blitz_count);
+	return console.Run(pick(process), cmdline, out, quiet, slot, key, blitz_count);
 }
 
 void Ide::IdeConsoleFlush()
@@ -296,6 +173,17 @@ bool Ide::IdeConsoleWait()
 	return console.Wait();
 }
 
+bool Ide::IdeConsoleWait(int slot)
+{
+	console.Wait(slot);
+	return true;
+}
+
+void Ide::IdeConsoleOnFinish(Event<>  cb)
+{
+	console.OnFinish(cb);
+}
+
 void Ide::IdeSetRight(Ctrl& ctrl)
 {
 	right.Add(ctrl.SizePos());
@@ -314,9 +202,26 @@ bool Ide::IdeIsDebug() const
 	return debugger;
 }
 
+String GetCurrentBuildMethod()
+{
+	Ide *ide = dynamic_cast<Ide *>(TheIde());
+	return ide ? ide->method : String();
+}
+
+String GetCurrentMainPackage()
+{
+	Ide *ide = dynamic_cast<Ide *>(TheIde());
+	return ide ? ide->main : String();
+}
+
+int GetHydraThreads()
+{
+	Ide *ide = dynamic_cast<Ide *>(TheIde());
+	return ide ? ide->hydra1_threads : CPU_Cores();
+}
+
 void Ide::IdeEndDebug()
 {
-	console.Kill();
 	debugger.Clear();
 	debuglock = 0;
 	MakeTitle();
@@ -418,15 +323,16 @@ void Ide::IdeSetBar()
 void Ide::SetupBars()
 {
 	ClearFrames();
-	int r = HorzLayoutZoom(100);
-	int l = HorzLayoutZoom(400);
+	int r = HorzLayoutZoom(170);
+	int l = HorzLayoutZoom(350);
 	menubar.Transparent();
 	if(toolbar_in_row) {
 		toolbar.SetFrame(NullFrame());
+		int tcy = max(mainconfiglist.GetStdSize().cy + DPI(2), toolbar.GetStdHeight());
 		bararea.Add(menubar.LeftPos(0, l).VCenterPos(menubar.GetStdHeight()));
-		bararea.Add(toolbar.HSizePos(l, r).VCenterPos(toolbar.GetStdHeight()));
+		bararea.Add(toolbar.HSizePos(l, r).VCenterPos(tcy));
 		bararea.Add(display.RightPos(4, r).VSizePos(2, 3));
-		bararea.Height(max(menubar.GetStdHeight(), toolbar.GetStdHeight()));
+		bararea.Height(max(menubar.GetStdHeight(), tcy));
 		AddFrame(bararea);
 		toolbar.Transparent();
 	}
@@ -443,21 +349,50 @@ void Ide::SetupBars()
 	SetBar();
 }
 
+void SetupError(ArrayCtrl& error, const char *s)
+{
+	error.AddColumn("File").SetDisplay(Single<Ide::FoundFileDisplay>());
+	error.AddColumn("Line").SetDisplay(Single<Ide::TopAlignedDisplay>());
+	error.AddColumn(s);
+	error.AddIndex("INFO");
+	error.ColumnWidths("184 44 298");
+	error.NoWantFocus();
+}
+
+void Ide::Layout()
+{
+	display.Show(!designer && (menubar.GetSize().cx + display.GetSize().cx < GetSize().cx));
+}
+
+static void sHighlightLine(const String& path, Vector<LineEdit::Highlight>& hln, const WString& ln)
+{
+	One<EditorSyntax> es = EditorSyntax::Create(EditorSyntax::GetSyntaxForFilename(GetFileName(path)));
+	es->IgnoreErrors();
+	HighlightOutput hl(hln);
+	es->Highlight(ln.Begin(), ln.End(), hl, NULL, 0, 0);
+}
+
 Ide::Ide()
 {
-	editor.RusIDE = this;
+	DiffDlg::WhenHighlight = callback(sHighlightLine);
 
+	editor.theide = this;
+	editor.WhenSel = THISBACK(SetToolBar);
+	
+	editormode = false;
+	
 	start_time = GetSysTime();
 	stat_build_time = 0;
 	build_start_time = Null;
 	hydra1_threads = CPU_Cores();
+	
+	gdbSelector = 0;
 
 	chstyle = 0;
 
 	Sizeable().Zoomable();
 
-	display.SetFrame(ThinInsetFrame());
-	display.SetAlign(ALIGN_CENTER);
+	display.SetAlign(ALIGN_RIGHT);
 
 	filelist.Columns(2);
 	package.Columns(2);
@@ -465,13 +400,15 @@ Ide::Ide()
 	filetabs = AlignedFrame::TOP;
 	auto_enclose = false;
 	mark_lines = true;
+	
+	persistent_find_replace = false;
 
 	idestate = EDITING;
 	debuglock = 0;
 
-	menubar.WhenHelp = statusbar;
+	menubar.WhenHelp = ~statusbar;
 	menubar.AreaLook(1);
-	toolbar.WhenHelp = statusbar;
+	toolbar.WhenHelp = ~statusbar;
 	toolbar.AreaLook(1);
 	toolbar_in_row = false;
 	SetupBars();
@@ -481,38 +418,65 @@ Ide::Ide()
 	editorsplit.Vert(editor, editor2);
 	editorsplit.Zoom(0);
 	SyncEditorSplit();
+	
+	editpane.AddFrame(editor.navigatorframe);
 
 	right_split.Horz(editpane, right);
-	right_split.SetPos(7000);
 	right_split.Zoom(0);
+	
+	SetupError(error, "Message");
+	error.AddIndex("NOTES");
+	error.ColumnWidths("207 41 834");
+	error.WhenBar = THISBACK(ErrorMenu);
+
+	SetupError(ffound, "Source");
+	ffound.ColumnWidths("207 41 834");
+	ffound.ColumnAt(0).SetDisplay(Single<FoundFileDisplay>());
+	ffound.ColumnAt(2).SetDisplay(Single<FoundDisplay>());
+	ffound.WhenBar = THISBACK(FFoundMenu);
+
+	error.WhenSel = THISBACK(SelError);
+	error.WhenLeftClick = THISBACK(ShowError);
+	ffound.WhenSel = ffound.WhenLeftClick = THISBACK(ShowFound);
+	console.WhenLine = THISBACK1(ConsoleLine, false);
+	console.WhenRunEnd = THISBACK(ConsoleRunEnd);
+	
+	addnotes = false;
+	removing_notes = false;
 
 	editor_bottom.Vert(right_split, bottom);
-	console2.WhenBar = console.WhenBar = THISBACK(ConsoleMenu);
+	console.WhenBar = THISBACK(ConsoleMenu);
 	editor_bottom.SetPos(8000);
 	bottom.SetFrame(btabs);
 	bottom.Add(console.SizePos().SetFrame(NullFrame()));
-	bottom.Add(console2.SizePos().SetFrame(NullFrame()));
+	bottom.Add(error.SizePos().SetFrame(NullFrame()));
+	bottom.Add(ffound.SizePos().SetFrame(NullFrame()));
 	bottom.Add(calc.SizePos().SetFrame(NullFrame()));
 	btabs <<= THISBACK(SyncBottom);
 	BTabs();
 
 	pfsplit.SetPos(2000);
 	pfsplit.Vert(package, filelist);
-	wesplit.Horz(pfsplit, editor_bottom);
-	wesplit.SetPos(2000);
-	Add(wesplit);
+	wepane.Add(editor_bottom.SizePos());
+	wepane.AddFrame(weframe.Left(pfsplit, HorzLayoutZoom(280)));
+	Add(wepane.SizePos());
 
 	editor.topsbbutton.ScrollStyle().NoWantFocus().Show();
 	editor.topsbbutton1.ScrollStyle().NoWantFocus().Show();
 	tabs <<= THISBACK(TabFile);
 //	tabs.WhenCloseRest = THISBACK1(CloseRest, &tabs);
-	editor2.SetFrame(NullFrame());
+//	editor2.SetFrame(NullFrame());
+	editor2.theide = this;
 	editor2.topsbbutton.ScrollStyle().NoWantFocus().Show();
 	editor2.topsbbutton1.ScrollStyle().NoWantFocus().Show();
 	editor2.WhenLeftDown = THISBACK(SwapEditors);
-	editor.WhenAction = THISBACK(AddHistory);
+	editor.WhenAction = THISBACK(EditorEdit);
 	editor.WhenBar = THISBACK(EditorMenu);
 	editor.WhenFontScroll = THISBACK(EditorFontScroll);
+	editor.WhenOpenFindReplace = THISBACK(AddHistory);
+	editor.WhenPaste = THISBACK(IdePaste);
+	
+	editor.WhenFindAll << THISFN(FindFileAll);
 
 	macro_api = MacroEditor();
 
@@ -523,17 +487,15 @@ Ide::Ide()
 
 	buildmode.WhenClick = THISBACK(SetupOutputMode);
 	buildmode.NoWantFocus();
-	buildmode.Tip("Режим вывода");
-	buildmode.AddButton().Tip("Метод постройки").Left() <<= THISBACK(DropMethodList);
-	buildmode.AddButton().Tip("Режим постройки") <<= THISBACK(DropModeList);
+	buildmode.Tip("Output mode");
+	buildmode.AddButton().Tip("Build method").Left() <<= THISBACK(DropMethodList);
+	buildmode.AddButton().Tip("Build mode") <<= THISBACK(DropModeList);
 	methodlist.Normal();
 	methodlist.WhenSelect = THISBACK(SelectMethod);
 	modelist.Normal();
 	modelist.WhenSelect = THISBACK(SelectMode);
-	modelist.Add("Отладка");
-	modelist.Add("Оптимально");
-	modelist.Add("Скорость");
-	modelist.Add("Размер");
+	modelist.Add("Debug");
+	modelist.Add("Release");
 
 	tabi = 0;
 	blocktabs = false;
@@ -547,20 +509,27 @@ Ide::Ide()
 
 	Icon(IdeImg::Package(), IdeImg::Package());
 
-	tfont = editorfont = font2 = Courier(13);
-	veditorfont = consolefont = font1 = Courier(11);
+	tfont = editorfont = font2 = CourierZ(12);
+	veditorfont = consolefont = font1 = CourierZ(10);
 	editortabsize = 4;
 	indent_amount = 4;
 	indent_spaces = false;
 	show_status_bar = false;
 	show_tabs = false;
+	warnwhitespace = true;
 	tabs_icons = false;
 	tabs_crosses = AlignedFrame::RIGHT;
 	tabs_grouping = true;
 	tabs_stacking = false;
 	tabs_serialize = true;
 	no_parenthesis_indent = false;
-
+#ifdef PLATFORM_POSIX
+	line_endings = DETECT_LF;
+#else
+	line_endings = DETECT_CRLF;
+#endif
+	spellcheck_comments = LNG_ENGLISH;
+	wordwrap_comments = true;
 	/*
 		astyle code formatter control vars
 		added 2008.01.27 by Massimo Del Fedele
@@ -588,13 +557,11 @@ Ide::Ide()
 	astyle_EmptyLineFill = false;
 	astyle_TabSpaceConversionMode = false;
 	astyle_TestBox = "#include <stdio.h>\n#ifndef __abcd_h\n#include <abcd.h>\n#endif\n\nvoid test(int a, int b)\n{\n  /* this is a switch */\n  switch(a)\n\n  {\n    case 1:\n      b = 2;\n      break;\n    case 2:\n      b = 4;\n      break;\n    default:\n    break;\n  }\n\n  /* this are more statements on one line */\n  a = 2*a;b=-5;a=2*(b+2)*(a+3)/4;\n\n  /* single line blocks */\n  {int z;z = 2*a+b;}\n\n  /* loop */\n  for(int i = 0;i< 10;i++) { a = b+2*i;}\n\n}\n";
-
+	
 	console.WhenSelect = THISBACK(FindError);
 	console.SetSlots(hydra1_threads);
 
-	console2.WhenSelect = THISBACK(FindError);
-
-	editor.WhenSelection = THISBACK(Display);
+	editor.WhenSelection = THISBACK(DoDisplay);
 	stoponerrors = true;
 	hilite_scope = 1;
 	hilite_bracket = 1;
@@ -602,6 +569,8 @@ Ide::Ide()
 	barline = true;
 	qtfsel = true;
 	hilite_if_endif = false;
+	thousands_separator = true;
+	hline = true;
 	wrap_console_text = true;
 	mute_sounds = false;
 	line_numbers = false;
@@ -610,6 +579,8 @@ Ide::Ide()
 
 	runmode = RUN_WINDOW;
 	runexternal = false;
+	consolemode = 0;
+	console_utf8 = false;
 
 	browser_closeesc = true;
 
@@ -654,7 +625,24 @@ Ide::Ide()
 	find_pick_sel = true;
 	find_pick_text = false;
 	
+	deactivate_save = true;
+	
 	output_per_assembly = true;
+	
+	issaving = 0;
+	isscanning = 0;
+	
+	linking = false;
+	
+	error_count = 0;
+	warning_count = 0;
+	
+	editor.WhenUpdate = THISBACK(TriggerAssistSync);
+
+	editfile_isfolder = false;
+	editfile_repo = NOT_REPO_DIR;
+	
+	auto_rescan = auto_check = true;
 }
 
 Ide::~Ide()
@@ -662,406 +650,4 @@ Ide::~Ide()
 	TheIde(NULL);
 }
 
-void DelTemps() {
-	FindFile ff(ConfigFile("*.tmp"));
-	while(ff) {
-		DeleteFile(ConfigFile(ff.GetName()));
-		ff.Next();
-	}
-}
-
-#ifdef PLATFORM_WIN32
-#include <mmsystem.h>
-#pragma comment( lib, "winmm.lib" )
-#endif
-
 void Ide::Paint(Draw&) {}
-
-extern int MemoryProbeFlags;
-
-void Uninstall();
-
-bool SilentMode;
-
-#ifdef PLATFORM_WIN32
-#include <Wincon.h>
-
-void Puts(const char *s)
-{
-	dword dummy;
-	if(!SilentMode)
-		WriteFile(GetStdHandle(STD_OUTPUT_HANDLE), s, (int)strlen(s), &dummy, NULL);
-}
-#endif
-
-
-#ifdef PLATFORM_POSIX
-void Puts(const char *s)
-{
-	if(!SilentMode)
-		puts(s);
-}
-#endif
-
-bool splash_screen;
-
-int CommaSpace(int c)
-{
-	return c == ',' ? ' ' : c;
-}
-
-void ReduceCache()
-{
-	String cfgdir = ConfigFile("cfg");
-	FindFile ff(AppendFileName(cfgdir, "*.*"));
-	while(ff) {
-		if(ff.IsFile()) {
-			String fn = ff.GetName();
-			String ext = GetFileExt(fn);
-			if(ext != ".aux" && ext != ".cfg")
-				if((Date)Time(ff.GetLastAccessTime()) < GetSysDate() - 14)
-					DeleteFile(AppendFileName(cfgdir, fn));
-		}
-		ff.Next();
-	}
-}
-
-#ifdef flagMAIN
-GUI_APP_MAIN
-#else
-void AppMain___()
-#endif
-{
-	SetLanguage(LNG_ENGLISH);
-	SetDefaultCharset(CHARSET_UTF8);
-
-	const Vector<String>& arg = CommandLine();
-
-	bool firstinstall = false;
-
-#ifdef PLATFORM_POSIX
-	LoadUpdaterCfg();
-
-	String home = Environment().Get("UPP_HOME", Null);
-	if(!IsNull(home))
-		SetHomeDirectory(home);
-	FindFile ff(ConfigFile("*.var"));
-	if(!ff) {
-		if(!Install())
-			return;
-		SaveFile(ConfigFile("version"), IDE_VERSION);
-		firstinstall = true;
-	}
-#endif
-
-#ifdef _DEBUG
-//	Ctrl::ShowRepaint(50);
-#endif
-
-#ifdef PLATFORM_WIN32
-	if(!CheckLicense())
-		return;
-	firstinstall = !IsNull(LoadFile(GetExeDirFile("install.upp")));
-#ifdef flagTESTINSTALL
-	firstinstall = true;
-#endif
-	if(firstinstall) {
-		if(!Install())
-			return;
-		SaveFile(ConfigFile("version"), IDE_VERSION);
-	}
-#endif
-
-	for(int i = 0; i < arg.GetCount(); i++) {
-		if(arg[i] == "-uninstall") {
-			Uninstall();
-			return;
-		}
-		if(!firstinstall && arg[i] == "-install" && !Install()) return;
-
-	#ifdef PLATFORM_WIN32
-		if(arg[i] == "!") {
-			String cmdline;
-			for(++i; i < arg.GetCount(); i++) {
-				if(!IsNull(cmdline))
-					cmdline << ' ';
-				cmdline << arg[i];
-			}
-			int n = cmdline.GetLength() + 1;
-			Buffer<char> cmd(n);
-			memcpy(cmd, cmdline, n);
-			SECURITY_ATTRIBUTES sa;
-			sa.nLength = sizeof(SECURITY_ATTRIBUTES);
-			sa.lpSecurityDescriptor = NULL;
-			sa.bInheritHandle = TRUE;
-			PROCESS_INFORMATION pi;
-			STARTUPINFO si;
-			ZeroMemory(&si, sizeof(STARTUPINFO));
-			si.cb = sizeof(STARTUPINFO);
-			AllocConsole();
-			SetConsoleTitle(cmdline);
-			int time = msecs();
-			if(CreateProcess(NULL, cmd, &sa, &sa, TRUE,
-				             NORMAL_PRIORITY_CLASS,
-			                 NULL, NULL, &si, &pi)) {
-				WaitForSingleObject(pi.hProcess, INFINITE);
-				dword exitcode = 255;
-				GetExitCodeProcess(pi.hProcess, &exitcode);
-				CloseHandle(pi.hProcess);
-				CloseHandle(pi.hThread);
-				Puts("<--- Завершено за " + GetPrintTime(time) + ", код выхода: " + AsString(exitcode) + " --->");
-			}
-			else
-				Puts("Не удаётся запустить " + cmdline);
-			char h[1];
-			dword dummy;
-			ReadFile(GetStdHandle(STD_INPUT_HANDLE), h, 1, &dummy, NULL);
-			return;
-		}
-	#endif
-	}
-
-#ifndef _DEBUG
-	SetVppLogSizeLimit(0);
-#endif
-
-	try {
-		void RegisterLayDes(); RegisterLayDes();
-		void RegisterIconDes(); RegisterIconDes();
-
-		splash_screen = true;
-
-		Ide ide;
-		ide.Maximize();
-		bool clset = false;
-		if(arg.GetCount() >= 2 && IsAlpha(arg[0][0]) && IsAlpha(arg[1][0])) {
-			bool build = arg.GetCount() >= 3 && IsAlpha(arg[2][0]);
-		#ifdef PLATFORM_WIN32
-			if(build) {
-				HMODULE hDLL = LoadLibrary ("kernel32");
-				bool attach = false;
-				if(hDLL) {
-					typedef BOOL (WINAPI *AttachConsoleType)(DWORD dwProcessId);
-					AttachConsoleType AttachConsole;
-					AttachConsole = (AttachConsoleType) GetProcAddress(hDLL, "AttachConsole");
-					if(AttachConsole)
-						attach = AttachConsole((DWORD)-1);
-				}
-				if(!attach)
-					AllocConsole();
-			}
-		#endif
-			for(int i = 3; i < arg.GetCount(); i++)
-				if(arg[i][0] == '-') {
-					String x = arg[i];
-					for(int i = 1; i < x.GetCount(); i++)
-						if(x[i] == 'l')
-							SilentMode = true;
-				}
-			if(!LoadVars(arg[0])) {
-				if(build)
-					Puts("RusIDE: Неверная сборка\n");
-				else
-					Exclamation("Неверная сборка!");
-				SetExitCode(2);
-				return;
-			}
-			if(!FileExists(SourcePath(arg[1], GetFileTitle(arg[1]) + ".upp"))) {
-				if(build)
-					Puts("RusIDE: Пакета не существует\n");
-				else
-					Exclamation("Пакета не существует!");
-				SetExitCode(2);
-				return;
-			}
-			if(build) {
-				ide.SetMain(arg[1]);
-				clset = true;
-				bool stoponerror = false;
-				const Workspace& wspc = ide.IdeWorkspace();
-				if(!wspc.GetCount())
-					return;
-				const Array<Package::Config>& f = wspc.GetPackage(0).config;
-				if(f.GetCount())
-					ide.mainconfigparam = f[0].param;
-				String m = arg[2];
-				if(!FileExists(ConfigFile((String)m + ".bm"))) {
-					SilentMode = false;
-					Puts("RusIDE: Неверный метод постройки\n");
-					SetExitCode(3);
-					return;
-				}
-				ide.method <<= m;
-				ide.debug.def.blitz = ide.release.def.blitz = 0;
-				ide.debug.def.debug = 2;
-				ide.release.def.debug = 0;
-				ide.debug.package.Clear();
-				ide.release.package.Clear();
-				ide.debug.linkmode = ide.release.linkmode = 0;
-				ide.release.createmap = ide.debug.createmap = false;
-				ide.targetmode = 0;
-				ide.console.console = true;
-				bool clean = false;
-				bool makefile = false;
-				int  exporting = 0;
-				String mkf;
-				for(int i = 3; i < arg.GetCount(); i++)
-					if(arg[i][0] == '>')
-						ide.mainconfigparam = Filter(~arg[i] + 1, CommaSpace);
-					else
-					if(arg[i][0] == '-') {
-						String x = arg[i];
-						for(int i = 1; i < x.GetCount(); i++)
-							switch(x[i]) {
-							case 'a':
-								clean = true;
-								break;
-							case 'r':
-								ide.targetmode = 1;
-								break;
-							case '1':
-								ide.targetmode = 2;
-								break;
-							case '2':
-								ide.targetmode = 3;
-								break;
-							case 'm':
-								ide.release.createmap = ide.debug.createmap = true;
-								break;
-							case 'b':
-								ide.release.def.blitz = ide.debug.def.blitz = 1;
-								break;
-							case 's':
-								ide.debug.linkmode = ide.release.linkmode = 1;
-								break;
-							case 'd':
-								ide.debug.def.debug = 0;
-								break;
-							case 'S':
-								ide.debug.linkmode = ide.release.linkmode = 2;
-								break;
-							case 'e':
-								stoponerror = true;
-								break;
-							case 'M':
-								makefile = true;
-								break;
-							case 'v':
-								ide.console.verbosebuild = true;
-								break;
-							case 'l':
-								break;
-							case 'x':
-								exporting = 1;
-								break;
-							case 'X':
-								exporting = 2;
-								break;
-							default:
-								SilentMode = false;
-								Puts("Неверная опция(-и) постройки");
-								SetExitCode(3);
-								return;
-							}
-					}
-					else {
-						ide.debug.target_override = ide.release.target_override = true;
-						ide.debug.target = ide.release.target = mkf = arg[i];
-					}
-				if(clean)
-					ide.Clean();
-				if(exporting) {
-					mkf = GetFullPath(mkf);
-					Cout() << mkf << '\n';
-					RealizeDirectory(mkf);
-					if(makefile)
-						ide.ExportMakefile(mkf);
-					else
-						ide.ExportProject(mkf, exporting == 2, false);
-				}
-				else
-				if(makefile) {
-					ide.SaveMakeFile(IsNull(mkf) ? "Makefile" : mkf, false);
-					SetExitCode(0);
-				}
-				else
-				if(ide.Build())
-					SetExitCode(0);
-				else {
-					if(stoponerror)
-						PromptOK("RusIDE: Ошибка при построении " + DeQtf(arg[1]) + "!");
-					SetExitCode(1);
-				}
-				return;
-			}
-		}
-
-		LoadFromFile(ide);
-		if(arg.GetCount()==2){
-			LoadVars(arg[0]);
-			ide.SetMain(arg[1]);
-			clset=true;
-		}
-		ide.LoadAbbr();
-
-		ide.SyncCh();
-
-		DelTemps();
-		if(splash_screen) {
-			ShowSplash();
-			Ctrl::ProcessEvents();
-		}
-
-	#ifdef PLATFORM_POSIX
-		int p=UpdaterCfg().period;
-		if(!IsNull(p)) {
-			int next=GetUtcTime()-UpdaterCfg().last+abs(p)*60;
-			if(p <= 0 || next <= 0)
-				ide.PostCallback(callback1(&ide,&Ide::CheckUpdates,false),0);
-			if(p != 0)
-				ide.SetTimeCallback(max(0, next),callback1(&ide,&Ide::SetUpdateTimer,abs(p)));
-		}
-	#endif
-
-		ide.editor_bottom.Zoom(0);
-		ide.right_split.Zoom(0);
-		ide.UpdateFormat();
-		RestoreKeys(LoadFile(ConfigFile("ide.key")));
-		ide.editor.LoadHlStyles(LoadFile(ConfigFile("ide.colors")));
-		if(FileExists(ConfigFile("developide"))) {
-	#ifdef PLATFORM_WIN32
-			InstallCrashDump();
-	#endif
-			ActivateUsrLog();
-		}
-		if(clset || ide.OpenMainPackage()) {
-			StoreToFile(ide);
-			SyncRefs();
-			ide.FileSelected();
-			ide.Run();
-		}
-		StoreToFile(ide);
-	#ifdef PLATFORM_POSIX
-		StoreAsXMLFile(UpdaterCfg(),"SourceUpdater",ConfigFile("updates.xml"));
-	#endif
-		SaveCodeBase();
-		SaveFile(ConfigFile("ide.key"), StoreKeys());
-		SaveFile(ConfigFile("ide.colors"), ide.editor.StoreHlStyles());
-		DelTemps();
-		ReduceCache();
-	}
-	catch(const CParser::Error& e) {
-		Exclamation("Ошибка парсера " + e);
-		LOG("!!!!! Ошибка парсера " + e);
-	}
-	catch(const Exc& e) {
-		Exclamation("Исключение " + e);
-		LOG("!!!!! Исключение " << e);
-	}
-#ifdef PLATFORM_POSIX
-	catch(...) {
-		Exclamation("Неизвестное исключение !");
-		LOG("!!!!! Неизвестное исключение");
-	}
-#endif
-}

@@ -1,4 +1,4 @@
-description "Простое приложение для рисования\377";
+description "Simple drawing application";
 
 uses
 	CtrlLib;

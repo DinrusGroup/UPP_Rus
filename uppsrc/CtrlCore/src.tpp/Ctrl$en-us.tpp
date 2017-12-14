@@ -293,6 +293,16 @@ foreground or changing its caption).&]
 [s5;:Ctrl`:`:Deactivate`(`):%- [@(0.0.255) virtual] [@(0.0.255) void]_[* Deactivate]()&]
 [s2;b17;a17; This method is called when Ctrl is top`-level and is 
 deactivated `- focus has gone outside of Ctrl and its child Ctrls.&]
+[s3; &]
+[s4;%- &]
+[s5;:Upp`:`:Ctrl`:`:DeactivateBy`(Upp`:`:Ctrl`*`):%- [@(0.0.255) virtual] 
+[@(0.0.255) void]_[* DeactivateBy]([_^Upp`:`:Ctrl^ Ctrl]_`*[*@3 new`_focus])&]
+[s2; Similar to Deactivate without parameter, but if a widget that 
+caused deactivation by getting a focus is part of the same appliaction, 
+[%-*@3 new`_focus] contains a pointer to it. If deactivation is 
+caused by switching to another application, this parameter is 
+NULL. Both variants of Deactivate are called, the variant with 
+paremeter is called first.&]
 [s3;%- &]
 [s4;%- &]
 [s5;:Ctrl`:`:FrameMouseEvent`(int`,Point`,int`,dword`):%- [@(0.0.255) virtual] 
@@ -360,7 +370,8 @@ Ctrl and Alt keys.&]
 [s5;:Ctrl`:`:LeftDouble`(Point`,dword`):%- [@(0.0.255) virtual] [@(0.0.255) void]_[* LeftDo
 uble]([_^`:`:Point^ Point]_[*@3 p], [_^`:`:dword^ dword]_[*@3 keyflags])&]
 [s2;b17;a17; This method is called by default implementation of MouseEvent 
-when mouse left button is double`-clicked.&]
+when mouse left button is double`-clicked. Default implementation 
+calls LeftDown.&]
 [s7;i1120;a17; [%-*C@3 p]-|Position of mouse cursor in view coordinates.&]
 [s7;i1120;a17; [%-*C@3 keyflags]-|Combination of key flags for Shift, 
 Ctrl and Alt keys.&]
@@ -369,7 +380,8 @@ Ctrl and Alt keys.&]
 [s5;:Ctrl`:`:LeftTriple`(Point`,dword`):%- [@(0.0.255) virtual] [@(0.0.255) void]_[* LeftTr
 iple]([_^`:`:Point^ Point]_[*@3 p], [_^`:`:dword^ dword]_[*@3 keyflags])&]
 [s2;b17;a17; This method is called by default implementation of MouseEvent 
-when mouse left button is triple`-clicked.&]
+when mouse left button is triple`-clicked. Default implementation 
+calls LeftDown.&]
 [s3;%- &]
 [s4;%- &]
 [s5;:Ctrl`:`:LeftDrag`(Point`,dword`):%- [@(0.0.255) virtual] [@(0.0.255) void]_[* LeftDrag
@@ -417,7 +429,8 @@ Ctrl and Alt keys.&]
 [s5;:Ctrl`:`:RightDouble`(Point`,dword`):%- [@(0.0.255) virtual] [@(0.0.255) void]_[* Right
 Double]([_^`:`:Point^ Point]_[*@3 p], [_^`:`:dword^ dword]_[*@3 keyflags])&]
 [s2;b17;a17; This method is called by default implementation of MouseEvent 
-when mouse right button is double`-clicked.&]
+when mouse right button is double`-clicked. Default implementation 
+calls RightDown.&]
 [s7;i1120;a17; [%-*C@3 p]-|Position of mouse cursor in view coordinates.&]
 [s7;i1120;a17; [%-*C@3 keyflags]-|Combination of key flags for Shift, 
 Ctrl and Alt keys.&]
@@ -426,7 +439,8 @@ Ctrl and Alt keys.&]
 [s5;:Ctrl`:`:RightTriple`(Point`,dword`):%- [@(0.0.255) virtual] [@(0.0.255) void]_[* Right
 Triple]([_^`:`:Point^ Point]_[*@3 p], [_^`:`:dword^ dword]_[*@3 keyflags])&]
 [s2;b17;a17; This method is called by default implementation of MouseEvent 
-when mouse right button is triple`-clicked.&]
+when mouse right button is triple`-clicked. Default implementation 
+calls RightDown.&]
 [s3;%- &]
 [s4;%- &]
 [s5;:Ctrl`:`:RightDrag`(Point`,dword`):%- [@(0.0.255) virtual] [@(0.0.255) void]_[* RightDr
@@ -529,7 +543,9 @@ Ctrl and Alt keys.&]
 [@(0.0.255) void]_[* MouseWheel]([_^`:`:Point^ Point]_[*@3 p], [@(0.0.255) int]_[*@3 zdelta],
  [_^`:`:dword^ dword]_[*@3 keyflags])&]
 [s2;b17;a17; This method is called by default implementation of MouseEvent 
-when mouse wheel is rotated.&]
+when mouse wheel is rotated. Default implementation of this method 
+propagates event to the parent and suppresses call of ChildMouseEvent 
+for the parent.&]
 [s7;i1120;a17; [%-*C@3 p]-|Position of mouse cursor in view coordinates.&]
 [s7;i1120;a17; [%-*C@3 zdelta]-|Amount of rotation.&]
 [s7;i1120;a17; [%-*C@3 keyflags]-|Combination of key flags for Shift, 
@@ -582,7 +598,7 @@ occurs at the border area of view.&]
 [s5;:Ctrl`:`:GetDropData`(const String`&`)const:%- [@(0.0.255) virtual] 
 [_^String^ String]_[* GetDropData]([@(0.0.255) const]_[_^String^ String][@(0.0.255) `&]_[*@3 f
 mt])_[@(0.0.255) const]&]
-[s2; This method is invoked to obtain drop data from Ctrl is such 
+[s2; This method is invoked to obtain drop data from Ctrl if such 
 data was not supplied as ClipData in call to DoDragAndDrop. Default 
 implementation calls GetSelectionData.&]
 [s3; &]
@@ -649,6 +665,16 @@ Default implementation is void.&]
 implementation is void.&]
 [s3;%- &]
 [s4;%- &]
+[s5;:Ctrl`:`:ChildFrameMouseEvent`(Ctrl`*`,int`,Point`,int`,dword`):%- [@(0.0.255) virt
+ual] [@(0.0.255) void]_[* ChildFrameMouseEvent]([_^Ctrl^ Ctrl]_`*[*@3 child], 
+[@(0.0.255) int]_[*@3 event], [_^Point^ Point]_[*@3 p], [@(0.0.255) int]_[*@3 zdelta], 
+[_^dword^ dword]_[*@3 keyflags])&]
+[s2; This method is invoked before the [/ frame] mouse [%-*@3 event] 
+is routed to the [%-*@3 child]. Parameters of the event are the 
+same as those in MouseEvent method. Default implementation calls 
+the parent`'s ChildMouseEvent method.&]
+[s3;%- &]
+[s4;%- &]
 [s5;:Ctrl`:`:ChildMouseEvent`(Ctrl`*`,int`,Point`,int`,dword`):%- [@(0.0.255) virtual] 
 [@(0.0.255) void]_[* ChildMouseEvent]([_^`:`:Ctrl^ Ctrl]_`*[*@3 child], 
 [@(0.0.255) int]_[*@3 event], [_^`:`:Point^ Point]_[*@3 p], [@(0.0.255) int]_[*@3 zdelta], 
@@ -657,7 +683,7 @@ implementation is void.&]
 is routed to the [%-*@3 child]. Parameters of the event are the 
 same as those in MouseEvent method. Default implementation calls 
 the parent`'s ChildMouseEvent method.&]
-[s3;%- &]
+[s3; &]
 [s4;%- &]
 [s5;:Ctrl`:`:ChildGotFocus`(`):%- [@(0.0.255) virtual] [@(0.0.255) void]_[* ChildGotFocus](
 )&]
@@ -693,7 +719,7 @@ ccessKeys]([_^`:`:dword^ dword]_[*@3 used])&]
 access keys.&]
 [s7;i1120;a17; [%-*C@3 used]-|Set of letter access keys that are already 
 used and should not be chosen by Ctrl as its access keys.&]
-[s3;%- &]
+[s3; &]
 [s4;%- &]
 [s5;:Ctrl`:`:ChildAdded`(Ctrl`*`):%- [@(0.0.255) virtual] [@(0.0.255) void]_[* ChildAdded](
 [_^`:`:Ctrl^ Ctrl]_`*[*@3 child])&]
@@ -729,14 +755,25 @@ or when the Ctrl is resized.&]
 [s4;%- &]
 [s5;:Ctrl`:`:GetMinSize`(`)const:%- [@(0.0.255) virtual] [_^`:`:Size^ Size]_[* GetMinSize](
 )_[@(0.0.255) const]&]
-[s2;b17;a17; This method should return minimal size of Ctrl.&]
-[s7;i1120;a17; [*/ Return value]-|Minimal size.&]
+[s2;b17;a17; This method should return [/ minimal] size of Ctrl. This 
+is used e.g. to limit the minimal size of windows. Default implementation 
+returns size suitable for edit`-field type of widget, based on 
+default GUI font and EditFieldIsThin setting.&]
 [s3;%- &]
 [s4;%- &]
 [s5;:Ctrl`:`:GetStdSize`(`)const:%- [@(0.0.255) virtual] [_^`:`:Size^ Size]_[* GetStdSize](
 )_[@(0.0.255) const]&]
-[s2;b17;a17; This method should return maximal size of Ctrl.&]
-[s7;i1120;a17; [*/ Return value]-|Maximal size.&]
+[s2;b17;a17; This method should return [/ standard] size of Ctrl. Default 
+implementation returns calls GetMinSize, increases width 10 and 
+returns resulting Size.&]
+[s3;%- &]
+[s4;%- &]
+[s5;:Ctrl`:`:GetMaxSize`(`)const:%- [@(0.0.255) virtual] [_^Size^ Size]_[* GetMaxSize]()_[@(0.0.255) c
+onst]&]
+[s2; This method should return [/ maximal] size of Ctrl. Default implementation 
+returns the size of virtual working area. Redefinition can be 
+used to e.g. define the maximum size of window (as maximal size 
+of view area).&]
 [s3;%- &]
 [s4;%- &]
 [s5;:Ctrl`:`:IsShowEnabled`(`)const:%- [@(0.0.255) virtual] [@(0.0.255) bool]_[* IsShowEnab
@@ -765,6 +802,10 @@ rectangle otherwise. Paint routine uses this information to optimize.&]
 information to optimize.&]
 [s3;%- &]
 [s4;%- &]
+[s5;:Ctrl`:`:Updated`(`):%- [@(0.0.255) virtual] [@(0.0.255) void]_[* Updated]()&]
+[s2; Invoked by Update method. Default implementation is empty.&]
+[s3;%- &]
+[s4;%- &]
 [s5;:Ctrl`:`:OverPaint`(`)const:%- [@(0.0.255) virtual] [@(0.0.255) int]_[* OverPaint]()_[@(0.0.255) c
 onst]&]
 [s2;b17;a17; This method can returns non`-zero number that represents 
@@ -787,11 +828,21 @@ if modal loop is performed for it.&]
 [s2;b17;a17; Used for Ocx control implementation.&]
 [s3;%- &]
 [s4;%- &]
+[s5;:Ctrl`:`:GetDesc`(`)const:%- [@(0.0.255) virtual] [_^String^ String]_[* GetDesc]()_[@(0.0.255) c
+onst]&]
+[s2; Returns description of Ctrl for diagnostic purposes. Default 
+implementation is empty.&]
+[s3;%- &]
+[s4;%- &]
+[s5;:Ctrl`:`:WhenAction:%- [_^Callback^ Callback]_[* WhenAction]&]
+[s2; This callback is used to signal that [/ user] has changed the 
+value (or state) of widget.&]
+[s3;%- &]
+[s4;%- &]
 [s5;:Ctrl`:`:SetData`(const Value`&`):%- [@(0.0.255) virtual] [@(0.0.255) void]_[* SetData](
 [@(0.0.255) const]_[_^`:`:Value^ Value][@(0.0.255) `&]_[*@3 data])&]
 [s2;b17;a17; Sets the new value to the object. Default implementation 
 is void.&]
-[s7;i1120;a17; [*C@3 data]-|New value.&]
 [s3;%- &]
 [s4;%- &]
 [s5;:Ctrl`:`:GetData`(`)const:%- [@(0.0.255) virtual] [_^`:`:Value^ Value]_[* GetData]()_[@(0.0.255) c
@@ -845,6 +896,18 @@ Ctrl in a way that is suitable for dialog backup and optional
 restore (e.g. when user presses Cancel button).&]
 [s3;%- &]
 [s4;%- &]
+[s5;:Ctrl`:`:Jsonize`(JsonIO`&`):%- [@(0.0.255) virtual] [@(0.0.255) void]_[* Jsonize]([_^JsonIO^ J
+sonIO][@(0.0.255) `&]_[*@3 jio])&]
+[s2; Method to convert the data of widget to/from JSON. Default implementation 
+calls Jsonize for Value obtained/set by GetData/SetData.&]
+[s3; &]
+[s4;%- &]
+[s5;:Ctrl`:`:Xmlize`(XmlIO`&`):%- [@(0.0.255) virtual] [@(0.0.255) void]_[* Xmlize]([_^XmlIO^ X
+mlIO][@(0.0.255) `&]_[*@3 xio])&]
+[s2; Method to convert the data of widget to/from XML. Default implementation 
+calls Jsonize for Value obtained/set by GetData/SetData.&]
+[s3; &]
+[s4;%- &]
 [s5;:Ctrl`:`:AddChild`(Ctrl`*`):%- [@(0.0.255) void]_[* AddChild]([_^`:`:Ctrl^ Ctrl]_`*[*@3 c
 hild])&]
 [s2;b17;a17; Adds a child Ctrl as last one.&]
@@ -857,6 +920,7 @@ Ctrls. &]
 [s5;:Ctrl`:`:AddChild`(Ctrl`*`,Ctrl`*`):%- [@(0.0.255) void]_[* AddChild]([_^`:`:Ctrl^ Ctrl
 ]_`*[*@3 child], [_^`:`:Ctrl^ Ctrl]_`*[*@3 insafter])&]
 [s2;b17;a17; Inserts child Ctrl after another Ctrl that is already 
+child. If [%-*@3 insafter] is NULL, child is inserted as the first 
 child.&]
 [s7;i1120;a17; [%-*C@3 child]-|Pointer to child Ctrl.&]
 [s7;i1120;a17; [%-*C@3 insafter]-|Ctrl that will be before inserted 
@@ -866,7 +930,7 @@ Ctrl.&]
 [s5;:Ctrl`:`:AddChildBefore`(Ctrl`*`,Ctrl`*`):%- [@(0.0.255) void]_[* AddChildBefore]([_^`:`:Ctrl^ C
 trl]_`*[*@3 child], [_^`:`:Ctrl^ Ctrl]_`*[*@3 insbefore])&]
 [s2;b17;a17; Inserts child Ctrl before another Ctrl that is already 
-child.&]
+child. If [%-*@3 insbefore], child is inserted as last child.&]
 [s7;i1120;a17; [%-*C@3 child]-|Pointer to child Ctrl.&]
 [s7;i1120;a17; [%-*C@3 insbefore]-|Ctrl that will be after inserted 
 Ctrl.&]
@@ -908,6 +972,28 @@ or NULL if Ctrl is first or not in list.&]
 list or NULL if Ctrl is last or not in list.&]
 [s7;i1120;a17; [*/ Return value]-|Pointer to next child or NULL.&]
 [s3;%- &]
+[s3;%- &]
+[s4;%- &]
+[s5;:Ctrl`:`:GetChildIndex`(const Ctrl`*`)const:%- [@(0.0.255) int]_[* GetChildIndex]([@(0.0.255) c
+onst]_[_^Ctrl^ Ctrl]_`*[*@3 child])_[@(0.0.255) const]&]
+[s2; Returns the index of [%-*@3 child] (first child has index 0, second 
+child 1 etc...). If [%-*@3 child] is not present in this Ctrl, 
+returns `-1. Note that this function performs sequential scan 
+of child (results in O(n) complexity).&]
+[s3; &]
+[s4;%- &]
+[s5;:Ctrl`:`:GetChildCount`(`)const:%- [@(0.0.255) int]_[* GetChildCount]()_[@(0.0.255) con
+st]&]
+[s2; Returns the number of child ctrls. Note that this function performs 
+sequential scan of child (results in O(n) complexity).&]
+[s3;%- &]
+[s4;%- &]
+[s5;:Ctrl`:`:GetIndexChild`(int`)const:%- [_^Ctrl^ Ctrl]_`*[* GetIndexChild]([@(0.0.255) in
+t]_[*@3 i])_[@(0.0.255) const]&]
+[s2; Retruns child at index [%-*@3 i] or NULL if there is none. Note 
+that this function performs sequential scan of child (results 
+in O(n) complexity).&]
+[s3; &]
 [s4;%- &]
 [s5;:Ctrl`:`:IsChild`(`)const:%- [@(0.0.255) bool]_[* IsChild]()_[@(0.0.255) const]&]
 [s7;i1120;a17; [*/ Return value]-|True if Ctrl has parent.&]
@@ -917,6 +1003,12 @@ list or NULL if Ctrl is last or not in list.&]
 oint][@(0.0.255) `&]_[*@3 pt])_[@(0.0.255) const]&]
 [s2;b17;a17; Checks whether opened top`-level Ctrl is foreground.&]
 [s7;i1120;a17; [*/ Return value]-|True if Ctrl is foreground.&]
+[s3;%- &]
+[s4;%- &]
+[s5;:Ctrl`:`:IsForeground`(`)const:%- [@(0.0.255) bool]_[* IsForeground]()_[@(0.0.255) cons
+t]&]
+[s2; Returns true if Ctrl or its top`-level parent is foreground 
+window.&]
 [s3;%- &]
 [s4;%- &]
 [s5;:Ctrl`:`:SetForeground`(`):%- [@(0.0.255) void]_[* SetForeground]()&]
@@ -1246,11 +1338,29 @@ st]&]
 [s4;%- &]
 [s5;:Ctrl`:`:RefreshLayout`(`):%- [@(0.0.255) void]_[* RefreshLayout]()&]
 [s2;b17;a17; Recomputes layout for Ctrl. This includes calling FrameLayout 
-for all frames and calling Layout virtual method.&]
+for all frames and calling Layout virtual method. Layout of child 
+widgets is recomputed if their size changes.&]
+[s3;%- &]
+[s4;%- &]
+[s5;:Ctrl`:`:RefreshLayoutDeep`(`):%- [@(0.0.255) void]_[* RefreshLayoutDeep]()&]
+[s2; Recomputes layout for the whole Ctrl tree `- unlike RefreshLayout, 
+recomputes layout of all descendants regardless whether their 
+size has changed.&]
 [s3;%- &]
 [s4;%- &]
 [s5;:Ctrl`:`:RefreshParentLayout`(`):%- [@(0.0.255) void]_[* RefreshParentLayout]()&]
 [s2;b17;a17; If Ctrl has parent, calls parent`->RefreshLayout().&]
+[s3;%- &]
+[s4;%- &]
+[s5;:Ctrl`:`:UpdateLayout`(`):%- [@(0.0.255) void]_[* UpdateLayout]()&]
+[s2; Recomputes layout of widget by recalculating its frame coverage, 
+then, if view size has changed, calls Layout method (this is 
+the difference from RefreshLayout, which calls Layout always). 
+Layout of child widgets is recomputed if their size changes.&]
+[s3;%- &]
+[s4;%- &]
+[s5;:Ctrl`:`:UpdateParentLayout`(`):%- [@(0.0.255) void]_[* UpdateParentLayout]()&]
+[s2; Calls UpdateLayout for parent (if exists).&]
 [s3;%- &]
 [s4;%- &]
 [s5;:Ctrl`:`:LeftPos`(int`,int`):%- [_^`:`:Ctrl^ Ctrl][@(0.0.255) `&]_[* LeftPos]([@(0.0.255) i
@@ -1463,6 +1573,11 @@ area `- in this case this method returns part of Ctrl view that
 is not clipped out by parent`'s are limits.&]
 [s3;%- &]
 [s4;%- &]
+[s5;:Ctrl`:`:GetWorkArea`(`)const:%- [_^Rect^ Rect]_[* GetWorkArea]()_[@(0.0.255) const]&]
+[s2; Returns the work area (the maximum rectangle that window can 
+use) for screen that this window is in.&]
+[s3;%- &]
+[s4;%- &]
 [s5;:Ctrl`:`:AddFrameSize`(int`,int`)const:%- [_^`:`:Size^ Size]_[* AddFrameSize]([@(0.0.255) i
 nt]_[*@3 cx], [@(0.0.255) int]_[*@3 cy])_[@(0.0.255) const]&]
 [s2;b17;a17; Computes size of Ctrl for given size of view and actual 
@@ -1649,6 +1764,11 @@ lay inside it.&]
 [s7;i1120;a17; [*/ Return value]-|`*this for method chaining.&]
 [s3;%- &]
 [s4;%- &]
+[s5;:Ctrl`:`:IsIgnoreMouse`(`)const:%- [@(0.0.255) bool]_[* IsIgnoreMouse]()_[@(0.0.255) co
+nst]&]
+[s2; Returns the ignore`-mouse flag (see IgnoreMouse).&]
+[s3;%- &]
+[s4;%- &]
 [s5;:Ctrl`:`:HasMouse`(`)const:%- [@(0.0.255) bool]_[* HasMouse]()_[@(0.0.255) const]&]
 [s7;i1120;a17; [*/ Return value]-|true when Ctrl is target for mouse 
 events.&]
@@ -1669,14 +1789,19 @@ events and mouse pointer is inside specified frame area rectangle.&]
 [s4;%- &]
 [s5;:Ctrl`:`:HasMouseIn`(const Rect`&`)const:%- [@(0.0.255) bool]_[* HasMouseIn]([@(0.0.255) c
 onst]_[_^Rect^ Rect][@(0.0.255) `&]_[*@3 r])_[@(0.0.255) const]&]
-[s2; [%-*C@3 r]-|rectangle in view area.&]
-[s7;i1120;a17; [*/ Return value]-|true when Ctrl is target for mouse 
-events and mouse pointer is inside specified view area rectangle.&]
+[s2; Returns true when Ctrl is target for mouse events and mouse 
+pointer is inside specified view area rectangle.&]
+[s3;%- &]
+[s4;%- &]
+[s5;:Ctrl`:`:GetMouseViewPos`(`)const:%- [_^Point^ Point]_[* GetMouseViewPos]()_[@(0.0.255) c
+onst]&]
+[s2; Returns the position of mouse relative to the view area. Note 
+that the result can negative point or point outside &]
 [s3;%- &]
 [s4;%- &]
 [s5;:Ctrl`:`:GetMouseCtrl`(`):%- [@(0.0.255) static] [_^`:`:Ctrl^ Ctrl]_`*[* GetMouseCtrl](
 )&]
-[s7;i1120;a17; [*/ Return value]-|Returns current target for mouse events.&]
+[s7;i1120;a17; Returns current target for mouse events.&]
 [s3;%- &]
 [s4;%- &]
 [s5;:Ctrl`:`:IgnoreMouseClick`(`):%- [@(0.0.255) static] [@(0.0.255) void]_[* IgnoreMouseCl
@@ -1691,6 +1816,12 @@ over its owner as well (TopWindow`::Close calls this function).&]
 &]
 [s2;b17;a17; Invokes IgnoreMouseClick if some of mouse buttons is 
 pressed.&]
+[s3;%- &]
+[s4;%- &]
+[s5;:Ctrl`:`:UnIgnoreMouse`(`):%- [@(0.0.255) static] [@(0.0.255) void]_[* UnIgnoreMouse]()
+&]
+[s2; Cancels the effect or IgnoreMouseClick and IgnoreMouseUp (clicks 
+are not ignored anymore).&]
 [s3;%- &]
 [s4;%- &]
 [s5;:Ctrl`:`:SetCapture`(`):%- [@(0.0.255) bool]_[* SetCapture]()&]
@@ -1710,6 +1841,13 @@ released.&]
 [s5;:Ctrl`:`:HasCapture`(`)const:%- [@(0.0.255) bool]_[* HasCapture]()_[@(0.0.255) const]&]
 [s7;i1120;a17; [*/ Return value]-|True if Ctrl has mouse capture.&]
 [s3;%- &]
+[s3;%- &]
+[s4;%- &]
+[s5;:Ctrl`:`:GetCaptureCtrl`(`):%- [@(0.0.255) static] [_^Ctrl^ Ctrl]_`*[* GetCaptureCtrl](
+)&]
+[s2; Returns a pointer to the Ctrl that is currently capturing the 
+mouse.&]
+[s3; &]
 [s4;%- &]
 [s5;:Ctrl`:`:ReleaseCtrlCapture`(`):%- [@(0.0.255) static] [@(0.0.255) bool]_[* ReleaseCtrl
 Capture]()&]
@@ -1740,8 +1878,8 @@ has focus or is equal to GetOwnerCtrl of any active popup.&]
 [s5;:Ctrl`:`:WantFocus`(bool`):%- [_^`:`:Ctrl^ Ctrl][@(0.0.255) `&]_[* WantFocus]([@(0.0.255) b
 ool]_[*@3 ft]_`=_[@(0.0.255) true])&]
 [s2;b17;a17; Indicates whether Ctrl wants focus to be passed to it 
-by U`+`+, e.g. when navigating through the dialog using Tab (or 
-Shift`+Tab) key.&]
+by U`+`+, when navigating through the dialog using Tab (or Shift`+Tab) 
+key.&]
 [s7;i1120;a17; [%-*C@3 ft]-|true to indicate that Ctrl wants focus.&]
 [s7;i1120;a17; [*/ Return value]-|Same Ctrl for method chaining.&]
 [s3;%- &]
@@ -1974,7 +2112,9 @@ can check this flag using IsEditable method and behave accordingly.&]
 [s3;%- &]
 [s4;%- &]
 [s5;:Ctrl`:`:Action`(`):%- [@(0.0.255) void]_[* Action]()&]
-[s2;b17;a17; Invokes default Ctrl callback `- WhenAction.&]
+[s2;b17;a17; Invokes default Ctrl callback `- WhenAction. Action 
+actually makes a copy of WhenAction `- this ensures that the 
+Event<> object is not destroyed during the call.&]
 [s3;%- &]
 [s4;%- &]
 [s5;:Ctrl`:`:UpdateAction`(`):%- [@(0.0.255) void]_[* UpdateAction]()&]
@@ -2079,35 +2219,25 @@ trl])&]
 [s4;%- &]
 [s5;:Ctrl`:`:Remove`(`):%- [@(0.0.255) void]_[* Remove]()&]
 [s2;b17;a17; Removes Ctrl from its parent.&]
-[s3;%- &]
+[s3; &]
 [s4;%- &]
 [s5;:Ctrl`:`:operator`<`<`=`(const Value`&`):%- [@(0.0.255) const]_[_^`:`:Value^ Value][@(0.0.255) `&
 ]_[* operator<<`=]([@(0.0.255) const]_[_^`:`:Value^ Value][@(0.0.255) `&]_[*@3 v])&]
 [s2;b17;a17; Same as SetData(v).&]
 [s7;i1120;a17; [%-*C@3 v]-|New Value of Ctrl.&]
 [s7;i1120;a17; [*/ Return value]-|Reference to v.&]
-[s3;%- &]
+[s3; &]
 [s4;%- &]
-[s5;:Ctrl`:`:operator`<`<`=`(Callback`):%- [_^`:`:Callback^ Callback]_[* operator<<`=]([_^`:`:Callback^ C
-allback]_[*@3 action])&]
-[s2;b17;a17; Same as WhenAction `= action;&]
-[s7;i1120;a17; [%-*C@3 action]-|Callback that is invoked when user changes 
-value of Ctrl.&]
-[s7;i1120;a17; [*/ Return value]-|The value of callback, so that it 
-can be assigned to several Ctrls in one statement.&]
-[s3;%- &]
+[s5;:Upp`:`:Ctrl`:`:operator`<`<`(Upp`:`:Function`<void`(`)`>`):%- [_^Upp`:`:Callback^ C
+allback][@(0.0.255) `&]_[* operator<<]([_^Upp`:`:Function^ Upp`::Function]<[@(0.0.255) voi
+d]_()>_[*@3 action])&]
+[s2; Same as WhenAction << action, can be used both with lambdas 
+and Events (former Callbacks)..&]
+[s3; &]
 [s4;%- &]
-[s5;:Ctrl`:`:operator`<`<`(Callback`):%- [_^`:`:Callback^ Callback][@(0.0.255) `&]_[* opera
-tor<<]([_^`:`:Callback^ Callback]_[*@3 action])&]
-[s2;b17;a17; Same as WhenAction << action;&]
-[s7;i1120;a17; [%-*C@3 action]-|Callback that is to be added to callbacks 
-that are invoked when user changes value of Ctrl.&]
-[s7;i1120;a17; [*/ Return value]-|Reference to WhenAction.&]
-[s3;%- &]
-[s4;%- &]
-[s5;:Ctrl`:`:SetTimeCallback`(int`,Callback`,int`):%- [@(0.0.255) void]_[* SetTimeCallbac
-k]([@(0.0.255) int]_[*@3 delay`_ms], [_^`:`:Callback^ Callback]_[*@3 cb], 
-[@(0.0.255) int]_[*@3 id]_`=_[@3 0])&]
+[s5;:Upp`:`:Ctrl`:`:SetTimeCallback`(int`,Upp`:`:Function`<void`(`)`>`,int`):%- [@(0.0.255) v
+oid]_[* SetTimeCallback]([@(0.0.255) int]_[*@3 delay`_ms], [_^Upp`:`:Function^ Function]<
+[@(0.0.255) void]_()>_[*@3 cb], [@(0.0.255) int]_[*@3 id]_`=_[@3 0])&]
 [s2;b17;a17; Puts delayed callback to the timer queue. As an identifier 
 of callback, which is void `* in timer queue, [* this] `+ [* id] 
 is used. When Ctrl is destroyed, all callbacks with [* id] in range 
@@ -2134,6 +2264,12 @@ nt]_[*@3 id]_`=_[@3 0])&]
 [s7;i1120;a17; [%-*C@3 id]-|Id of callback.&]
 [s3;%- &]
 [s4;%- &]
+[s5;:Upp`:`:Ctrl`:`:KillSetTimeCallback`(int`,Upp`:`:Function`<void`(`)`>`,int`):%- [@(0.0.255) v
+oid]_[* KillSetTimeCallback]([@(0.0.255) int]_[*@3 delay`_ms], [_^Upp`:`:Function^ Functi
+on]<[@(0.0.255) void]_()>_[*@3 cb], [@(0.0.255) int]_[*@3 id])&]
+[s2; Removes callback with [%-*@3 id] and sets it again.&]
+[s3; &]
+[s4;%- &]
 [s5;:Ctrl`:`:ExistsTimeCallback`(int`)const:%- [@(0.0.255) bool]_[* ExistsTimeCallback]([@(0.0.255) i
 nt]_[*@3 id]_`=_[@3 0])_[@(0.0.255) const]&]
 [s2;b17;a17; Tests whether Ctrl has associated callback in timer 
@@ -2141,6 +2277,20 @@ queue.&]
 [s7;i1120;a17; [%-*C@3 id]-|Id of callback.&]
 [s7;i1120;a17; [*/ Return value]-|true when id is found in timer queue.&]
 [s3;%- &]
+[s4;%- &]
+[s5;:Upp`:`:Ctrl`:`:PostCallback`(Upp`:`:Function`<void`(`)`>`,int`):%- [@(0.0.255) voi
+d]_[* PostCallback]([_^Upp`:`:Function^ Function]<[@(0.0.255) void]_()>_[*@3 cb], 
+[@(0.0.255) int]_[*@3 id]_`=_[@3 0])&]
+[s2; Posts callback to be executed immediately (but in the main loop 
+after all current GUI events).&]
+[s3; &]
+[s4;%- &]
+[s5;:Upp`:`:Ctrl`:`:KillPostCallback`(Upp`:`:Function`<void`(`)`>`,int`):%- [@(0.0.255) v
+oid]_[* KillPostCallback]([_^Upp`:`:Function^ Function]<[@(0.0.255) void]_()>_[*@3 cb], 
+[@(0.0.255) int]_[*@3 id])&]
+[s2; Similar to PostCallback, but removes callback(s) with the same 
+id from the queue first.&]
+[s3; &]
 [s4;%- &]
 [s5;:Ctrl`:`:GetActiveCtrl`(`):%- [@(0.0.255) static] [_^`:`:Ctrl^ Ctrl]_`*[* GetActiveCtrl
 ]()&]
@@ -2175,7 +2325,8 @@ view or frame coordinates.&]
 HWND_[*@3 hwnd], [@(0.0.255) bool]_[*@3 savebits]_`=_[@(0.0.255) true], 
 [@(0.0.255) bool]_[*@3 activate]_`=_[@(0.0.255) true], [@(0.0.255) bool]_[*@3 dropshadow]_`=
 _[@(0.0.255) false], [@(0.0.255) bool]_[*@3 topmost]_`=_[@(0.0.255) false])&]
-[s2;b17;a17; Opens top`-level Ctrl as pop`-up window.&]
+[s2;b17;a17; Opens top`-level Ctrl as pop`-up window. [*/ This method 
+can only be invoked in the main thread.]&]
 [s6; [2 Win32 specific.]&]
 [s7;i1120;a17; [%-*C@3 hwnd]-|Win32 handle of owner window.&]
 [s7;i1120;a17; [%-*C@3 savebits]-|Indicates that system should try to 
@@ -2190,7 +2341,8 @@ preserve background bits.&]
 trl]_`*[*@3 owner]_`=_NULL, [@(0.0.255) bool]_[*@3 savebits]_`=_[@(0.0.255) true], 
 [@(0.0.255) bool]_[*@3 activate]_`=_[@(0.0.255) true], [@(0.0.255) bool]_[*@3 dropshadow]_`=
 _[@(0.0.255) false], [@(0.0.255) bool]_[*@3 topmost]_`=_[@(0.0.255) false])&]
-[s2;b17;a17; Opens top`-level Ctrl as pop`-up window.&]
+[s2;b17;a17; Opens top`-level Ctrl as pop`-up window. [*/ This method 
+can only be invoked in the main thread.]&]
 [s7;i1120;a17; [%-*C@3 owner]-|Owner.&]
 [s7;i1120;a17; [%-*C@3 savebits]-|Indicates that system should try to 
 preserve background bits.&]
@@ -2239,15 +2391,16 @@ were processed, false that queue was empty.&]
 [s4;%- &]
 [s5;:Ctrl`:`:IsPopUp`(`)const:%- [@(0.0.255) bool]_[* IsPopUp]()_[@(0.0.255) const]&]
 [s7;i1120;a17; [*/ Return value]-|True if Ctrl is pop`-up window.&]
-[s3;%- &]
+[s3; &]
 [s4;%- &]
-[s5;:Ctrl`:`:EventLoop`(`:`:Ctrl`*`):%- [@(0.0.255) static] [@(0.0.255) void]_[* EventLoop](
-[_^`:`:Ctrl^ Ctrl]_`*[*@3 loopctrl]_`=_NULL)&]
+[s5;:Ctrl`:`:EventLoop`(Ctrl`*`):%- [@(0.0.255) static] [@(0.0.255) void]_[* EventLoop]([_^`:`:Ctrl^ C
+trl]_`*[*@3 loopctrl]_`=_NULL)&]
 [s2;b17;a17; Executes event`-loop. If [*@3 loopctrl ]is not NULL, it 
 must be opened top`-level Ctrl and loop is executed until EndLoop 
 method for [*@3 loopctrl ]is invoked. If [*@3 loopctrl] is NULL, 
 loop is executed as long as any top`-level Ctrl exists or application 
-is terminated by OS specific `"shutdown`" event.&]
+is terminated by OS specific `"shutdown`" event. [*/ This method 
+can only be invoked in the main thread.]&]
 [s7;i1120;a17; [%-*C@3 loopctrl]-|Looping Ctrl.&]
 [s3;%- &]
 [s4;%- &]
@@ -2408,6 +2561,16 @@ ize]_[*@3 sz])&]
 [s2;b17;a17; Sets scaling factor to (1, 1). Same as SetZoomSize(Size(1, 
 1), Size(1, 1)).&]
 [s3; &]
+[s4;%- &]
+[s5;:Upp`:`:Ctrl`:`:SetUHDEnabled`(bool`):%- [@(0.0.255) void]_[* SetUHDEnabled]([@(0.0.255) b
+ool]_[*@3 set])&]
+[s2; Informs host platform that application is UHD ready. Default 
+is true.&]
+[s3; &]
+[s4;%- &]
+[s5;:Upp`:`:Ctrl`:`:IsUHDEnabled`(`):%- [@(0.0.255) bool]_[* IsUHDEnabled]()&]
+[s2; Returns the value set by SetUHDEnabled.&]
+[s3;%- &]
 [s4; &]
 [s5;K:Ctrl`:`:GetWorkArea`(`):%- [*^`:`:Rect^@(64) Rect][*@(64) _][* GetWorkArea][*@(64) ()]&]
 [s2; Returns OS specific working area for the widget `- this is rectangle 
@@ -2439,6 +2602,19 @@ in Windows is the display with start menu.&]
 ryScreenArea]()&]
 [s2;b17;a17; Returns the size of primary screen `- primary screen 
 in Windows is the display with start menu.&]
+[s3;%- &]
+[s4;%- &]
+[s5;:Ctrl`:`:GetWorkArea`(Point`):%- [@(0.0.255) static] [_^Rect^ Rect]_[* GetWorkArea]([_^Point^ P
+oint]_[*@3 pt])&]
+[s2; Returns the recangle of work area which contains [%-*@3 pt]. If 
+[%-*@3 pt] does not belong to any area, returns the primary work 
+area.&]
+[s3; &]
+[s4;%- &]
+[s5;:Ctrl`:`:GetMouseWorkArea`(`):%- [@(0.0.255) static] [_^Rect^ Rect]_[* GetMouseWorkArea
+]()&]
+[s2; Returns the work are which contains mouse cursor. Same as GetWorkArea(GetMousePo
+s()).&]
 [s3;%- &]
 [s4;%- &]
 [s5;:Ctrl`:`:GetKbdDelay`(`):%- [@(0.0.255) static] [@(0.0.255) int]_[* GetKbdDelay]()&]
@@ -2489,9 +2665,37 @@ does is platform specific).&]
 nt]_[*@3 ms])&]
 [s2;b17;a17; Sleeps (while allowing other applications or threads 
 to run) for at least [*@3 ms] milliseconds or until new input event 
-is available.&]
+is available. [*/ This method can only be invoked in the main thread.]&]
 [s7;i1120;a17; [%-*@3 ms]-|Time to sleep.&]
 [s3; &]
+[s4;%- &]
+[s5;:Upp`:`:Ctrl`:`:Call`(Upp`:`:Function`<void`(`)`>`):%- [@(0.0.255) static] 
+[@(0.0.255) void]_[* Call]([_^Upp`:`:Function^ Function]<[@(0.0.255) void]_()>_[*@3 cb])&]
+[s2; Executes a callback in the main thread (the one responsible 
+for GUI). It works by posting callback into timer queue (with 
+zero delay), then waits its completion using Semaphore. Main 
+GUI thread has to run timer queue management for callback to 
+be executed (by running event`-loop (TopWindow`::Run) or ProcessEvents). 
+Warning: Call temporarily unlocks GuiLock (if locked) so that 
+the main thread can run on GUI, this is possible source of race`-conditions 
+(GuiLock is relocked after call completes). Be prepared that 
+some other code can run on GUI between call to Call and cb being 
+executed!&]
+[s3; &]
+[s4;%- &]
+[s5;:Ctrl`:`:IsShutdownThreads`(`):%- [@(0.0.255) static] [@(0.0.255) bool]_[* IsShutdownTh
+reads]()&]
+[s2; Same as Thread`::IsShutdownThreads. Used to signal non`-main 
+threads that the program is about to end, so that non`-main threads 
+should terminate.&]
+[s3;%- &]
+[s4;%- &]
+[s5;:Ctrl`:`:ShutdownThreads`(`):%- [@(0.0.255) static] [@(0.0.255) void]_[* ShutdownThread
+s]()&]
+[s2; Similiar to Thread`::ShutdownThreads, but as part of waiting 
+for threads to finish calls ProcessEvents so that any Call methods 
+can finish.&]
+[s3;%- &]
 [s4;%- &]
 [s5;:Ctrl`:`:GetEventId`(`):%- [@(0.0.255) static] [_^int64^ int64]_[* GetEventId]()&]
 [s2; This function is guaranteed to return the same number while 
@@ -2610,4 +2814,4 @@ or!`=]([_^Ctrl`:`:LogPos^ LogPos]_[*@3 b])_[@(0.0.255) const]&]
 [s5;:Ctrl`:`:LogPos`:`:y:%- [_^Ctrl`:`:Logc^ Logc]_[* y]&]
 [s2; Vertical Logc.&]
 [s3; &]
-[s0; ]
+[s0; ]]

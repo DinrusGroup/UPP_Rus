@@ -2,9 +2,9 @@
 
 #ifdef GUI_WIN
 
-NAMESPACE_UPP
+namespace Upp {
 
-#define LLOG(x)  // LOG(x)
+#define LLOG(x)  // DLOG(x)
 
 #if defined(COMPILER_MINGW) && !defined(FLASHW_ALL)
 	// MINGW headers don't include this in (some versions of) windows
@@ -36,40 +36,44 @@ LRESULT TopWindow::WindowProc(UINT message, WPARAM wParam, LPARAM lParam)
 	bool inloop;
 #endif
 	switch(message) {
-#ifndef PLATFORM_WINCE
 	case WM_QUERYENDSESSION:
 		inloop = InLoop();
 		WhenClose();
 		return inloop ? !InLoop() : !IsOpen();
-#endif
 	case WM_CLOSE:
 		if(IsEnabled()) {
 			IgnoreMouseUp();
 			WhenClose();
 		}
 		return 0;
+	case WM_DESTROY:
+		if(overlapped.GetWidth() && overlapped.GetHeight())
+			SetRect(overlapped);
+		break;
 	case WM_WINDOWPOSCHANGED:
-#ifndef PLATFORM_WINCE
+		if(!isopen)
+			break;
 		if(IsIconic(hwnd))
 			state = MINIMIZED;
 		else
 		if(IsZoomed(hwnd))
 			state = MAXIMIZED;
-		else
-#endif
-		{
+		else {
 			state = OVERLAPPED;
-			overlapped = GetScreenClient(hwnd);
+			if(IsWindowVisible(hwnd))
+				overlapped = GetScreenClient(hwnd);
 		}
+		LLOG("TopWindow::WindowProc::WM_WINDOWPOSCHANGED: overlapped = " << overlapped);
 		Layout();
 		break;
 	}
 	return Ctrl::WindowProc(message, wParam, lParam);
 }
 
-void TopWindow::SyncTitle0()
+void TopWindow::SyncTitle()
 {
 	GuiLock __;
+	LLOG("TopWindow::SyncTitle0 " << UPP::Name(this));
 	HWND hwnd = GetHWND();
 #ifndef PLATFORM_WINCE
 	if(hwnd)
@@ -80,9 +84,10 @@ void TopWindow::SyncTitle0()
 			::SetWindowText(hwnd, ToSystemCharset(title.ToString()));
 }
 
-void TopWindow::DeleteIco0()
+void TopWindow::DeleteIco()
 {
 	GuiLock __;
+	LLOG("TopWindow::DeleteIco " << UPP::Name(this));
 	if(ico)
 		DestroyIcon(ico);
 	if(lico)
@@ -90,15 +95,62 @@ void TopWindow::DeleteIco0()
 	ico = lico = NULL;
 }
 
-void TopWindow::DeleteIco()
+String WindowStyleAsString(dword style, dword exstyle)
 {
-	ICall(THISBACK(DeleteIco0));
+	String r1;
+#define DO(x) if(style & x) { if(r1.GetCount()) r1 << "|"; r1 << #x; }
+	DO(WS_OVERLAPPED)
+	DO(WS_POPUP)
+	DO(WS_CHILD)
+	DO(WS_MINIMIZE)
+	DO(WS_VISIBLE)
+	DO(WS_DISABLED)
+	DO(WS_CLIPSIBLINGS)
+	DO(WS_CLIPCHILDREN)
+	DO(WS_MAXIMIZE)
+	DO(WS_CAPTION)
+	DO(WS_BORDER)
+	DO(WS_DLGFRAME)
+	DO(WS_VSCROLL)
+	DO(WS_HSCROLL)
+	DO(WS_SYSMENU)
+	DO(WS_THICKFRAME)
+	DO(WS_GROUP)
+	DO(WS_TABSTOP)
+	DO(WS_MINIMIZEBOX)
+	DO(WS_MAXIMIZEBOX)
+#undef DO
+
+	String r2;
+#define DO(x) if(exstyle & x) { if(r2.GetCount()) r2 << "|"; r2 << #x; }
+	DO(WS_EX_DLGMODALFRAME)
+	DO(WS_EX_NOPARENTNOTIFY)
+	DO(WS_EX_TOPMOST)
+	DO(WS_EX_ACCEPTFILES)
+	DO(WS_EX_TRANSPARENT)
+	DO(WS_EX_MDICHILD)
+	DO(WS_EX_TOOLWINDOW)
+	DO(WS_EX_WINDOWEDGE)
+	DO(WS_EX_CLIENTEDGE)
+	DO(WS_EX_CONTEXTHELP)
+	DO(WS_EX_RIGHT)
+	DO(WS_EX_LEFT)
+	DO(WS_EX_RTLREADING)
+	DO(WS_EX_LTRREADING)
+	DO(WS_EX_LEFTSCROLLBAR)
+	DO(WS_EX_RIGHTSCROLLBAR)
+	DO(WS_EX_CONTROLPARENT)
+	DO(WS_EX_STATICEDGE)
+	DO(WS_EX_APPWINDOW)
+#undef DO
+
+	return r1 + ' ' + r2;
 }
 
-void TopWindow::SyncCaption0()
+void TopWindow::SyncCaption()
 {
 	GuiLock __;
-	LLOG("SyncCaption");
+	LLOG("TopWindow::SyncCaption " << UPP::Name(this));
 	if(fullscreen)
 		return;
 	HWND hwnd = GetHWND();
@@ -106,6 +158,7 @@ void TopWindow::SyncCaption0()
 		style = ::GetWindowLong(hwnd, GWL_STYLE);
 		exstyle = ::GetWindowLong(hwnd, GWL_EXSTYLE);
 	}
+	else style = exstyle = 0;
 	style &= ~(WS_THICKFRAME|WS_MINIMIZEBOX|WS_MAXIMIZEBOX|WS_SYSMENU|WS_POPUP|WS_DLGFRAME);
 	exstyle &= ~(WS_EX_TOOLWINDOW|WS_EX_DLGMODALFRAME);
 	style |= WS_CAPTION;
@@ -117,18 +170,16 @@ void TopWindow::SyncCaption0()
 		style |= WS_MAXIMIZEBOX;
 	if(sizeable)
 		style |= WS_THICKFRAME;
-#ifndef PLATFORM_WINCE
 	if(frameless)
 		style = (style & ~WS_CAPTION) | WS_POPUP;
 	else
-	if(IsNull(icon) && !maximizebox && !minimizebox || noclosebox) {
+	if(/*IsNull(icon) && */!maximizebox && !minimizebox || noclosebox) { // icon ignored because of FixIcons
 		style |= WS_POPUPWINDOW|WS_DLGFRAME;
 		exstyle |= WS_EX_DLGMODALFRAME;
 		if(noclosebox)
 			style &= ~WS_SYSMENU;
 	}
 	else
-#endif
 		style |= WS_SYSMENU;
 	if(tool)
 		exstyle |= WS_EX_TOOLWINDOW;
@@ -151,8 +202,8 @@ void TopWindow::SyncCaption0()
 	DeleteIco();
 #ifndef PLATFORM_WINCE //TODO!!!
 	if(hwnd) {
-		::SendMessage(hwnd, WM_SETICON, false, (LPARAM)(ico = IconWin32(icon)));
-		::SendMessage(hwnd, WM_SETICON, true, (LPARAM)(lico = IconWin32(largeicon)));
+		::SendMessage(hwnd, WM_SETICON, false, (LPARAM)(ico = SystemDraw::IconWin32(icon)));
+		::SendMessage(hwnd, WM_SETICON, true, (LPARAM)(lico = SystemDraw::IconWin32(largeicon)));
 	}
 #endif
 }
@@ -160,7 +211,7 @@ void TopWindow::SyncCaption0()
 void TopWindow::CenterRect(HWND hwnd, int center)
 {
 	GuiLock __;
-	SetupRect();
+	SetupRect(CtrlFromHWND(hwnd));
 	if(hwnd && center == 1 || center == 2) {
 		Size sz = GetRect().Size();
 		Rect frmrc(sz);
@@ -202,15 +253,16 @@ void TopWindow::Open(HWND hwnd)
 	GuiLock __;
 	if(dokeys && (!GUI_AKD_Conservative() || GetAccessKeysDeep() <= 1))
 		DistributeAccessKeys();
-	UsrLogT(3, "OPEN " + Desc(this));
+	USRLOG("   OPEN " << Desc(this));
 	LLOG("TopWindow::Open, owner HWND = " << FormatIntHex((int)hwnd, 8) << ", Active = " << FormatIntHex((int)::GetActiveWindow(), 8));
 	IgnoreMouseUp();
 	SyncCaption();
+	LLOG("WindowStyles: " << WindowStyleAsString(style, exstyle));
 #ifdef PLATFORM_WINCE
 	if(!GetRect().IsEmpty())
 #endif
 	if(fullscreen) {
-		SetRect(GetScreenSize());
+		SetRect(GetScreenRect()); // 12-05-23 Tom changed from GetScreenSize() to GetScreenRect() in order to get full screen on correct display
 		Create(hwnd, WS_POPUP, 0, false, SW_SHOWMAXIMIZED, false);
 	}
 	else {
@@ -245,6 +297,7 @@ void TopWindow::OpenMain()
 
 void TopWindow::Minimize(bool effect)
 {
+	LLOG("TopWindow::Minimize " << UPP::Name(this));
 	state = MINIMIZED;
 	if(IsOpen())
 #ifdef PLATFORM_WINCE
@@ -256,12 +309,13 @@ void TopWindow::Minimize(bool effect)
 
 TopWindow& TopWindow::FullScreen(bool b)
 {
+	LLOG("TopWindow::FullScreen " << UPP::Name(this));
 	fullscreen = b;
 	HWND hwnd = GetOwnerHWND();
 	bool pinloop = inloop;
 	WndDestroy();
 	Overlap();
-	SetRect(GetDefaultWindowRect());
+	SetRect(overlapped); // 12-05-23 Tom changed from GetDefaultWindowRect() to 'overlapped' to restore back to previous window position
 	Open(hwnd);
 	inloop = pinloop;
 	return *this;
@@ -269,6 +323,7 @@ TopWindow& TopWindow::FullScreen(bool b)
 
 void TopWindow::Maximize(bool effect)
 {
+	LLOG("TopWindow::Maximize " << UPP::Name(this));
 	state = MAXIMIZED;
 	if(IsOpen()) {
 		::ShowWindow(GetHWND(), effect ? SW_MAXIMIZE : SW_SHOWMAXIMIZED);
@@ -279,6 +334,7 @@ void TopWindow::Maximize(bool effect)
 void TopWindow::Overlap(bool effect)
 {
 	GuiLock __;
+	LLOG("TopWindow::Overlap " << UPP::Name(this));
 	state = OVERLAPPED;
 	if(IsOpen()) {
 		::ShowWindow(GetHWND(), effect ? SW_SHOWNORMAL : SW_RESTORE);
@@ -289,6 +345,7 @@ void TopWindow::Overlap(bool effect)
 TopWindow& TopWindow::Style(dword _style)
 {
 	GuiLock __;
+	LLOG("TopWindow::Style " << UPP::Name(this));
 	style = _style;
 	if(GetHWND())
 		::SetWindowLong(GetHWND(), GWL_STYLE, style);
@@ -299,6 +356,7 @@ TopWindow& TopWindow::Style(dword _style)
 TopWindow& TopWindow::ExStyle(dword _exstyle)
 {
 	GuiLock __;
+	LLOG("TopWindow::ExStyle " << UPP::Name(this));
 	exstyle = _exstyle;
 	if(GetHWND())
 		::SetWindowLong(GetHWND(), GWL_EXSTYLE, exstyle);
@@ -309,6 +367,7 @@ TopWindow& TopWindow::ExStyle(dword _exstyle)
 TopWindow& TopWindow::TopMost(bool b, bool stay_top)
 {
 	GuiLock __;
+	LLOG("TopWindow::TopMost " << UPP::Name(this));
 	HWND hwnd;
 	if(hwnd = GetHWND())
 		SetWindowPos(hwnd, b ? HWND_TOPMOST : (stay_top ? HWND_NOTOPMOST : HWND_BOTTOM),
@@ -336,19 +395,22 @@ void TopWindow::GuiPlatformDestruct()
 void TopWindow::SerializePlacement(Stream& s, bool reminimize)
 {
 	GuiLock __;
-#ifndef PLATFORM_WINCE
-	int version = 0;
+	int version = 1;
 	s / version;
 	Rect rect = GetRect();
 	s % overlapped % rect;
 	bool mn = state == MINIMIZED;
 	bool mx = state == MAXIMIZED;
-	s.Pack(mn, mx);
-	LLOG("TopWindow::SerializePlacement / " << (s.IsStoring() ? "write" : "read"));
-	LLOG("minimized = " << mn << ", maximized = " << mx);
+	bool fs = fullscreen;
+	if(version >= 1)
+		s.Pack(mn, mx, fs);
+	else
+		s.Pack(mn, mx);
+	LLOG(Name(this) << "::SerializePlacement / " << (s.IsStoring() ? "write" : "read"));
+	LLOG("minimized = " << mn << ", maximized = " << mx << ", fullscreen = " << fs);
 	LLOG("rect = " << rect << ", overlapped = " << overlapped);
 	if(s.IsLoading()) {
-		if(mn) rect = overlapped;
+		rect = overlapped;
 		Rect limit = GetVirtualWorkArea();
 		Rect outer = rect;
 		::AdjustWindowRect(outer, WS_OVERLAPPEDWINDOW, FALSE);
@@ -361,45 +423,35 @@ void TopWindow::SerializePlacement(Stream& s, bool reminimize)
 			minmax(rect.left, limit.left, limit.right - sz.cx),
 			minmax(rect.top,  limit.top,  limit.bottom - sz.cy),
 			sz.cx, sz.cy);
-		state = OVERLAPPED;
+
+		Overlap();
+		SetRect(rect);
+		
 		if(mn && reminimize)
 			state = MINIMIZED;
 		if(mx)
 			state = MAXIMIZED;
-		if(state == OVERLAPPED)
-			SetRect(rect);
+		if(min(sz.cx, sz.cy) < 50 && mn && !reminimize)
+			state = MAXIMIZED; // Minimized tends to have invalid size, somewhat ugly patch here
 		if(IsOpen()) {
-			WINDOWPLACEMENT wp;
-			memset(&wp,0,sizeof(WINDOWPLACEMENT));
-			wp.length=sizeof(WINDOWPLACEMENT);
-			wp.showCmd = state==MINIMIZED ? SW_MINIMIZE : state==MAXIMIZED ? SW_MAXIMIZE : SW_RESTORE;
-			wp.rcNormalPosition.left=rect.left;
-			wp.rcNormalPosition.top=rect.top;
-			wp.rcNormalPosition.right=rect.right;
-			wp.rcNormalPosition.bottom=rect.bottom;
-			::SetWindowPlacement(GetHWND(),&wp);
-		/*
-			HWND hwnd = GetHWND();
 			switch(state) {
 			case MINIMIZED:
-				if(!IsIconic(hwnd))
-					::ShowWindow(hwnd, SW_MINIMIZE);
+				Minimize();
 				break;
 			case MAXIMIZED:
-				if(!IsZoomed(hwnd))
-					::ShowWindow(hwnd, SW_MAXIMIZE);
-				break;
-			default:
-				if(IsIconic(hwnd) || IsZoomed(hwnd))
-					::ShowWindow(hwnd, SW_RESTORE);
+				Maximize();
 				break;
 			}
-		*/
+			if(fs) {
+				Overlap(); // Needed to restore normal position before fullscreen mode
+				FullScreen();
+			}
 		}
+		else
+			fullscreen = fs;
 	}
-#endif
 }
 
-END_UPP_NAMESPACE
+}
 
 #endif

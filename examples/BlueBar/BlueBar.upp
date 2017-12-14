@@ -1,4 +1,4 @@
-description "Демонстрация \"голубого\" скина для ToolBar иMenuBar\377";
+description "Demonstration of \"blue\" ToolBar and MenuBar skin\377";
 
 uses
 	CtrlLib,

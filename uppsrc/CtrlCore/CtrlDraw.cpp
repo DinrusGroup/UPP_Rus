@@ -1,6 +1,6 @@
 #include "CtrlCore.h"
 
-NAMESPACE_UPP
+namespace Upp {
 
 #define LLOG(x)     // DLOG(x)
 #define LTIMING(x)  // TIMING(x)
@@ -8,8 +8,14 @@ NAMESPACE_UPP
 bool Ctrl::globalbackpaint;
 bool Ctrl::globalbackbuffer;
 
+static void sCheckGuiLock()
+{
+	ASSERT_(ThreadHasGuiLock(), "Using GUI in non-main thread without GuiLock");
+}
+
 void Ctrl::RefreshFrame(const Rect& r) {
-	GuiLock __;
+	sCheckGuiLock();
+	GuiLock __; // Beware: Even if we have ThreadHasGuiLock ASSERT, we still can be the main thread!
 	if(!IsOpen() || !IsVisible() || r.IsEmpty()) return;
 	LTIMING("RefreshFrame");
 	LLOG("RefreshRect " << Name() << ' ' << r);
@@ -28,20 +34,26 @@ void Ctrl::RefreshFrame(const Rect& r) {
 	}
 }
 
-void Ctrl::Refresh(const Rect& area) {
-	GuiLock __;
-	if(fullrefresh || !IsVisible() || !IsOpen()) return;
-	LLOG("Refresh " << Name() << ' ' <<  area);
+void Ctrl::Refresh0(const Rect& area) {
 	RefreshFrame((area + GetView().TopLeft()) & GetView().Inflated(OverPaint()));
 }
 
+void Ctrl::Refresh(const Rect& area) {
+	sCheckGuiLock();
+	GuiLock __; // Beware: Even if we have ThreadHasGuiLock ASSERT, we still can be the main thread!
+	if(fullrefresh || !IsVisible() || !IsOpen()) return;
+	LLOG("Refresh " << Name() << ' ' <<  area);
+	Refresh0(area);
+}
+
 void Ctrl::Refresh() {
-	GuiLock __;
+	sCheckGuiLock();
+	GuiLock __; // Beware: Even if we have ThreadHasGuiLock ASSERT, we still can be the main thread!
 	if(fullrefresh || !IsVisible() || !IsOpen()) return;
 	LLOG("Refresh " << Name() << " full:" << fullrefresh);
-	Refresh(Rect(GetSize()).Inflated(OverPaint()));
 	if(!GuiPlatformSetFullRefreshSpecial())
-		fullrefresh = true;
+		fullrefresh = true; // Needs to be set ahead because of possible MT ICall that can cause repaint during Refresh0
+	Refresh0(Rect(GetSize()).Inflated(OverPaint()));
 }
 
 void Ctrl::Refresh(int x, int y, int cx, int cy) {
@@ -59,7 +71,8 @@ void Ctrl::RefreshFrame() {
 
 void  Ctrl::ScrollRefresh(const Rect& r, int dx, int dy)
 {
-	GuiLock __;
+	sCheckGuiLock();
+	GuiLock __; // Beware: Even if we have ThreadHasGuiLock ASSERT, we still can be the main thread!
 	LLOG("ScrollRefresh " << r << " " << dx << " " << dy);
 	if(!IsOpen() || !IsVisible() || r.IsEmpty()) return;
 	int tdx = tabs(dx), tdy = tabs(dy);
@@ -149,6 +162,10 @@ void  Ctrl::ScrollView(const Rect& _r, int dx, int dy)
 {
 	GuiLock __;
 	LLOG("ScrollView " << _r << " " << dx << " " << dy);
+#ifdef GUIPLATFORM_NOSCROLL
+	LLOG("NOSCROLL");
+	Refresh(_r);
+#else
 	if(IsFullRefresh() || !IsVisible())
 		return;
 	Size vsz = GetSize();
@@ -179,6 +196,7 @@ void  Ctrl::ScrollView(const Rect& _r, int dx, int dy)
 				if(q->InView() && q != this)
 					ScrollCtrl(top, q, r, q->GetScreenRect() - GetScreenView().TopLeft(), dx, dy);
 	}
+#endif
 }
 
 void  Ctrl::ScrollView(int x, int y, int cx, int cy, int dx, int dy) {
@@ -194,7 +212,7 @@ void  Ctrl::SyncScroll()
 	GuiLock __;
 	if(!top)
 		return;
-	Vector<Scroll> scroll = top->scroll;
+	Vector<Scroll> scroll = pick(top->scroll);
 	top->scroll.Clear();
 	if(IsFullRefresh())
 		return;
@@ -224,6 +242,7 @@ Rect Ctrl::GetVoidRect() const
 
 
 #ifdef _DEBUG
+
 struct sDrawLevelCheck {
 	Draw&        w;
 	int          lvl;
@@ -234,7 +253,7 @@ struct sDrawLevelCheck {
 	}
 
 	sDrawLevelCheck(Draw& w, const Ctrl *q) : w(w), lvl(w.GetCloffLevel()), q(q) {}
-	~sDrawLevelCheck() { Check(); }
+	// NOTE: Checking level in destructor is a bad idea because of exceptions
 };
 
 #define LEVELCHECK(w, q)    sDrawLevelCheck _x_(w, q)
@@ -243,8 +262,8 @@ struct sDrawLevelCheck {
 #define LEVELCHECK(w, q)
 #define DOLEVELCHECK
 #endif
-#ifdef flagWINGL
-void Ctrl::CtrlPaint(SystemDraw& w, const Rect& clip, int depth) {
+#if defined(flagWINGL) || defined(flagLINUXGL)
+void Ctrl::CtrlPaint(SystemDraw& w, const Rect& clip) {
 	GuiLock __;
 	LEVELCHECK(w, this);
 	LTIMING("CtrlPaint");
@@ -254,7 +273,8 @@ void Ctrl::CtrlPaint(SystemDraw& w, const Rect& clip, int depth) {
 	if(!IsShown() || orect.IsEmpty() || clip.IsEmpty() || !clip.Intersects(orect))
 		return;
 	
-	glPushMatrix();
+	w.PushContext();
+	//glPushMatrix();
 	ApplyTransform(TS_BEFORE_CTRL_PAINT);
 		
 	Ctrl *q;
@@ -279,7 +299,7 @@ void Ctrl::CtrlPaint(SystemDraw& w, const Rect& clip, int depth) {
 				LEVELCHECK(w, q);
 				Point off = q->GetRect().TopLeft();
 				w.Offset(off);
-				q->CtrlPaint(w, clip - off, depth + 1);
+				q->CtrlPaint(w, clip - off);
 				w.End();
 			}
 			else
@@ -288,56 +308,41 @@ void Ctrl::CtrlPaint(SystemDraw& w, const Rect& clip, int depth) {
 	if(viewexcluded)
 		w.End();
 	//DOLEVELCHECK;
-	
-	if(!oview.IsEmpty() && oview.Intersects(clip)) {
-		glPushMatrix();
-		LEVELCHECK(w, this);
-		if(overpaint) {
-			if(cliptobounds)
-				w.Clip(oview);
-			w.Offset(view.left, view.top);
-			Paint(w);
-			PaintCaret(w);
-			w.End();
-			if(cliptobounds)
-				w.End();
-		}
-		else {
-			if(cliptobounds)
-				w.Clip(view);
-			w.Offset(view.left, view.top);
-			Paint(w);
-			PaintCaret(w);
-			w.End();
-			if(cliptobounds)
-				w.End();
-		}
-		glPopMatrix();
-	}
-	
-	if(hasviewctrls && !view.IsEmpty()) {
-		Rect cl = clip & view;
-		for(q = firstchild; q; q = q->next)
-			if(q->IsShown() && q->InView()) {
-				Rect rr(q->popup ? clip : cl);
-				LEVELCHECK(w, q);
-				if(q->cliptobounds)
-					w.Clip(rr);
-				Rect qr = q->GetRect();
-				Point off = qr.TopLeft() + view.TopLeft();
-				Rect ocl = cl - off;
-				if(ocl.Intersects(Rect(qr.GetSize()).Inflated(overpaint))) {
-					w.Offset(off);
-					q->CtrlPaint(w, rr - off, depth + 1);
-					w.End();
-				}
-				if(q->cliptobounds)
-					w.End();
-			}
-	}
 
+	if(!oview.IsEmpty() && oview.Intersects(clip)) {
+		LEVELCHECK(w, this);
+		if(cliptobounds)
+			w.Clip(overpaint ? oview : view);
+		w.Offset(view.left, view.top);
+		Paint(w);
+		PaintCaret(w);
+		w.End();
+		
+		if(hasviewctrls && !view.IsEmpty()) {
+			Rect cl = clip & view;
+			for(q = firstchild; q; q = q->next)
+				if(q->IsShown() && q->InView()) {
+					Rect rr(q->popup ? clip : cl);
+					LEVELCHECK(w, q);
+					Rect qr = q->GetRect();
+					Point off = qr.TopLeft() + view.TopLeft();
+					Rect ocl = cl - off;
+					if(ocl.Intersects(Rect(qr.GetSize()).Inflated(overpaint))) {
+						w.Offset(off);
+						q->CtrlPaint(w, rr - off);
+						w.End();
+					}
+				}
+		}
+
+		if(cliptobounds)
+			w.End();
+	}
+	
 	ApplyTransform(TS_AFTER_CTRL_PAINT);
-	glPopMatrix();
+	//glPopMatrix();
+	w.PopContext();
+	DOLEVELCHECK;
 }
 #else
 void Ctrl::CtrlPaint(SystemDraw& w, const Rect& clip) {
@@ -359,7 +364,7 @@ void Ctrl::CtrlPaint(SystemDraw& w, const Rect& clip) {
 	bool hasviewctrls = false;
 	bool viewexcluded = false;
 	for(q = firstchild; q; q = q->next)
-		if(q->IsShown())
+		if(q->IsShown()) {
 			if(q->InFrame()) {
 				if(!viewexcluded && IsTransparent() && q->GetRect().Intersects(view)) {
 					w.Begin();
@@ -374,6 +379,7 @@ void Ctrl::CtrlPaint(SystemDraw& w, const Rect& clip) {
 			}
 			else
 				hasviewctrls = true;
+		}
 	if(viewexcluded)
 		w.End();
 	DOLEVELCHECK;
@@ -413,6 +419,7 @@ void Ctrl::CtrlPaint(SystemDraw& w, const Rect& clip) {
 			}
 		w.End();
 	}
+	DOLEVELCHECK;
 }
 #endif
 
@@ -467,6 +474,7 @@ bool Ctrl::PaintOpaqueAreas(SystemDraw& w, const Rect& r, const Rect& clip, bool
 			LEVELCHECK(bw, this);
 			Paint(bw);
 			PaintCaret(bw);
+			DOLEVELCHECK;
 		}
 		bw.Put(w, opaque.TopLeft());
 	}
@@ -478,6 +486,7 @@ bool Ctrl::PaintOpaqueAreas(SystemDraw& w, const Rect& r, const Rect& clip, bool
 			LEVELCHECK(w, this);
 			Paint(w);
 			PaintCaret(w);
+			DOLEVELCHECK;
 		}
 		w.End();
 		w.End();
@@ -561,17 +570,36 @@ Ctrl *Ctrl::FindBestOpaque(const Rect& clip)
 	return w;
 }
 
+void Ctrl::ExcludeDHCtrls(SystemDraw& w, const Rect& r, const Rect& clip)
+{
+	GuiLock __;
+	LTIMING("PaintOpaqueAreas");
+	if(!IsShown() || r.IsEmpty() || !r.Intersects(clip) || !w.IsPainting(r))
+		return;
+	Point off = r.TopLeft();
+	Point viewpos = off + GetView().TopLeft();
+	if(dynamic_cast<DHCtrl *>(this)) {
+		w.ExcludeClip(r);
+		return;
+	}
+	Rect cview = clip & (GetView() + off);
+	for(Ctrl *q = lastchild; q; q = q->prev)
+		q->ExcludeDHCtrls(w, q->GetRect() + (q->InView() ? viewpos : off),
+		                  q->InView() ? cview : clip);
+}
+
 void Ctrl::UpdateArea0(SystemDraw& draw, const Rect& clip, int backpaint)
 {
 	GuiLock __;
 	LTIMING("UpdateArea");
 	LLOG("========== UPDATE AREA " << UPP::Name(this) << " ==========");
+	ExcludeDHCtrls(draw, GetRect().GetSize(), clip);
 	if(globalbackbuffer) {
 		CtrlPaint(draw, clip);
 		LLOG("========== END (TARGET IS BACKBUFFER)");
 		return;
 	}
-	if(backpaint == FULLBACKPAINT || globalbackpaint && !hasdhctrl && !dynamic_cast<DHCtrl *>(this)) {
+	if(backpaint == FULLBACKPAINT || globalbackpaint/* && !hasdhctrl && !dynamic_cast<DHCtrl *>(this)*/) {
 		ShowRepaintRect(draw, clip, LtRed());
 		BackDraw bw;
 		bw.Create(draw, clip.GetSize());
@@ -638,16 +666,17 @@ void Ctrl::RemoveFullRefresh()
 		q->RemoveFullRefresh();
 }
 
-Ctrl *Ctrl::GetTopRect(Rect& r, bool inframe)
+Ctrl *Ctrl::GetTopRect(Rect& r, bool inframe, bool clip)
 {
 	GuiLock __;
 	if(!inframe) {
-		r &= Rect(GetSize());
+		if(clip)
+			r &= Rect(GetSize());
 		r.Offset(GetView().TopLeft());
 	}
 	if(parent) {
 		r.Offset(GetRect().TopLeft());
-		return parent->GetTopRect(r, InFrame());
+		return parent->GetTopRect(r, InFrame(), clip);
 	}
 	return this;
 }
@@ -766,4 +795,4 @@ void Ctrl::GlobalBackBuffer(bool b)
 	globalbackbuffer = b;
 }
 
-END_UPP_NAMESPACE
+}

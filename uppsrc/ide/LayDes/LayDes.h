@@ -5,6 +5,7 @@
 #include <RichEdit/RichEdit.h>
 #include <CodeEditor/CodeEditor.h>
 #include <IconDes/IconDes.h>
+#include <ide/Browser/Browser.h>
 
 #define LAYOUTFILE <ide/LayDes/LayDes.lay>
 #include <CtrlCore/lay.h>
@@ -17,6 +18,9 @@
 #define KEYGROUPNAME "Layout"
 #define KEYFILE      <ide/LayDes/laydes.key>
 #include             <CtrlLib/key_header.h>
+
+inline Font LayFont() { return Arial(Zy(11)); }
+inline Font LayFont2() { return Arial(Zy(14)); }
 
 class DiffPacker {
 	String master;
@@ -51,6 +55,8 @@ struct LayoutType : Moveable<LayoutType> {
 	String                     group;
 	Image                      icon[2];
 	Size                       iconsize[2];
+
+	rval_default(LayoutType);	
 
 	LayoutType()               { iconsize[0] = iconsize[1] = Null; }
 };
@@ -141,7 +147,7 @@ struct RawProperty : public EditorProperty<EditString>
 	static ItemProperty *Create()            { return new RawProperty; }
 
 	RawProperty() {
-		Add(editor.HSizePos(100, 2).TopPos(2));
+		Add(editor.HSizePosZ(100, 2).TopPos(2));
 	}
 };
 
@@ -192,8 +198,10 @@ public:
 	int      FindProperty(const String& s) const;
 	void     SetCharset(byte charset);
 	void     ReadProperties(CParser& p, bool addunknow = true);
-	String   SaveProperties() const;
-	String   Save(int i) const;
+	String   SaveProperties(int y = 0) const;
+	String   Save(int i, int y) const;
+
+	rval_default(LayoutItem);
 
 	LayoutItem()                      { csize.cx = -1; hide = false; charset = CHARSET_UNICODE; }
 };
@@ -230,13 +238,15 @@ private:
 public:
 	void        SetCharset(byte charset);
 	void        Read(CParser& p);
-	String      Save();
-	String      Save(const Vector<int>& sel);
+	String      Save(int y);
+	String      Save(const Vector<int>& sel, int y);
 	void        SaveState();
 	bool        IsUndo();
 	void        Undo();
 	bool        IsRedo();
 	void        Redo();
+
+	rval_default(LayoutData);
 
 	LayoutData() { size = Size(400, 200); charset = CHARSET_UNICODE; }
 };
@@ -263,14 +273,20 @@ public:
 	virtual void   LeftUp(Point p, dword keyflags);
 	virtual void   RightDown(Point p, dword keyflags);
 	virtual void   Layout();
+	virtual bool   HotKey(dword key);
 
 private:
 	bool   DoKey(dword key, int count);
+	bool   DoHotKey(dword key);
 
 	struct KeyMaster : public ParentCtrl {
 		LayDes *d;
 
-		virtual bool   Key(dword key, int count) {
+		virtual bool HotKey(dword key) {
+			return d->DoHotKey(key);
+		}
+
+		virtual bool Key(dword key, int count) {
 			return d->DoKey(key, count);
 		}
 	};
@@ -287,7 +303,11 @@ private:
 	LayDesigner       *frame;
 	ToolBar            toolbar;
 	MenuBar            menubar;
-	ArrayCtrl          layoutlist;
+	
+	ParentCtrl         layouts;
+	ArrayCtrl          list;
+	EditString         search;
+
 	ArrayCtrl          item;
 	PropertyPane       property;
 
@@ -345,6 +365,7 @@ private:
 	void   SyncItem(int item, int style);
 	void   SyncProperties(bool sync);
 	void   SyncLayoutList();
+	void   Search();
 	void   CreateCtrl(const String& type);
 	void   Group(Bar& bar, const String& group);
 	void   Templates(Bar& bar);
@@ -371,7 +392,7 @@ private:
 	LayoutItem& CurrentItem();
 	void        ItemClick();
 
-	String      SaveSelection();
+	String      SaveSelection(bool scrolled = false);
 	LayoutData  LoadLayoutData(const String& s);
 
 	void        Undo();
@@ -384,6 +405,9 @@ private:
 	void        Duplicate();
 	void        MoveUp();
 	void        MoveDown();
+	void        DnDInsert(int line, PasteClip& d);
+	void        Drag();
+	void        SortItems();
 	void        SelectAll();
 
 	void        Matrix();
@@ -406,13 +430,17 @@ private:
 	void        SetSprings(dword s);
 	void        ShowSelection(bool s);
 
-	void        AddLayout();
+	void        GoTo(int key);
+	void        AddLayout(bool insert);
+	void        DuplicateLayout();
 	void        RenameLayout();
 	void        RemoveLayout();
 	void        PrevLayout();
 	void        NextLayout();
 	void        MoveLayoutUp();
 	void        MoveLayoutDown();
+	void        DnDInsertLayout(int line, PasteClip& d);
+	void        DragLayout();
 	void        LayoutMenu(Bar& bar);
 
 	void        EditBar(Bar& bar);
@@ -428,6 +456,8 @@ private:
 	void        MainMenuBar(Bar& bar);
 
 	void        EditMenu(Bar& bar);
+	
+	void        GotoUsing();
 
 	void        SyncUsc();
 	void        Save();
@@ -436,8 +466,7 @@ private:
 	void        SaveEditPos();
 	void        RestoreEditPos();
 	
-	void        FindLayout(const String& name);
-
+	void        FindLayout(const String& name, const String& item_name);
 
 	bool           Load(const char *filename, byte charset);
 
@@ -465,7 +494,8 @@ public:
 
 	void Serialize(Stream& s)                 { designer.Serialize(s); }
 	bool Load(const char *filename, byte cs)  { return designer.Load(filename, cs); }
-	void FindLayout(const String& name)       { designer.FindLayout(name); }
+
+	void FindLayout(const String& name, const String& item) { designer.FindLayout(name, item); }
 
 	LayDesigner()                             { parent.Add(designer.DesignerCtrl().SizePos()); }
 };

@@ -1,3 +1,5 @@
+#ifdef _WIN32
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //
 // File: MAPIMessage.cpp
@@ -12,11 +14,11 @@
 //
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-#include <MapiUtil.h>
-#include "MAPIEx.h"
-#include <imessage.h>
+// Ported to U++ Framework by Koldo. See License.txt file
 
-const GUID CLSID_MailMessage={ 0x00020D0B, 0x0000, 0x0000, 0xC0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x46 };
+#include "MAPIEx.h"
+
+const GUID CLSID_MailMessage = {0x00020D0B, 0x0000, 0x0000, 0xC0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x46};
 
 #ifndef _WIN32_WCE
 #define INITGUID
@@ -25,9 +27,7 @@ const GUID CLSID_MailMessage={ 0x00020D0B, 0x0000, 0x0000, 0xC0, 0x00, 0x00, 0x0
 #include <MAPIGuid.h>
 #endif
 
-
-// Ported to U++ Framework by Koldo. See License.txt file
-  					
+				
 /////////////////////////////////////////////////////////////
 // MAPIMessage
 
@@ -144,7 +144,7 @@ bool MAPIMessage::GetNextRecipient(String& strName, String& strEmail, int &nType
 				strEmail = MAPIEx::GetValidString(pRows->aRow[0].lpProps[PROP_RECIPIENT_EMAIL]);
 			bResult = true;
 		}
-		FreeProws(pRows);
+		MAPIEx::FreeProws(pRows);
 	}
 	return bResult;
 }
@@ -408,9 +408,9 @@ bool MAPIMessage::SetMessageStatus(int nMessageStatus) {
 int MAPIMessage::ShowForm(MAPIEx* pMAPI, MAPIFolder &folder) {
 	//MAPIFolder* pFolder=pMAPI->GetFolder();
 	IMAPISession* pSession = pMAPI->GetSession();
-	ULONG ulMessageToken;
+	ULONG_PTR2 ulMessageToken;
 
-	if(folder.IsOpened() && pSession && pSession->PrepareForm(NULL,Message(), &ulMessageToken) == S_OK) {
+	if(folder.IsOpened() && pSession && pSession->PrepareForm(NULL, Message(), &ulMessageToken) == S_OK) {
 		ULONG ulMessageStatus=GetPropertyValue(PR_MSG_STATUS, 0);
 		ULONG ulMessageFlags=GetMessageFlags();
 		ULONG ulAccess=GetPropertyValue(PR_ACCESS, 0);
@@ -455,10 +455,10 @@ bool MAPIMessage::SaveToFile(const String &fileName) {
 	if(StgCreateDocfile(fileName.ToWString(), dwFlags, 0, &pStorage) != S_OK) 
 		return false;
 	LPMSGSESS pMsgSession;
-	LPMALLOC pMalloc = MAPIGetDefaultMalloc();
-	if(OpenIMsgSession(pMalloc, 0, &pMsgSession) == S_OK) {
+	LPMALLOC pMalloc = MF().MAPIGetDefaultMalloc();
+	if(MF().OpenIMsgSession(pMalloc, 0, &pMsgSession) == S_OK) {
 		LPMESSAGE pIMsg;
-		if(OpenIMsgOnIStg(pMsgSession, MAPIAllocateBuffer, MAPIAllocateMore, MAPIFreeBuffer, 
+		if(MF().OpenIMsgOnIStg(pMsgSession, MAPIAllocateBuffer, MAPIAllocateMore, MAPIFreeBuffer, 
 										pMalloc, NULL, pStorage, NULL, 0, 0, &pIMsg) == S_OK) {
 			// client must support CLSID_MailMessage as the compound document
 			if(WriteClassStg(pStorage, CLSID_MailMessage) == S_OK) {
@@ -481,9 +481,11 @@ bool MAPIMessage::SaveToFile(const String &fileName) {
 			}
 			RELEASE(pIMsg);
 		}
-		CloseIMsgSession(pMsgSession);
+		MF().CloseIMsgSession(pMsgSession);
 	}
 	RELEASE(pStorage);
 	return true;
 #endif
 }
+
+#endif

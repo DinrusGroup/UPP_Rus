@@ -1,6 +1,6 @@
 #include "CtrlLib.h"
 
-NAMESPACE_UPP
+namespace Upp {
 
 CH_STYLE(ProgressIndicator, Style, StyleDefault)
 {
@@ -57,7 +57,7 @@ void ProgressIndicator::Paint(Draw& w) {
 		w.DrawRect(r2, SColorPaper);
 		w.DrawRect(r3, SColorPaper);
 		if(percent) {
-			String pt = Format("%d %%", 100 * actual / max(total, 1));
+			String pt = Format("%d %%", (int)(100L * actual / max(total, 1)));
 			Size psz = GetTextSize(pt, StdFont());
 			int px = (sz.cx - psz.cx) / 2 + 2;
 			int py = (sz.cy - psz.cy) / 2 + 2;
@@ -108,7 +108,7 @@ void ProgressIndicator::Set(int _actual, int _total) {
 	}
 	else {
 		int l = max(1, max(sz.cx, sz.cy));
-		p = total ? min(actual * l / total, l) : 0;
+		p = total ? min(iscale(actual, l, total), l) : 0;
 	}
 	if(p != pxp) {
 		pxp = p;
@@ -133,6 +133,8 @@ void Progress::Reset() {
 	total = 0;
 	cancel = false;
 	granularity = 50;
+	show_delay = 250;
+	
 	set_time = show_time = GetTickCount(); // + 300;
 }
 
@@ -176,20 +178,22 @@ void Progress::Create() {
 		Open(owner);
 	else
 		Open();
-	SetFocus();
-	Show();
-	modality.Begin(this);
-	if(total) Set(pos, total);
-	Setxt();
-	Sync();
-	Process();
+	if(IsOpen()) { // in some context, e.g. headless skeleton, window does not open - need prevent infinite recursion here
+		SetFocus();
+		Show();
+		modality.Begin(this);
+		if(total) Set(pos, total);
+		Setxt();
+		Sync();
+		Process();
+	}
 }
 
 void Progress::Process()
 {
 	if(!IsOpen()) {
 		dword t = GetTickCount();
-		if((int)(t - show_time) >= granularity) {
+		if((int)(t - show_time) >= show_delay) {
 			Create();
 			show_time = t;
 		}
@@ -275,4 +279,4 @@ bool Progress::StepCanceled(int n)
 	return cancel;
 }
 
-END_UPP_NAMESPACE
+}

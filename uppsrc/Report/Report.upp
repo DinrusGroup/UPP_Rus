@@ -5,10 +5,10 @@ uses
 	RichText;
 
 file
-	Report.h,
+	Report.h options(BUILDER_OPTION) PCH,
 	Report.cpp,
 	ReportDlg.cpp,
-	ReportI.icpp,
 	Report.lay,
-	Report.t charset "UTF-8";
+	Report.t charset "UTF-8",
+	srcdoc.tpp;
 

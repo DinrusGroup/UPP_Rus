@@ -1,4 +1,4 @@
-description "TCP/IP related stuff\377128,0,0";
+description "TCP/IP related stuff (DEPRECATED!)\377128,0,0";
 
 uses
 	Core;
@@ -8,11 +8,11 @@ library(SOLARIS) "nsl socket";
 library(WIN32) ws2_32;
 
 file
-	Web.h,
-	"Пакет" readonly separator,
+	Web.h options(BUILDER_OPTION) PCH,
+	Package readonly separator,
 	Web.t charset "UTF-8",
 	Web_init.icpp,
-	"Код" readonly separator,
+	Code readonly separator,
 	util.h,
 	util.cpp,
 	md5.cpp,
@@ -35,6 +35,6 @@ file
 	src.tpp,
 	srcdoc.tpp,
 	srcimp.tpp,
-	"Инфо" readonly separator,
+	Info readonly separator,
 	Copying;
 

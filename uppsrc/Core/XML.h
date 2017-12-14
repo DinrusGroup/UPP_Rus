@@ -23,6 +23,9 @@ public:
 	String  Text(const String& s, byte charset = CHARSET_DEFAULT) { return Text(~s, charset); }
 	String  PreservedText(const char *s, byte charset = CHARSET_DEFAULT);
 	String  PreservedText(const String& s, byte charset = CHARSET_DEFAULT) { return PreservedText(~s, charset); }
+	
+	String  GetBegin() const                                      { return tag + '>'; }
+	String  GetEnd() const                                        { return end; }
 
 	XmlTag& operator()(const char *attr, const char *val);
 	XmlTag& operator()(const char *attr, int q);
@@ -40,14 +43,31 @@ struct XmlError : public Exc
 };
 
 class XmlParser {
+	enum {
+#ifdef flagTEST_XML // This is for testing purposes only to increase boundary condition frequency
+		MCHARS = 128,
+		CHUNK = 256
+#else
+		MCHARS = 256,
+		CHUNK = 16384
+#endif
+	};
+	
 	struct Nesting {
 		Nesting(String tag = Null, bool blanks = false) : tag(tag), preserve_blanks(blanks) {}
 		String tag;
 		bool   preserve_blanks;
 	};
 
+	VectorMap<String, String> entity;
+
+	Stream                   *in;
+	Buffer<char>              buffer;
+	int                       len;
+	int                       begincolumn;
 	const char               *begin;
 	const char               *term;
+
 	String                    attr1, attrval1;
 	VectorMap<String, String> attr;
 	Array<Nesting>            stack;
@@ -60,19 +80,29 @@ class XmlParser {
 	bool                      empty_tag;
 	bool                      npreserve, preserveall;
 	bool                      relaxed;
+	bool                      raw;
 
 	int                       line;
 
+	void                      Init();
+	void                      LoadMore0();
+	void                      LoadMore()              { if(len - (term - begin) < MCHARS) LoadMore0(); }
+	bool                      More();
+	bool                      HasMore()               { return *term || More(); }
 	void                      Ent(StringBuffer& out);
 	void                      Next();
 	void                      ReadAttr(StringBuffer& b, int c);
 	String                    ReadTag(bool next);
+	String                    ReadEnd(bool next);
 	String                    ReadDecl(bool next);
 	String                    ReadPI(bool next);
 	String                    ReadComment(bool next);
+	int                       GetColumn0() const;
 
 public:
 	void   SkipWhites();
+	
+	void   RegisterEntity(const String& id, const String& text);
 
 	bool   IsEof();
 	const char *GetPtr() const                                { return term; }
@@ -85,10 +115,17 @@ public:
 	void   PassTag(const char *tag);
 	void   PassTag(const String& tag);
 	bool   IsEnd();
+	String PeekEnd()                                          { return ReadEnd(false); }
+	String ReadEnd()                                          { return ReadEnd(true); }
 	bool   End();
+	bool   End(const char *tag);
+	bool   End(const String& tag);
 	void   PassEnd();
+	void   PassEnd(const char *tag);
 	bool   TagE(const char *tag);
 	void   PassTagE(const char *tag);
+	bool   TagElseSkip(const char *tag);
+	bool   LoopTag(const char *tag);
 
 	int    GetAttrCount() const                               { return attr.GetCount() + !IsNull(attr1); }
 	String GetAttr(int i) const                               { return i ? attr.GetKey(i - 1) : attr1; }
@@ -101,7 +138,7 @@ public:
 	bool   IsText();
 	String PeekText()                                         { return cdata; }
 	String ReadText();
-	String ReadTextE();	
+	String ReadTextE();
 
 	bool   IsDecl();
 	String PeekDecl()                                         { return ReadDecl(false); }
@@ -112,28 +149,30 @@ public:
 	String ReadPI()                                           { return ReadPI(true); }
 
 	bool   IsComment();
-	String PeekComment()                                      { return ReadComment(false); } 
+	String PeekComment()                                      { return ReadComment(false); }
 	String ReadComment()                                      { return ReadComment(true); }
 
 	void   Skip();
 	void   SkipEnd();
 
-	VectorMap<String, String> PickAttrs() pick_;
+	VectorMap<String, String> PickAttrs();
 
 	int    GetLine() const                                    { return line; }
-	int    GetColumn() const;
+	int    GetColumn() const                                  { return GetColumn0() + 1; }
 
-	void   Relaxed(bool b)                                    { relaxed = b; }
+	void   Relaxed(bool b = true)                             { relaxed = b; }
 	void   PreserveAllWhiteSpaces(bool b = true)              { preserveall = b; }
+	void   Raw(bool b = true)                                 { raw = b; }
 
 	XmlParser(const char *s);
+	XmlParser(Stream& in);
 };
 
-class XmlNode {
-	int                       type;
-	String                    text;
-	VectorMap<String, String> attr;
-	Array<XmlNode>            node;
+class XmlNode : Moveable< XmlNode, DeepCopyOption<XmlNode> > {
+	int                              type;
+	String                           text;
+	Array<XmlNode>                   node;
+	One< VectorMap<String, String> > attr;
 
 public:
 	static const XmlNode& Void();
@@ -162,6 +201,7 @@ public:
 	const XmlNode& operator[](int i) const                    { return i >= 0 && i < node.GetCount() ? node[i] : Void(); }
 	const XmlNode& operator[](const char *tag) const;
 	XmlNode&       Add()                                      { return node.Add(); }
+	void           Remove(int i);
 	void           AddText(const String& txt)                 { Add().CreateText(txt); }
 	int            FindTag(const char *tag) const;
 	XmlNode&       Add(const char *tag);
@@ -171,18 +211,37 @@ public:
 
 	String         GatherText() const;
 	String         operator~() const                          { return GatherText(); }
+	bool           HasTags() const;
 
-	int            GetAttrCount() const                       { return attr.GetCount(); }
-	String         AttrId(int i) const                        { return attr.GetKey(i); }
-	String         Attr(int i) const                          { return attr[i]; }
-	String         Attr(const char *id) const                 { return attr.Get(id, Null); }
+	int            GetAttrCount() const                       { return attr ? attr->GetCount() : 0; }
+	String         AttrId(int i) const                        { return attr->GetKey(i); }
+	String         Attr(int i) const                          { return (*attr)[i]; }
+	String         Attr(const char *id) const                 { return attr ? attr->Get(id, Null) : String(); }
 	XmlNode&       SetAttr(const char *id, const String& val);
 	int            AttrInt(const char *id, int def = Null) const;
 	XmlNode&       SetAttr(const char *id, int val);
 
-	void           SetAttrsPick(pick_ VectorMap<String, String>& a) { attr = a; }
+	void           SetAttrs(VectorMap<String, String>&& a);
+	
+	void           Shrink();
+	
+	rval_default(XmlNode);
 
-	XmlNode()      { type = XML_DOC; }
+	XmlNode(const XmlNode& n, int);
+	
+	XmlNode()                                                 { type = XML_DOC; }
+
+	typedef Array<XmlNode>::ConstIterator ConstIterator;
+	ConstIterator          Begin() const                      { return node.Begin(); }
+	ConstIterator          End() const                        { return node.End(); }
+
+	typedef XmlNode        value_type;
+	typedef ConstIterator  const_iterator;
+	typedef const XmlNode& const_reference;
+	typedef int            size_type;
+	typedef int            difference_type;
+	const_iterator         begin() const                      { return Begin(); }
+	const_iterator         end() const                        { return End(); }
 };
 
 enum {
@@ -191,12 +250,40 @@ enum {
 	XML_IGNORE_COMMENTS = 0x04,
 };
 
-	XmlNode ParseXML(XmlParser& p, dword style = XML_IGNORE_DECLS|XML_IGNORE_PIS|XML_IGNORE_COMMENTS);
+struct ParseXmlFilter {
+	virtual bool DoTag(const String& tag) = 0;
+	virtual void EndTag();
+};
+
+XmlNode ParseXML(XmlParser& p, dword style = XML_IGNORE_DECLS|XML_IGNORE_PIS|XML_IGNORE_COMMENTS);
 XmlNode ParseXML(const char *s, dword style = XML_IGNORE_DECLS|XML_IGNORE_PIS|XML_IGNORE_COMMENTS);
+XmlNode ParseXML(Stream& in, dword style = XML_IGNORE_DECLS|XML_IGNORE_PIS|XML_IGNORE_COMMENTS);
+XmlNode ParseXMLFile(const char *path, dword style = XML_IGNORE_DECLS|XML_IGNORE_PIS|XML_IGNORE_COMMENTS);
+
+XmlNode ParseXML(XmlParser& p, ParseXmlFilter& filter, dword style = XML_IGNORE_DECLS|XML_IGNORE_PIS|XML_IGNORE_COMMENTS);
+XmlNode ParseXML(const char *s, ParseXmlFilter& filter, dword style = XML_IGNORE_DECLS|XML_IGNORE_PIS|XML_IGNORE_COMMENTS);
+XmlNode ParseXML(Stream& in, ParseXmlFilter& filter, dword style = XML_IGNORE_DECLS|XML_IGNORE_PIS|XML_IGNORE_COMMENTS);
+XmlNode ParseXMLFile(const char *path, ParseXmlFilter& filter, dword style = XML_IGNORE_DECLS|XML_IGNORE_PIS|XML_IGNORE_COMMENTS);
+
+class IgnoreXmlPaths : public ParseXmlFilter {
+public:
+	virtual bool DoTag(const String& id);
+	virtual void EndTag();
+
+private:
+	Index<String>  list;
+	Vector<String> path;
+
+public:
+	IgnoreXmlPaths(const char *s);
+};
 
 enum {
 	XML_HEADER  = 0x01,
 	XML_DOCTYPE = 0x02,
+	XML_PRETTY =  0x04,
 };
 
-String  AsXML(const XmlNode& n, dword style = XML_HEADER|XML_DOCTYPE);
+void    AsXML(Stream& out, const XmlNode& n, dword style = XML_HEADER|XML_DOCTYPE|XML_PRETTY);
+String  AsXML(const XmlNode& n, dword style = XML_HEADER|XML_DOCTYPE|XML_PRETTY);
+bool    AsXMLFile(const char *path, const XmlNode& n, dword style = XML_HEADER|XML_DOCTYPE|XML_PRETTY);

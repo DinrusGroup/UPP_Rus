@@ -1,6 +1,6 @@
 #include "Core.h"
 
-NAMESPACE_UPP
+namespace Upp {
 
 #ifdef PLATFORM_WIN32
 
@@ -70,33 +70,32 @@ String AsString(const wchar_t *buffer, const wchar_t *end) {
 	return AsString(buffer, (int)(end - buffer));
 }
 
-#ifndef PLATFORM_WINCE
-String GetWinRegString(const char *value, const char *path, HKEY base_key) {
+String GetWinRegString(const char *value, const char *path, HKEY base_key, dword wow) {
 	HKEY key = 0;
-	if(RegOpenKeyEx(base_key, path, 0, KEY_READ, &key) != ERROR_SUCCESS)
+	if(RegOpenKeyEx(base_key, path, 0, KEY_READ|wow, &key) != ERROR_SUCCESS)
 		return String::GetVoid();
-	dword type, data;
-	if(RegQueryValueEx(key, value, 0, &type, NULL, &data) != ERROR_SUCCESS)
+	dword type, len;
+	if(RegQueryValueEx(key, value, 0, &type, NULL, &len) != ERROR_SUCCESS)
 	{
 		RegCloseKey(key);
 		return String::GetVoid();
 	}
-	StringBuffer raw_data(data);
-	if(RegQueryValueEx(key, value, 0, 0, (byte *)~raw_data, &data) != ERROR_SUCCESS)
+	StringBuffer raw_len(len);
+	if(RegQueryValueEx(key, value, 0, 0, (byte *)~raw_len, &len) != ERROR_SUCCESS)
 	{
 		RegCloseKey(key);
 		return String::GetVoid();
 	}
-	if(data > 0 && (type == REG_SZ || type == REG_EXPAND_SZ))
-		data--;
-	raw_data.SetLength(data);
+	if(len > 0 && (type == REG_SZ || type == REG_EXPAND_SZ))
+		len--;
+	raw_len.SetLength(len);
 	RegCloseKey(key);
-	return raw_data;
+	return raw_len;
 }
 
-int GetWinRegInt(const char *value, const char *path, HKEY base_key) {
+int GetWinRegInt(const char *value, const char *path, HKEY base_key, dword wow) {
 	HKEY key = 0;
-	if(RegOpenKeyEx(base_key, path, 0, KEY_READ, &key) != ERROR_SUCCESS)
+	if(RegOpenKeyEx(base_key, path, 0, KEY_READ|wow, &key) != ERROR_SUCCESS)
 		return Null;
 	int data;
 	dword type, length = sizeof(data);
@@ -106,39 +105,39 @@ int GetWinRegInt(const char *value, const char *path, HKEY base_key) {
 	return data;
 }
 
-bool SetWinRegString(const String& string, const char *value, const char *path, HKEY base_key) {
+bool SetWinRegString(const String& string, const char *value, const char *path, HKEY base_key, dword wow) {
 	HKEY key = 0;
 	if(RegCreateKeyEx(base_key, path, 0, NULL, REG_OPTION_NON_VOLATILE,
-		KEY_ALL_ACCESS, NULL, &key, NULL) != ERROR_SUCCESS)
+		KEY_ALL_ACCESS|wow, NULL, &key, NULL) != ERROR_SUCCESS)
 		return false;
 	bool ok = (RegSetValueEx(key, value, 0,	REG_SZ, string, string.GetLength() + 1) == ERROR_SUCCESS);
 	RegCloseKey(key);
 	return ok;
 }
 
-bool SetWinRegExpandString(const String& string, const char *value, const char *path, HKEY base_key) {
+bool SetWinRegExpandString(const String& string, const char *value, const char *path, HKEY base_key, dword wow) {
 	HKEY key = 0;
 	if(RegCreateKeyEx(base_key, path, 0, NULL, REG_OPTION_NON_VOLATILE,
-		KEY_ALL_ACCESS, NULL, &key, NULL) != ERROR_SUCCESS)
+		KEY_ALL_ACCESS|wow, NULL, &key, NULL) != ERROR_SUCCESS)
 		return false;
 	bool ok = (RegSetValueEx(key, value, 0,	REG_EXPAND_SZ, string, string.GetLength() + 1) == ERROR_SUCCESS);
 	RegCloseKey(key);
 	return ok;
 }
 
-bool SetWinRegInt(int data, const char *value, const char *path, HKEY base_key)
+bool SetWinRegInt(int data, const char *value, const char *path, HKEY base_key, dword wow)
 {
 	HKEY key = 0;
-	if(RegCreateKeyEx(base_key, path, 0, NULL, REG_OPTION_NON_VOLATILE, KEY_ALL_ACCESS, NULL, &key, NULL) != ERROR_SUCCESS)
+	if(RegCreateKeyEx(base_key, path, 0, NULL, REG_OPTION_NON_VOLATILE, KEY_ALL_ACCESS|wow, NULL, &key, NULL) != ERROR_SUCCESS)
 		return false;
 	bool ok = (RegSetValueEx(key, value, 0, REG_DWORD, (const byte *)&data, sizeof(data)) == ERROR_SUCCESS);
 	RegCloseKey(key);
 	return ok;
 }
 
-void DeleteWinReg(const String& key, HKEY base) {
+void DeleteWinReg(const String& key, HKEY base, dword wow) {
 	HKEY hkey;
-	if(RegOpenKeyEx(base, key, 0, KEY_READ, &hkey) != ERROR_SUCCESS)
+	if(RegOpenKeyEx(base, key, 0, KEY_READ|wow, &hkey) != ERROR_SUCCESS)
 		return;
 	Vector<String> subkeys;
 	char temp[_MAX_PATH];
@@ -148,7 +147,14 @@ void DeleteWinReg(const String& key, HKEY base) {
 	RegCloseKey(hkey);
 	while(!subkeys.IsEmpty())
 		DeleteWinReg(key + '\\' + subkeys.Pop(), base);
-	RegDeleteKey(base, key);
+
+	static LONG (WINAPI *RegDeleteKeyEx)(HKEY, LPCTSTR, REGSAM, DWORD);
+	DllFn(RegDeleteKeyEx, "Advapi32.dll", "RegDeleteKeyExA");
+
+	if(wow && RegDeleteKeyEx)
+		RegDeleteKeyEx(base, key, wow, 0);
+	else
+		RegDeleteKey(base, key);
 }
 
 String GetSystemDirectory() {
@@ -159,20 +165,11 @@ String GetSystemDirectory() {
 }
 
 String GetWindowsDirectory() {
-	if(IsWinNT()) {
-		wchar temp[MAX_PATH];
-		*temp = 0;
-		UnicodeWin32().GetWindowsDirectoryW(temp, sizeof(temp));
-		return FromSystemCharsetW(temp);
-	}
-	else {
-		char temp[MAX_PATH];
-		*temp = 0;
-		::GetWindowsDirectory(temp, sizeof(temp));
-		return FromSystemCharset(temp);
-	}
+	wchar temp[MAX_PATH];
+	*temp = 0;
+	GetWindowsDirectoryW(temp, sizeof(temp));
+	return FromSystemCharsetW(temp);
 }
-#endif
 
 void *GetDllFn(const char *dll, const char *fn)
 {
@@ -182,22 +179,9 @@ void *GetDllFn(const char *dll, const char *fn)
 }
 
 String GetModuleFileName(HINSTANCE instance) {
-#ifdef PLATFORM_WINCE
 	wchar h[_MAX_PATH];
-	GetModuleFileName(instance, h, _MAX_PATH);
-	return FromSystemCharset(h);
-#else
-	if(IsWinNT()) {
-		wchar h[_MAX_PATH];
-		UnicodeWin32().GetModuleFileNameW(instance, h, _MAX_PATH);
-		return FromSystemCharsetW(h);
-	}
-	else {
-		char h[_MAX_PATH];
-		GetModuleFileName(instance, h, _MAX_PATH);
-		return FromSystemCharset(h);
-	}
-#endif
+	GetModuleFileNameW(instance, h, _MAX_PATH);
+	return FromSystemCharsetW(h);
 }
 
 bool SyncObject::Wait(int ms)
@@ -220,16 +204,16 @@ SyncObject::~SyncObject()
 	if(handle) CloseHandle(handle);
 }
 
-Event::Event()
+Win32Event::Win32Event()
 {
 	handle = CreateEvent(NULL, FALSE, FALSE, NULL);
 }
 
-void Event::Set()
+void Win32Event::Set()
 {
 	SetEvent(handle);
 }
 
 #endif
 
-END_UPP_NAMESPACE
+}

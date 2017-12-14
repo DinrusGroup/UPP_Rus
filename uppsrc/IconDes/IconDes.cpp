@@ -1,18 +1,21 @@
 #include "IconDes.h"
 
-NAMESPACE_UPP
+namespace Upp {
 
 IconDes::Slot::Slot()
 {
 	pastepos = Null;
 	supersampling = false;
 	exp = false;
+	ImageBuffer b;
+	b.SetResolution(IMAGE_RESOLUTION_STANDARD);
+	image = b;
 }
 
 IconDes::Slot& IconDes::Current()
 {
-	if(list.IsCursor())
-		return slot[list.GetCursor()];
+	if(ilist.IsCursor())
+		return slot[ilist.GetKey()];
 	NEVER();
 	return dummy;
 }
@@ -49,7 +52,7 @@ void IconDes::SyncShow()
 				image = IconDesImg::LargeImage();
 		}
 		iconshow.image = image;
-		list.Set(1, image);
+		ilist.Set(2, image);
 	}
 	iconshow.Refresh();
 }
@@ -110,6 +113,7 @@ Point IconDes::GetPos(Point p)
 
 void IconDes::FinishPaste()
 {
+	CloseText();
 	if(IsCurrent()) {
 		Current().pastepos = Null;
 		Current().base_image.Clear();
@@ -143,7 +147,7 @@ void IconDes::PenSet(Point p, dword flags)
 void IconDes::LineTool(Point p, dword flags)
 {
 	Size isz = GetImageSize();
-	ImageDraw iw(isz);
+	IconDraw iw(isz);
 	iw.DrawRect(isz, GrayColor(0));
 	iw.DrawLine(startpoint, p, pen, GrayColor(255));
 	ApplyDraw(iw, flags);
@@ -154,7 +158,7 @@ void IconDes::LineTool(Point p, dword flags)
 void IconDes::EllipseTool0(Point p, dword flags, Color inner)
 {
 	Size isz = GetImageSize();
-	ImageDraw iw(isz);
+	IconDraw iw(isz);
 	iw.DrawRect(isz, GrayColor(0));
 	iw.DrawEllipse(Rect(startpoint, p).Normalized(), inner, pen, GrayColor(255));
 	ApplyDraw(iw, flags);
@@ -173,7 +177,7 @@ void IconDes::EmptyEllipseTool(Point p, dword flags)
 void IconDes::RectTool0(Point p, dword flags, bool empty)
 {
 	Size isz = GetImageSize();
-	ImageDraw iw(isz);
+	IconDraw iw(isz);
 	iw.DrawRect(isz, GrayColor(0));
 	Rect r = Rect(startpoint, p + 1).Normalized();
 	if(empty)
@@ -213,23 +217,28 @@ Image IconDes::MakeIconDesCursor(const Image& arrow, const Image& cmask)
 {
 	RGBA c = CurrentColor();
 	c.a = 255;
-	ImageBuffer ib(arrow.GetSize());
-	const RGBA *a = ~arrow;
-	const RGBA *m = ~cmask;
+	Image ucmask = Unmultiply(cmask);
+	ImageBuffer ib(ucmask.GetSize());
+	const RGBA *m = ~ucmask;
 	RGBA *t = ~ib;
-	RGBA *e = ~ib + ib.GetLength();
+	RGBA *e = ib.End();
 	while(t < e) {
-		*t++ = m->a ? c : *a;
+		*t = c;
+		t->a = m->a;
 		m++;
-		a++;
+		t++;
 	}
-	return ib;
+	Image cm(ib);
+	Image r = arrow;
+	Over(r, Point(0, 0), Premultiply(cm), r.GetSize());
+	return r;
 }
 
 void IconDes::ColorChanged()
 {
 	cursor_image = MakeIconDesCursor(IconDesImg::Arrow(), IconDesImg::ArrowColor());
 	fill_cursor = MakeIconDesCursor(IconDesImg::Fill(), IconDesImg::FillColor());
+	PasteText();
 }
 
 void IconDes::SetTool(void (IconDes::*_tool)(Point p, dword flags))
@@ -429,7 +438,7 @@ void IconDes::SaveUndo()
 		return;
 	Slot& c = Current();
 	Vector<Image> undo = UnpackImlData(c.undo);
-	int maxn = minmax(400000 / max(c.image.GetLength(), 1), 4, 128);
+	int maxn = minmax((single_mode ? 4000000 : 400000) / max(c.image.GetLength(), 1), 4, 128);
 	while(undo.GetCount() > maxn)
 		undo.Remove(0);
 	if(undo.GetCount() && undo.Top() == c.image)
@@ -490,6 +499,8 @@ void IconDes::SyncImage()
 		c.pastepos = Null;
 		if(c.selection.GetSize() != c.image.GetSize())
 			SetSelect(255);
+		if(single_mode)
+			info.SetLabel(Format("%d x %d", c.image.GetWidth(), c.image.GetHeight()));
 	}
 	selectrect = false;
 	SetBar();
@@ -576,4 +587,16 @@ void IconDes::ResizeDown()
 	Reset();
 }
 
-END_UPP_NAMESPACE
+void IconDes::SingleMode()
+{
+	single_mode = true;
+	ilist.Ctrl::Remove();
+	rgbactrl.SubCtrl(&single);
+	Size fsz = GetTextSize("Resize", StdFont());
+	single.Add(info.HSizePos().TopPos(0, fsz.cy));
+	resize.SetLabel("Resize");
+	single.Add(resize.LeftPos(0, fsz.cx + 2 * fsz.cy).TopPos(4 * fsz.cy / 3, 4 * fsz.cy / 3));
+	resize <<= THISBACK(EditImage);
+}
+
+}

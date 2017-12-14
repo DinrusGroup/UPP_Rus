@@ -11,7 +11,11 @@ IdeMacro::IdeMacro()
 	hotkey = 0;
 }
 
-GLOBAL_VAR(Array<IdeMacro>, UscMacros)
+Array<IdeMacro>& UscMacros()
+{
+	static Array<IdeMacro> h;
+	return h;
+}
 
 void ESC_cout(EscEscape& e)
 {
@@ -25,7 +29,7 @@ void ESC_cout(EscEscape& e)
 	}
 	else
 	if(!e[0].IsVoid())
-		e.ThrowError("неверный аргумент к 'cout'" + e.DumpType(0));
+		e.ThrowError("invalid argument to 'cout'" + e.DumpType(0));
 }
 
 void ESC_dump(EscEscape& e)
@@ -64,22 +68,25 @@ void UscSetReadMacro(void (*ReadMacro)(CParser& p))
 	sReadMacro = ReadMacro;
 }
 
-void ParseUscFile(const char *filename) throw(CParser::Error)
+void ParseUscFile(const char *filename)
 {
 	String d = LoadFile(filename);
-	CParser p(d, filename);
-	while(!p.IsEof()) {
-		if(p.Id("fn")) {
-			EscValue& v = UscGlobal().GetPut(p.ReadId());
-			v = ReadLambda(p);
-		}
-		else
-		if(p.Id("macro") && sReadMacro)
-			sReadMacro(p);
-		else
-		if(!sIdeModuleUsc || !sIdeModuleUsc(p)) {
-			EscValue& v = UscGlobal().GetPut(p.ReadId());
-			v = ReadLambda(p);
+	try {
+		CParser p(d, filename);
+		while(!p.IsEof()) {
+			if(p.Id("fn")) {
+				EscValue& v = UscGlobal().GetPut(p.ReadId());
+				v = ReadLambda(p);
+			}
+			else
+			if(p.Id("macro") && sReadMacro)
+				sReadMacro(p);
+			else
+			if(!sIdeModuleUsc || !sIdeModuleUsc(p)) {
+				EscValue& v = UscGlobal().GetPut(p.ReadId());
+				v = ReadLambda(p);
+			}
 		}
 	}
+	catch(CParser::Error) {}
 }

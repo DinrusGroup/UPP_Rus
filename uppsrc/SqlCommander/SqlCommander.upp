@@ -1,4 +1,4 @@
-description "Простая консольная утилита SQL\377";
+description "Simple SQL console utility\377";
 
 uses
 	SqlCtrl,

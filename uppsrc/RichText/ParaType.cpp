@@ -1,6 +1,6 @@
 #include "RichText.h"
 
-NAMESPACE_UPP
+namespace Upp {
 
 void RichPara::Smh(Lines& lines, HeightInfo *th, int cx) const
 {
@@ -141,7 +141,7 @@ void RichPara::StorePart::Store(Lines& lines, const Part& part, int pinc)
 				else
 				if(IsLower(c)) {
 					*f++ = &cfmt;
-					c = ToUpper(c);
+					c = (wchar)ToUpper(c);
 					h->ascent = cfi.GetAscent();
 					h->descent = cfi.GetDescent();
 					h->external = cfi.GetExternal();
@@ -212,16 +212,14 @@ Array<RichPara::Lines>& RichPara::Lines::Cache()
 	return x;
 }
 
-static StaticMutex sLineCacheMutex;
-
 RichPara::Lines::~Lines()
 {
-	if(cacheid && !line.IsPicked() && !incache) {
-		Mutex::Lock __(sLineCacheMutex);
+	if(cacheid && line.GetCount() && !incache) {
+		Mutex::Lock __(cache_lock);
 		Array<Lines>& cache = Cache();
 		incache = true;
-		cache.Insert(0) = *this;
-		cache.SetCount(1);
+		cache.Insert(0) = pick(*this);
+//		cache.SetCount(1);
 		int total = 0;
 		for(int i = 1; i < cache.GetCount(); i++) {
 			total += cache[i].clen;
@@ -229,7 +227,6 @@ RichPara::Lines::~Lines()
 				cache.SetCount(i);
 				break;
 			}
-			i++;
 		}
 	}
 }
@@ -238,11 +235,11 @@ RichPara::Lines RichPara::FormatLines(int acx) const
 {
 	Lines lines;
 	if(cacheid) {
-		Mutex::Lock __(sLineCacheMutex);
+		Mutex::Lock __(cache_lock);
 		Array<Lines>& cache = Lines::Cache();
 		for(int i = 0; i < cache.GetCount(); i++)
 			if(cache[i].cacheid == cacheid && cache[i].cx == acx) {
-				lines = cache[i];
+				lines = pick(cache[i]);
 				lines.incache = false;
 				cache.Remove(i);
 				return lines;
@@ -304,7 +301,7 @@ RichPara::Lines RichPara::FormatLines(int acx) const
 	int cx = lines.first_indent;
 	int rcx = lines.cx - format.lm - format.rm;
 	bool withtabs = false;
-	int scx;
+	int scx = cx;
 	while(s < end) {
 		Tab t;
 		if(*s == ' ') {
@@ -435,4 +432,4 @@ int RichPara::Lines::BodyHeight() const
 	return sum;
 }
 
-END_UPP_NAMESPACE
+}

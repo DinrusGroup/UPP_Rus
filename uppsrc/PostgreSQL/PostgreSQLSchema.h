@@ -1,7 +1,7 @@
 #define INT(x)                     COLUMN("integer", int, x, 0, 0)
 #define INT_ARRAY(x, items)        COLUMN_ARRAY("integer", int, x, 0, 0, items)
 #define INT_(x)                    COLUMN_("integer", int, x, 0, 0)
-#define INT_ARRAY_(x, items)       COLUMN_ARRAY("integer", int, x, 0, 0, items)
+#define INT_ARRAY_(x, items)       COLUMN_ARRAY_("integer", int, x, 0, 0, items)
 
 #define INT64(x)                   COLUMN("bigint", int64, x, 0, 0)
 #define INT64_ARRAY(x, items)      COLUMN_ARRAY("bigint", int64, x, 0, 0, items)
@@ -59,24 +59,31 @@
 #define LONGRAW(x)                 COLUMN("bytea", String, x, 0, 0)
 #define LONGRAW_(x)                COLUMN_("bytea", String, x, 0, 0)
 
-#define BLOB(x)                    COLUMN("bytea", String, x, 0, 0)
-#define BLOB_(x)                   COLUMN_("bytea", String, x, 0, 0)
+#define BLOB(x)                    COLUMN("bytea", String, x, INT_MAX/2, 0)
+#define BLOB_(x)                   COLUMN_("bytea", String, x, INT_MAX/2, 0)
 
-#define CLOB(x)                    COLUMN("text", String, x, 0, 0)
-#define CLOB_(x)                   COLUMN_("text", String, x, 0, 0)
+#define CLOB(x)                    COLUMN("text", String, x, INT_MAX/2, 0)
+#define CLOB_(x)                   COLUMN_("text", String, x, INT_MAX/2, 0)
 
 #define SEQUENCE(x)                SCHEMA("create sequence " #x " start with 1;",\
                                           "drop sequence " #x ";") \
                                    UPGRADE("create sequence " #x " start with 1;")
 #define SEQUENCE_(x)               DOID(x) SEQUENCE(x)
 
+#ifndef PRIMARY_KEY
 #define PRIMARY_KEY                INLINE_ATTRIBUTE("primary key")
+#endif
 #define NOT_NULL                   INLINE_ATTRIBUTE("not null")
 #define UNIQUE                     INLINE_ATTRIBUTE("unique")
 #define SQLDEFAULT(v)              INLINE_ATTRIBUTE("default " #v)
 
 #define INDEX                      ATTRIBUTE("create index IDX_@x on @t(@c);", \
                                              "drop index IDX_@x;")
+
+#define PARTIAL_INDEX(cond)        ATTRIBUTE("create index IDX_@x on @t(@c) where " cond ";", \
+                                             "drop index IDX_@x;")
+#define PARTIAL_INDEX_(name, cond) ATTRIBUTE("create index IDXP_@x" #name " on @t(@c) where " cond ";", \
+                                             "drop index IDXP_@x" #name ";")
 #ifndef REFERENCES
 #define REFERENCES(x)              ATTRIBUTE("alter table @t add constraint FK_@x foreign key "\
                                              "(@c) references " #x ";",\
@@ -124,6 +131,10 @@ ATTRIBUTE("alter table @t add constraint FKL_@t$" #name " foreign key " \
 
 #define INDEX_LIST(name, keys) \
 ATTRIBUTE("create index IDXL_@t$" #name " on @t(" keys ");", \
+          "drop index IDXL_@t$" #name ";");
+
+#define PARTIAL_INDEX_LIST(name, keys, where) \
+ATTRIBUTE("create index IDXL_@t$" #name " on @t(" keys ") where " where ";", \
           "drop index IDXL_@t$" #name ";");
 
 #define UNIQUE_LIST(name, list) \
@@ -193,6 +204,7 @@ ATTRIBUTE("alter table @t add constraint UQ_@t$" #name " unique (" list ");", \
 #undef PRIMARY_KEY
 #undef NOT_NULL
 #undef INDEX
+#undef PARTIAL_INDEX
 #undef UNIQUE
 #undef SQLDEFAULT
 #undef REFERENCES
@@ -203,3 +215,7 @@ ATTRIBUTE("alter table @t add constraint UQ_@t$" #name " unique (" list ");", \
 #undef DUAL_UNIQUE
 #undef UNIQUE_LIST
 #undef SQLCHECK
+#undef INDEX_LIST
+#undef PARTIAL_INDEX_LIST
+#undef PRIMARY_KEY_LIST
+#undef REFERENCES_LIST

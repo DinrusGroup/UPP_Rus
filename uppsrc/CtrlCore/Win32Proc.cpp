@@ -6,9 +6,9 @@
 
 //#include "imm.h"
 
-NAMESPACE_UPP
+namespace Upp {
 
-#define LLOG(x)  // LOG(x)
+#define LLOG(x)  // DLOG(x)
 
 dword Ctrl::KEYtoK(dword chr) {
 	if(chr == VK_TAB)
@@ -34,56 +34,34 @@ class NilDrawFull : public NilDraw {
 	virtual bool IsPaintingOp(const Rect& r) const { return true; }
 };
 
-#ifdef PLATFORM_WINCE
-
-
-bool GetShift() { return false; }
-bool GetCtrl() { return false; }
-bool GetAlt() { return false; }
-bool GetCapsLock() { return false; }
-
-bool wince_mouseleft;
-bool wince_mouseright;
-
-bool GetMouseLeft() { return wince_mouseleft; }
-bool GetMouseRight() { return wince_mouseright; }
-bool GetMouseMiddle() { return false; }
-
-Point wince_mousepos = Null;
-
-Point GetMousePos() {
-	return wince_mousepos;
-}
-
-void  SetWinceMouse(HWND hwnd, LPARAM lparam)
-{
-	Point p(lparam);
-	ClientToScreen(hwnd, p);
-	wince_mousepos = p;
-}
-#else
-void  SetWinceMouse(HWND hwnd, LPARAM lparam) {}
-
-bool GetShift()       { return !!(GetKeyState(VK_SHIFT) & 0x8000); }
-bool GetCtrl()        { return !!(GetKeyState(VK_CONTROL) & 0x8000); }
-bool GetAlt()         { return !!(GetKeyState(VK_MENU) & 0x8000); }
-bool GetCapsLock()    { return !!(GetKeyState(VK_CAPITAL) & 1); }
-bool GetMouseLeft()   { return !!(GetKeyState(VK_LBUTTON) & 0x8000); }
-bool GetMouseRight()  { return !!(GetKeyState(VK_RBUTTON) & 0x8000); }
-bool GetMouseMiddle() { return !!(GetKeyState(VK_MBUTTON) & 0x8000); }
-#endif
-
 void AvoidPaintingCheck__()
 {
 	Ctrl::painting = false;
 }
+
+void  SetWinceMouse(HWND hwnd, LPARAM lparam) {}
+
+dword GetKeyStateSafe(dword what) {
+	bool h = Ctrl::painting;
+	Ctrl::painting = false;
+	dword r = GetKeyState(what);
+	Ctrl::painting = h;
+	return r;
+}
+
+bool GetShift()       { return !!(GetKeyStateSafe(VK_SHIFT) & 0x8000); }
+bool GetCtrl()        { return !!(GetKeyStateSafe(VK_CONTROL) & 0x8000); }
+bool GetAlt()         { return !!(GetKeyStateSafe(VK_MENU) & 0x8000); }
+bool GetCapsLock()    { return !!(GetKeyStateSafe(VK_CAPITAL) & 1); }
+bool GetMouseLeft()   { return !!(GetKeyStateSafe(VK_LBUTTON) & 0x8000); }
+bool GetMouseRight()  { return !!(GetKeyStateSafe(VK_RBUTTON) & 0x8000); }
+bool GetMouseMiddle() { return !!(GetKeyStateSafe(VK_MBUTTON) & 0x8000); }
 
 bool PassWindowsKey(int wParam);
 
 LRESULT Ctrl::WindowProc(UINT message, WPARAM wParam, LPARAM lParam) {
 	GuiLock __;
 	eventid++;
-	ASSERT_(!painting, "WindowProc invoked while in Paint routine");
 //	LLOG("Ctrl::WindowProc(" << message << ") in " << ::Name(this) << ", focus " << (void *)::GetFocus());
 	Ptr<Ctrl> _this = this;
 	HWND hwnd = GetHWND();
@@ -107,6 +85,7 @@ LRESULT Ctrl::WindowProc(UINT message, WPARAM wParam, LPARAM lParam) {
 		}
 #endif
 	case WM_PAINT:
+		ASSERT_(!painting || IsPanicMode(), "WM_PAINT invoked for " + Name() + " while in Paint routine");
 		ASSERT(hwnd);
 		if(hwnd) {
 			PAINTSTRUCT ps;
@@ -332,7 +311,7 @@ LRESULT Ctrl::WindowProc(UINT message, WPARAM wParam, LPARAM lParam) {
 		if(HasChildDeep(mouseCtrl) || this == ~mouseCtrl) mouseCtrl = NULL;
 		if(HasChildDeep(focusCtrl) || this == ~focusCtrl) focusCtrl = NULL;
 		if(HasChildDeep(focusCtrlWnd) || this == ~focusCtrlWnd) {
-			LLOG("WM_NCDESTROY: clearing focusCtrlWnd = " << ::Name(focusCtrlWnd));
+			LLOG("WM_NCDESTROY: clearing focusCtrlWnd = " << UPP::Name(focusCtrlWnd));
 			focusCtrlWnd = NULL;
 			focusCtrl = NULL;
 		}
@@ -391,15 +370,17 @@ LRESULT Ctrl::WindowProc(UINT message, WPARAM wParam, LPARAM lParam) {
 			LLOG("WM_MOVE / WM_SIZE: screen client = " << rect);
 			if(GetRect() != rect)
 				SetWndRect(rect);
+		#if WINCARET
 			WndDestroyCaret();
 			caretCtrl = NULL;
 			SyncCaret();
+		#endif
 		}
 		return 0L;
 	case WM_HELP:
 		return TRUE;
 	case WM_ACTIVATE:
-		LLOG("WM_ACTIVATE " << Name() << ", wParam = " << (int)wParam << ", focusCtrlWnd = " << ::Name(focusCtrlWnd) << ", raw = " << (void *)::GetFocus());
+		LLOG("WM_ACTIVATE " << Name() << ", wParam = " << (int)wParam << ", focusCtrlWnd = " << UPP::Name(focusCtrlWnd) << ", raw = " << (void *)::GetFocus());
 		ignorekeyup = true;
 		break;
 	case WM_SETFOCUS:
@@ -431,12 +412,12 @@ LRESULT Ctrl::WindowProc(UINT message, WPARAM wParam, LPARAM lParam) {
 		return 0L;
 	case WM_KILLFOCUS:
 		LLOG("WM_KILLFOCUS " << (void *)(HWND)wParam << ", this = " << UPP::Name(this) << ", focusCtrlWnd = " << UPP::Name(focusCtrlWnd) << ", raw = " << (void *)::GetFocus());
-		LLOG("Kill " << ::Name(CtrlFromHWND((HWND)wParam)));
+		LLOG("Kill " << UPP::Name(CtrlFromHWND((HWND)wParam)));
 		if(!CtrlFromHWND((HWND)wParam)) {
 			LLOG("WM_KILLFOCUS -> KillFocusWnd: " << UPP::Name(this));
 			KillFocusWnd();
 		}
-		LLOG("//WM_KILLFOCUS " << (void *)(HWND)wParam << ", focusCtrlWnd = " << ::Name(focusCtrlWnd) << ", raw = " << (void *)::GetFocus());
+		LLOG("//WM_KILLFOCUS " << (void *)(HWND)wParam << ", focusCtrlWnd = " << UPP::Name(focusCtrlWnd) << ", raw = " << (void *)::GetFocus());
 		return 0L;
 	case WM_ENABLE:
 		if(!!wParam != enabled) {
@@ -451,10 +432,12 @@ LRESULT Ctrl::WindowProc(UINT message, WPARAM wParam, LPARAM lParam) {
 			MINMAXINFO *mmi = (MINMAXINFO *)lParam;
 			Rect frmrc = Size(200, 200);
 			::AdjustWindowRect(frmrc, WS_OVERLAPPEDWINDOW, FALSE);
-			Size msz = Ctrl::GetWorkArea().Deflated(-frmrc.left, -frmrc.top,
-				           frmrc.right - 200, frmrc.bottom - 200).GetSize();
-			Rect minr(Point(50, 50), min(msz, GetMinSize()));
-			Rect maxr(Point(50, 50), min(msz, GetMaxSize()));
+//			Size msz = Ctrl::GetWorkArea().Deflated(-frmrc.left, -frmrc.top,
+//				           frmrc.right - 200, frmrc.bottom - 200).GetSize();
+//			Rect minr(Point(50, 50), min(msz, GetMinSize()));
+//			Rect maxr(Point(50, 50), min(msz, GetMaxSize())); // Removed cxl&nixnixnix 2012-6-12
+			Rect minr(Point(50, 50), GetMinSize());
+			Rect maxr(Point(50, 50), GetMaxSize());
 			dword style = ::GetWindowLong(hwnd, GWL_STYLE);
 			dword exstyle = ::GetWindowLong(hwnd, GWL_EXSTYLE);
 			AdjustWindowRectEx(minr, style, FALSE, exstyle);
@@ -466,12 +449,13 @@ LRESULT Ctrl::WindowProc(UINT message, WPARAM wParam, LPARAM lParam) {
 		}
 		return 0L;
 #endif
-	case WM_SETTINGCHANGE:
+/*	case WM_SETTINGCHANGE:
 	case 0x031A: // WM_THEMECHANGED
 		ReSkin();
 		RefreshLayoutDeep();
 		RefreshFrame();
 		break;
+*/
 /*
     case WM_IME_COMPOSITION:
 		HIMC himc = ImmGetContext(hwnd);
@@ -500,6 +484,6 @@ LRESULT Ctrl::WindowProc(UINT message, WPARAM wParam, LPARAM lParam) {
 
 void Ctrl::PreDestroy() {}
 
-END_UPP_NAMESPACE
+}
 
 #endif

@@ -1,6 +1,6 @@
 #include "Core.h"
 
-NAMESPACE_UPP
+namespace Upp {
 
 static int s_month[] = {
 	31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31
@@ -22,12 +22,12 @@ void Date::Serialize(Stream& s)
 }
 
 int  GetDaysOfMonth(int m, int y) {
+	ASSERT(m >= 1 && m <= 12);
 	return s_month[m - 1] + (m == 2) * IsLeapYear(y);
 }
 
 bool Date::IsValid() const {
-	return year == -32768 /* TRC fix 2007/06/17:was == 0 */ || month >= 1 && month <= 12 &&
-		                day >= 1 && day <= GetDaysOfMonth(month, year);
+	return year == -32768 || month >= 1 && month <= 12 && day >= 1 && day <= GetDaysOfMonth(month, year);
 }
 
 String DayName(int i, int lang)
@@ -68,30 +68,44 @@ String MonName(int i, int lang)
 	return i >= 0 && i < 12 ? Nvl(GetLngString(lang, month[i]), GetENUS(month[i])) : String();
 }
 
-static char s_date_format[64] = "%2:02d/%3:02d/%1:4d";
+static thread__ char s_date_format_thread[64];
+static char s_date_format_main[64] = "%2:02d/%3:02d/%1:4d";
 
 void   SetDateFormat(const char *fmt)
 {
-	strncpy(s_date_format, fmt, 63);
+	strncpy(s_date_format_thread, fmt, 63);
+#ifdef _MULTITHREADED
+	if(Thread::IsMain())
+#endif
+		strncpy(s_date_format_main, fmt, 63);
 }
 
 String   Format(Date date) {
 	String  s;
 	if(IsNull(date))
 		return String();
-	return Format(s_date_format, date.year, date.month, date.day, DayOfWeek(date));
+	return Format(*s_date_format_thread ? s_date_format_thread : s_date_format_main, date.year, date.month, date.day, DayOfWeek(date));
 }
 
-static char s_date_scan[64] = "mdy";
+static thread__ char s_date_scan_thread[64];
+static char s_date_scan_main[64] = "mdy";
 
 void   SetDateScan(const char *scan)
 {
-	strncpy(s_date_scan, scan, 63);
+	strncpy(s_date_scan_thread, scan, 63);
+#ifdef _MULTITHREADED
+	if(Thread::IsMain())
+#endif
+		strncpy(s_date_scan_main, scan, 63);	
 }
 
 const char *StrToDate(Date& d, const char *s, Date def)
 {
-	const char *fmt = s_date_scan;
+	return StrToDate(*s_date_scan_thread ? s_date_scan_thread : s_date_scan_main, d, s, def);
+}
+
+const char *StrToDate(const char *fmt, Date& d, const char *s, Date def)
+{
 	if(*s == 0) {
 		d = Null;
 		return s;
@@ -139,7 +153,7 @@ const char *StrToDate(Date& d, const char *s, Date def)
 			break;
 		case 'y':
 			d.year = n;
-			if(d.year < 20) d.year += 2000; // Check again in 2015....
+			if(d.year < 25) d.year += 2000; // Check again in 2020.... // TODO: Make this automatic
 			else
 			if(d.year < 100) d.year += 1900;
 			break;
@@ -151,40 +165,60 @@ const char *StrToDate(Date& d, const char *s, Date def)
 	return d.IsValid() ? s : NULL;
 }
 
-const char * StrToDate(Date& d, const char *s)
+const char *StrToDate(Date& d, const char *s)
 {
 	return StrToDate(d, s, Null);
 }
 
-static bool s_date_letters = true, s_date_upper = true;
-static char s_date_seps[64] = "A/\a .-";
+Date ScanDate(const char *fmt, const char *s, Date def)
+{
+	Date d;
+	if(StrToDate(fmt, d, s, def))
+		return d;
+	return def;
+}
+
+Date ScanDate(const char *s, Date def)
+{
+	Date d;
+	if(StrToDate(d, s, def))
+		return d;
+	return def;
+}
+
+static thread__ char s_date_seps_thread[64];
+static char s_date_seps_main[64] = "A/\a .-";
 
 void   SetDateFilter(const char *seps)
 {
-	s_date_letters = false;
-	s_date_upper = false;
-	if(*seps == 'a') {
-		s_date_letters = true;
-		seps++;
-	}
-	else
-	if(*seps == 'A') {
-		s_date_letters = true;
-		s_date_upper = true;
-		seps++;
-	}
-	strncpy(s_date_seps, seps, 63);
+	strncpy(s_date_seps_thread, seps, 63);
+#ifdef _MULTITHREADED
+	if(Thread::IsMain())
+#endif
+		strncpy(s_date_seps_main, seps, 63);
 }
 
 int  CharFilterDate(int c)
 {
 	if(IsDigit(c))
 		return c;
-	if(s_date_letters && IsLetter(c))
-		return s_date_upper ? ToUpper(c) : c;
+	const char *s = *s_date_seps_thread ? s_date_seps_thread : s_date_seps_main;
+	bool letters = false;
+	bool upper = false;
+	if(*s == 'a') {
+		letters = true;
+		s++;
+	}
+	else
+	if(*s == 'A') {
+		letters = true;
+		upper = true;
+		s++;
+	}
+	if(letters && IsLetter(c))
+		return upper ? ToUpper(c) : c;
 	;
 	int r = 0;
-	const char *s = s_date_seps;
 	while(*s) {
 		if(c == (byte)*s)
 			return c;
@@ -205,19 +239,34 @@ int  CharFilterDate(int c)
 	return 0;
 }
 
-int Date::Get() const {
-	return year * 365 + s_month_off[month - 1] + (day - 1) +
-	       (year - 1) / 4 - (year - 1) / 100 + (year - 1) / 400 + 1 +
-	       (month > 2) * IsLeapYear(year);
+int Date::Get() const
+{
+	if(IsNull(*this))
+		return Null;
+	int y400 = (year / 400 ) - 2;
+	int ym = year - y400 * 400;
+	return y400 * (400 * 365 + 100 - 3) +
+	        ym * 365 + s_month_off[month - 1] + (day - 1) +
+	       (ym - 1) / 4 - (ym - 1) / 100 + (ym - 1) / 400 + 1 +
+	       (month > 2) * IsLeapYear(ym);
 }
 
-void Date::Set(int d) {
+void Date::Set(int d)
+{
+	if(IsNull(d)) {
+		*this = Null;
+		return;
+	}
 	int q, leap;
 	year = 0;
 	q = d / (400 * 365 + 100 - 3);
 	year += 400 * q;
 	d -= q * (400 * 365 + 100 - 3);
-	leap = 1;
+	if(d < 0) {
+		year -= 400;
+		d += 400 * 365 + 100 - 3;
+	}
+ 	leap = 1;
 	if(d >= 100 * 365 + 24 + 1) {
 		d--;
 		q = d / (100 * 365 + 24);
@@ -309,10 +358,58 @@ Date AddMonths(Date date, int months) {
 	return date;
 }
 
+int GetMonths(Date since, Date till)
+{
+	return 12 * till.year + till.month - (12 * since.year + since.month) + (till.day >= since.day) - 1;
+}
+
+int GetMonthsP(Date since, Date till)
+{
+	return 12 * till.year + till.month - (12 * since.year + since.month) + (till.day > since.day);
+}
+
 Date AddYears(Date date, int years) {
 	date.year += years;
 	date.day = min(date.day, LastDayOfMonth(date).day);
 	return date;
+}
+
+Date GetWeekDate(int year, int week)
+{
+	int jan1 = Date(year, 1, 1).Get();
+	int start = (jan1 - 584390) / 7 * 7 + 584390; // 584390 = 03.01.1600 Monday
+	if(jan1 - start > 3)
+		start += 7;
+	Date d;
+	d.Set(start + 7 * (week - 1));
+	return d;
+}
+
+int GetWeek(Date d, int& year)
+{
+	year = d.year;
+	Date d0 = GetWeekDate(year + 1, 1);
+	if(d >= d0)
+		year++;
+	else {
+		d0 = GetWeekDate(year, 1);
+		if(d < d0)
+			d0 = GetWeekDate(--year, 1);
+	}
+	return (d - d0) / 7 + 1;
+}
+
+Date EasterDay(int year)
+{
+    int a = year % 19;
+    int b = year >> 2;
+    int c = b / 25 + 1;
+    int d = (c * 3) >> 2;
+    int e = ((a * 19) - ((c * 8 + 5) / 25) + d + 15) % 30;
+    e += (29578 - a - e * 32) >> 10;
+    e -= ((year % 7) + b - d + e + 2) % 7;
+    d = e >> 5;
+    return Date(year, d + 3, e - d * 31);
 }
 
 void Time::Serialize(Stream& s)
@@ -403,6 +500,12 @@ int64 Time::Get() const
 	return Date::Get() * (int64)24 * 3600 + hour * 3600 + minute * 60 + second;
 }
 
+bool Time::IsValid() const
+{
+	return year == -32768 ||
+	       Date::IsValid() && hour >= 0 && hour < 24 && minute >= 0 && minute < 60 && second >= 0 && second < 60;
+}
+
 int64 operator-(Time a, Time b) {
 	return a.Get() - b.Get();
 }
@@ -424,9 +527,9 @@ String Format(Time time, bool seconds)
 	                                     : Format(" %02d:%02d", time.hour, time.minute));
 }
 
-const char *StrToTime(Time& d, const char *s)
+const char *StrToTime(const char *datefmt, Time& d, const char *s)
 {
-	s = StrToDate(d, s);
+	s = StrToDate(datefmt, d, s);
 	if(!s)
 		return NULL;
 	d.hour = d.minute = d.second = 0;
@@ -447,6 +550,26 @@ const char *StrToTime(Time& d, const char *s)
 	return s;
 }
 
+const char *StrToTime(Time& d, const char *s)
+{
+	return StrToTime(*s_date_scan_thread ? s_date_scan_thread : s_date_scan_main, d, s);
+}
+
+Time ScanTime(const char *datefmt, const char *s, Time def)
+{
+	Time tm;
+	if(StrToTime(datefmt, tm, s))
+		return tm;
+	return def;
+}
+
+Time ScanTime(const char *s, Time def)
+{
+	Time tm;
+	if(StrToTime(tm, s))
+		return tm;
+	return def;
+}
 
 #ifdef PLATFORM_WIN32
 
@@ -485,4 +608,103 @@ Date GetSysDate() {
 	return GetSysTime();
 }
 
-END_UPP_NAMESPACE
+bool SetSysTime(Time time)
+{
+#ifdef PLATFORM_POSIX
+	struct tm      tmp_time;
+	tmp_time.tm_sec  = time.second;
+	tmp_time.tm_min  = time.minute;
+	tmp_time.tm_hour = time.hour;
+	tmp_time.tm_mday = time.day;
+	tmp_time.tm_mon  = time.month-1;
+	tmp_time.tm_year = time.year-1900;
+	time_t raw_time  = mktime(&tmp_time);
+
+	struct timespec sys_time;
+	sys_time.tv_sec  = raw_time;
+	sys_time.tv_nsec = 0;
+
+	int result = clock_settime(CLOCK_REALTIME, &sys_time);
+	return (result == 0);
+#endif
+#ifdef PLATFORM_WIN32
+	SYSTEMTIME systime;
+	systime.wYear	= time.year;
+	systime.wMonth	= time.month;
+	systime.wDay	= time.day;
+	systime.wHour	= time.hour;
+	systime.wMinute	= time.minute;
+	systime.wSecond	= time.second;
+	systime.wDayOfWeek = 0;
+	systime.wMilliseconds = 0;
+	return SetLocalTime( &systime );
+#endif
+}
+
+int GetTimeZone()
+{
+	static int zone;
+	ONCELOCK {
+		for(;;) { // This is somewhat ugly, but unified approach to get time zone offset
+			Time t0 = GetSysTime();
+			Time gmtime = GetUtcTime();
+			Time ltime = GetSysTime();
+			if(GetSysTime() - t0 < 1) { // Make sure that there is not much time between calls
+				zone = (int)(ltime - gmtime) / 60; // Round to minutes
+				break;
+			}
+		}
+	}
+	return zone;
+}
+
+String FormatTimeZone(int n)
+{
+	return (n < 0 ? "-" : "+") + Format("%02.2d%02.2d", abs(n) / 60, abs(n) % 60);
+}
+
+String GetTimeZoneText()
+{
+	return FormatTimeZone(GetTimeZone());
+}
+
+int ScanTimeZone(const char *s)
+{
+	int n = atoi(s);
+	int hour = abs(n) / 100;
+	int minutes = abs(n) % 100;
+	if(hour >= 0 && hour <= 12 && minutes >= 0 && minutes < 60)
+		return sgn(n) * (hour * 60 + minutes);
+	return 0;
+}
+
+int GetLeapSeconds(Date dt)
+{
+	static Tuple<int, int> sLeapSeconds[] = {
+		{ 1972,6 }, { 1972,12 }, { 1973,12 }, { 1974,12 }, { 1975,12 }, { 1976,12 }, { 1977,12 },
+		{ 1978,12 }, { 1979,12 }, { 1981,6 }, { 1982,6 }, { 1983,6 }, { 1985,6 }, { 1987,12 },
+		{ 1989,12 }, { 1990,12 }, { 1992,6 }, { 1993,6 }, { 1994,6 }, { 1995,12 }, { 1997,6 },
+		{ 1998,12 }, { 2005,12 }, { 2008,12 }, { 2012,6 }, { 2015,6 }
+	};
+	static byte ls[1200]; // 100 years of leap seconds per month
+	ONCELOCK {
+		for(int i = 0; i < __countof(sLeapSeconds); i++) {
+			int l = (sLeapSeconds[i].a - 1970) * 12 + sLeapSeconds[i].b - 1;
+			memset(ls + l, i + 1, __countof(ls) - l);
+		}
+	}
+	return ls[minmax(12 * (dt.year - 1970) + dt.month - 1, 0, __countof(ls) - 1)];
+}
+
+int64 GetUTCSeconds(Time tm)
+{
+	return tm - Time(1970, 1, 1) + GetLeapSeconds(tm);
+}
+
+Time TimeFromUTC(int64 seconds)
+{
+	Time tm = Time(1970, 1, 1) + seconds;
+	return tm - GetLeapSeconds(tm);
+}
+
+}

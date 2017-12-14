@@ -12,6 +12,7 @@ XMLToolBarItem::XMLToolBarItem()
 	label		= "";
 	icon		= Null;
 	tooltip		= "";
+	isSeparator	= false;
 	subMenu.Clear();
 }
 		
@@ -22,17 +23,19 @@ XMLToolBarItem::XMLToolBarItem(const XMLToolBarItem &item, int dummy)
 	label		= item.label;
 	icon		= item.icon;
 	tooltip		= item.tooltip;
+	isSeparator	= item.isSeparator;
 	subMenu		<<= item.subMenu;
 }
 
 // pick constructor
-XMLToolBarItem::XMLToolBarItem(XMLToolBarItem pick_ &item)
+XMLToolBarItem::XMLToolBarItem(XMLToolBarItem rval_ item)
 {
 	commandId	= item.commandId;
 	label		= item.label;
 	icon		= item.icon;
 	tooltip		= item.tooltip;
-	subMenu		= item.subMenu;
+	isSeparator	= item.isSeparator;
+	subMenu		= pick(item.subMenu);
 }
 
 #ifdef flagDEBUG
@@ -41,12 +44,17 @@ void XMLToolBarItem::Dump(int level)
 {
 	String spacer;
 	spacer.Cat(' ', level);
-	DLOG(spacer << "commandId:" << commandId);
-	DLOG(spacer << "label    :" << label);
-	DLOG(spacer << "tooltip  :" << tooltip);
-	DLOG(spacer << "submenu  :" << FormatHex(~subMenu));
-	if(subMenu)
-		subMenu->Dump(level+2);
+	if(isSeparator)
+		DLOG(spacer << "SEPARATOR");
+	else
+	{
+		DLOG(spacer << "commandId:" << commandId);
+		DLOG(spacer << "label    :" << label);
+		DLOG(spacer << "tooltip  :" << tooltip);
+		DLOG(spacer << "submenu  :" << FormatHex(~subMenu));
+		if(subMenu)
+			subMenu->Dump(level+2);
+	}
 }
 #endif
 
@@ -57,6 +65,7 @@ void XMLToolBarItem::Xmlize(XmlIO xml)
 		("commandId"	, commandId)
 		("label"		, label)
 		("tooltip"		, tooltip)
+		("separator"	, isSeparator)
 	;
 	if(xml.IsLoading())
 	{
@@ -107,7 +116,7 @@ XMLToolBar::XMLToolBar()
 XMLToolBar::XMLToolBar(XMLToolBar pick_ &tb)
 {
 	name = tb.name;
-	items = tb.items;
+	items = pick(tb.items);
 	state = tb.state;
 	position = tb.position;
 }
@@ -126,7 +135,7 @@ XMLToolBar::XMLToolBar(XMLToolBar const &tb, int dummy)
 XMLToolBar &XMLToolBar::operator=(XMLToolBar pick_ &tb)
 {
 	name = tb.name;
-	items = tb.items;
+	items = pick(tb.items);
 	state = tb.state;
 	prevState = tb.prevState;
 	position = tb.position;
@@ -249,6 +258,97 @@ XMLToolBar XMLToolBar::SubMenu(void)
 // add a submenu entry by callback
 XMLToolBar &XMLToolBar::Add(Callback1<XMLToolBar &> bar)
 {
+	XMLToolBar tb;
+	bar(tb);
+	items.Append(tb.items);
+	return *this;
+}
+
+// add a fixed, unnamed internal command
+// used for on-the-fly built menus
+XMLToolBar &XMLToolBar::Add(String const &label, Callback cb)
+{
+	XMLToolBarItem *item = new XMLToolBarItem;
+	item->internalCb = cb;
+	item->commandId = "";
+	item->label = label;
+	item->subMenu.Clear();
+	item->tooltip = "";
+	items.Add(item);
+	return *this;
+}
+
+XMLToolBar &XMLToolBar::Add(Image const &icon, Callback cb)
+{
+	XMLToolBarItem *item = new XMLToolBarItem;
+	item->internalCb = cb;
+	item->commandId = "";
+	item->label = "";
+	item->icon = icon;
+	item->subMenu.Clear();
+	item->tooltip = "";
+	items.Add(item);
+	return *this;
+}
+
+
+XMLToolBar &XMLToolBar::Add(String const &label, Image const &icon, Callback cb)
+{
+	XMLToolBarItem *item = new XMLToolBarItem;
+	item->internalCb = cb;
+	item->commandId = "";
+	item->label = label;
+	item->icon = icon;
+	item->subMenu.Clear();
+	item->tooltip = "";
+	items.Add(item);
+	return *this;
+}
+
+XMLToolBar &XMLToolBar::Add(String const &label, String const &tooltip, Callback cb)
+{
+	XMLToolBarItem *item = new XMLToolBarItem;
+	item->internalCb = cb;
+	item->commandId = "";
+	item->label = label;
+	item->subMenu.Clear();
+	item->tooltip = tooltip;
+	items.Add(item);
+	return *this;
+}
+
+XMLToolBar &XMLToolBar::Add(Image const &icon, String const &tooltip, Callback cb)
+{
+	XMLToolBarItem *item = new XMLToolBarItem;
+	item->internalCb = cb;
+	item->commandId = "";
+	item->label = "";
+	item->icon = icon;
+	item->subMenu.Clear();
+	item->tooltip = tooltip;
+	items.Add(item);
+	return *this;
+}
+
+XMLToolBar &XMLToolBar::Add(String const &label, Image const &icon, String const &tooltip, Callback cb)
+{
+	XMLToolBarItem *item = new XMLToolBarItem;
+	item->internalCb = cb;
+	item->commandId = "";
+	item->label = label;
+	item->icon = icon;
+	item->subMenu.Clear();
+	item->tooltip = tooltip;
+	items.Add(item);
+	return *this;
+}
+
+// add a separator
+XMLToolBar &XMLToolBar::Separator(void)
+{
+	XMLToolBarItem *item = new XMLToolBarItem;
+	item->isSeparator = true;
+	items.Add(item);
 	return *this;
 }
 
@@ -284,7 +384,7 @@ void XMLToolBar::Xmlize(XmlIO xml)
 // adds a new toolbar
 XMLToolBars &XMLToolBars::Add(String const &name, XMLToolBar pick_ &tb)
 {
-	ArrayMap<String, XMLToolBar>::AddPick(name, tb);
+	ArrayMap<String, XMLToolBar>::AddPick(name, pick(tb));
 	Top().SetName(name);
 	return *this;
 }

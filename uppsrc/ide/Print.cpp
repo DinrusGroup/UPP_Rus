@@ -9,7 +9,7 @@ public:
 
 PrinterDlg::PrinterDlg()
 {
-	CtrlLayoutOKCancel(*this, "Печать");
+	CtrlLayoutOKCancel(*this, "Print");
 	columns <<= 1;
 	orientation <<= 0;
 	line <<= 100;

@@ -1,6 +1,6 @@
 #include "RichText.h"
 
-NAMESPACE_UPP
+namespace Upp {
 
 const RichStyle& RichStyle::GetDefault()
 {
@@ -129,7 +129,7 @@ struct RichText::OverrideStylesOp : RichTxt::ParaOp {
 void  RichText::OverrideStyles(const RichStyles& ms, bool matchname, bool addmissing)
 {
 	Invalidate();
-	RichStyles orig = style;
+	RichStyles orig = pick(style);
 	style <<= ms;
 	OverrideStylesOp op;
 	for(int i = 0; i < orig.GetCount(); i++) {
@@ -150,4 +150,4 @@ void  RichText::OverrideStyles(const RichStyles& ms, bool matchname, bool addmis
 	Update(op);
 }
 
-END_UPP_NAMESPACE
+}

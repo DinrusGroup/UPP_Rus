@@ -4,9 +4,9 @@
 #include <mmsystem.h>
 #endif
 
-NAMESPACE_UPP
+namespace Upp {
 
-#define LLOG(x)    // LOG(x)
+#define LLOG(x)    // DLOG(x)
 #define LTIMING(x) // RTIMING(x)
 
 MenuItemBase::MenuItemBase()
@@ -16,8 +16,8 @@ MenuItemBase::MenuItemBase()
 	isenabled = true;
 	type = 0;
 	font = StdFont();
-	leftgap = 16;
-	textgap = 6;
+	leftgap = DPI(16) + Zx(6);
+	textgap = Zy(6);
 	accesskey = 0;
 	NoWantFocus();
 	style = &MenuBar::StyleDefault();
@@ -67,6 +67,12 @@ Bar::Item& MenuItemBase::Check(bool check)
 Bar::Item& MenuItemBase::Radio(bool check)
 {
 	type = RADIO0 + check;
+	return *this;
+}
+
+Bar::Item& MenuItemBase::Bold(bool bold)
+{
+	font.Bold(bold);
 	return *this;
 }
 
@@ -162,27 +168,37 @@ void MenuItemBase::DrawMenuText(Draw& w, int x, int y, const String& s, Font f, 
 
 void MenuItemBase::PaintTopItem(Draw& w, int state) {
 	Size sz = GetSize();
+	String text = GetText();
+	Size isz = GetTextSize(text, StdFont());
+	Point tp = (sz - isz) / 2;
 	if(GUI_GlobalStyle() >= GUISTYLE_XP) {
 		bool opaque = InOpaqueBar();
-		bool opaque2 = opaque || state == 2;
+		bool opaque2 = opaque || state;
+		Color bg = SColorFace();
 		if(opaque2)
 			ChPaint(w, 0, 0, sz.cx, sz.cy, style->topitem[state]);
 		else
 		if(opaque)
-			w.DrawRect(0, 0, sz.cx, sz.cy, SColorFace());
-		String text = GetText();
-		Size isz = GetTextSize(text, StdFont());
-		DrawMenuText(w, 6, (sz.cy - isz.cy) / 2, text, GetFont(), IsItemEnabled(), state,
-		             opaque ? style->topitemtext[0] : GetLabelTextColor(this),
-		             opaque2 ? style->topitemtext[state] : GetLabelTextColor(this));
+			w.DrawRect(0, 0, sz.cx, sz.cy, bg);
+		Color txt = opaque ? style->topitemtext[0] : GetLabelTextColor(this);
+		Color hltxt = opaque2 ? style->topitemtext[state] : GetLabelTextColor(this);
+		if(!opaque && state != 2) { // Fix issues when text color is not compatible with transparent background (e.g. Ubuntu Ambience)]
+			Color c = state == 1 ? SColorHighlight() : bg;
+			int g = Grayscale(c);
+			bool dark = IsDark(c);
+			if(abs(g - Grayscale(txt)) < 70)
+				txt = dark ? White() : Black();
+			if(abs(g - Grayscale(hltxt)) < 70)
+				hltxt = dark ? White() : Black();
+		}
+		DrawMenuText(w, tp.x, tp.y, text, GetFont(), IsItemEnabled(), state,
+		             txt, hltxt);
 	}
 	else {
 		w.DrawRect(sz, SColorFace);
 		static const ColorF b0[] = { (ColorF)1, SColorLight, SColorLight, SColorShadow, SColorShadow, };
 		static const ColorF b1[] = { (ColorF)1, SColorShadow, SColorShadow, SColorLight, SColorLight, };
-		String text = GetText();
-		Size isz = GetTextSize(text, StdFont());
-		DrawMenuText(w, 6, (sz.cy - isz.cy) / 2, text, GetFont(), IsItemEnabled(), false,
+		DrawMenuText(w, tp.x, tp.y, text, GetFont(), IsItemEnabled(), false,
 		             SColorMenuText, SColorHighlightText);
 		if(state)
 			DrawBorder(w, 0, 0, sz.cx, sz.cy, state == 2 ? b1 : b0);
@@ -228,7 +244,9 @@ void MenuItem::MouseEnter(Point, dword)
 
 void MenuItem::MouseLeave()
 {
-	ClearHelpLine();
+    if(HasFocus() && GetParent())
+        GetParent()->SetFocus();
+    ClearHelpLine();
 }
 
 void MenuItem::GotFocus()
@@ -274,11 +292,12 @@ void MenuItem::Paint(Draw& w)
 	bool hl = state != NORMAL;
 	Size sz = GetSize();
 
-	if(hl)
+	if(hl) {
 		if(GUI_GlobalStyle() >= GUISTYLE_XP)
 			ChPaint(w, 0, 0, sz.cx, sz.cy, style->item);
 		else
 			w.DrawRect(sz, SColorHighlight);
+	}
 	UPP::Image li = licon;
 	if(li.IsEmpty()) {
 		switch(type) {
@@ -288,44 +307,41 @@ void MenuItem::Paint(Draw& w)
 		case RADIO1: li = CtrlImg::MenuRadio1(); break;
 		}
 	}
-	Size imsz = li.GetSize();
-	Size isz = min(maxiconsize, imsz);
-	if(isz != imsz)
-		li = CachedRescale(li, isz);
+	Size isz = li.GetSize();
 	int iy = (sz.cy - isz.cy) / 2;
 	bool chk = false;
-	int x = (max(isz.cx, leftgap - 2) - isz.cx) / 2;
+	int x = max(Zx(3), (leftgap + textgap - isz.cx) / 2);
 	if(!licon.IsEmpty() && type) {
 		chk = type == CHECK1 || type == RADIO1;
-		x = 2;
 		if(GUI_GlobalStyle() >= GUISTYLE_XP) {
-			if(chk && !hl) {
-				DrawXPButton(w, RectC(0, iy - 2, isz.cx + 4, isz.cy + 4), BUTTON_EDGE|BUTTON_CHECKED);
-			}
+			if(chk && !hl)
+				DrawXPButton(w, RectC(x - Zx(2), iy - Zy(2), isz.cx + Zx(4), isz.cy + Zy(4)),
+				             BUTTON_EDGE|BUTTON_CHECKED);
 		}
 		else {
-			w.DrawRect(1, iy - 1, isz.cx + 2, isz.cy + 2, chk ? Blend(SColorFace, SColorLight)
-			                                                  : SColorFace);
-			DrawBorder(w, 0, iy - 2, isz.cx + 4, isz.cy + 4, chk ? ThinInsetBorder : ThinOutsetBorder);
+			w.DrawRect(x - Zx(1), iy - Zy(1), isz.cx + Zx(2), isz.cy + Zy(2),
+			           chk ? Blend(SColorFace, SColorLight) : SColorFace);
+			DrawBorder(w, x - Zx(2), iy - Zy(2), isz.cx + Zx(4), isz.cy + Zy(4),
+			           chk ? ThinInsetBorder : ThinOutsetBorder);
 		}
 	}
 	if(isenabled)
 		DrawHighlightImage(w, x, iy, li, hl || chk, true);
 	else
 		w.DrawImage(x, iy, DisabledImage(li));
-	x = max(isz.cx, leftgap) + textgap;
+	x = max(isz.cx + Zx(3), leftgap) + textgap;
 	isz = GetTextSize(text, StdFont());
-	DrawMenuText(w, x, (sz.cy - isz.cy) / 2, txt, font, isenabled, hl, SColorMenuText,
+	DrawMenuText(w, x, (sz.cy - isz.cy) / 2, txt, font, isenabled, hl, style->menutext,
 	             style->itemtext);
 	isz = ricon.GetSize();
 	if(isenabled)
-		w.DrawImage(sz.cx - isz.cx, (sz.cy - isz.cy) / 2, ricon, hl ? style->itemtext : SColorMenuText());
+		w.DrawImage(sz.cx - isz.cx, (sz.cy - isz.cy) / 2, ricon, hl ? style->itemtext : style->menutext);
 	else
 		w.DrawImage(sz.cx - isz.cx, (sz.cy - isz.cy) / 2, DisabledImage(ricon));
-	x = sz.cx - max(isz.cx, 16) - 1;
+	x = sz.cx - max(isz.cx, Zx(16)) - Zx(1);
 	if(!IsEmpty(keydesc)) {
 		isz = GetTextSize(keydesc, StdFont());
-		UPP::DrawMenuText(w, x - isz.cx - 2, (sz.cy - isz.cy) / 2, keydesc, font, isenabled, hl,
+		UPP::DrawMenuText(w, x - isz.cx - Zx(2), (sz.cy - isz.cy) / 2, keydesc, font, isenabled, hl,
 		                  0, SColorMenuMark(), style->itemtext, false);
 	}
 }
@@ -336,13 +352,13 @@ Size MenuItem::GetMinSize() const
 	Size sz2(0, 0);
 	if(accel) {
 		sz2 = GetTextSize(GetKeyDesc(accel), font);
-		sz2.cx += 12;
+		sz2.cx += Zx(12);
 	}
 	Size lsz = min(maxiconsize, licon.GetSize());
 	Size rsz = ricon.GetSize();
-	return AddFrameSize(Size(max(lsz.cx, leftgap) + sz1.cx + max(sz2.cx, (rsz.cx ? 16 : 0))
-	                         + max(rsz.cx, 16) + textgap + 10,
-	                         max(max(lsz.cy, rsz.cy) + 4, sz1.cy + 6)));
+	return AddFrameSize(Size(max(lsz.cx, leftgap) + sz1.cx + max(sz2.cx, (rsz.cx ? Zx(16) : 0))
+	                         + max(rsz.cx, Zx(16)) + textgap + Zx(10),
+	                         max(max(lsz.cy, rsz.cy) + Zy(4), sz1.cy + Zy(6))));
 }
 
 void MenuItem::LeftUp(Point, dword)
@@ -356,7 +372,7 @@ void MenuItem::LeftUp(Point, dword)
 #endif
 #endif
 	LLOG("Menu Item pre Action");
-	WhenAction();
+	Action();
 	LLOG("Menu Item post Action");
 }
 
@@ -373,7 +389,7 @@ bool MenuItem::HotKey(dword key)
 		SetFocus();
 		Sync();
 		Sleep(50);
-		WhenAction();
+		Action();
 		return true;
 	}
 	return false;
@@ -382,7 +398,7 @@ bool MenuItem::HotKey(dword key)
 bool MenuItem::Key(dword key, int count)
 {
 	if(key == K_ENTER && isenabled) {
-		WhenAction();
+		Action();
 		return true;
 	}
 	return false;
@@ -476,7 +492,9 @@ bool SubMenuItem::HotKey(dword key)
 
 Size TopSubMenuItem::GetMinSize() const
 {
-	return AddFrameSize(GetTextSize(text, font) + Size(12, 7));
+	Size sz = Zsz(10, 5);
+	sz.cx = (sz.cx + 1) & 0xfffffffe; // We need even number, otherwise it looks asymmetric
+	return AddFrameSize(GetTextSize(text, font) + sz);
 }
 
 int  TopSubMenuItem::GetState()
@@ -509,6 +527,7 @@ void TopSubMenuItem::Pull()
 
 void TopSubMenuItem::MouseEnter(Point p, dword)
 {
+	LLOG("TopSubMenuItem::MouseEnter");
 	Refresh();
 	if(isenabled && parentmenu->GetActiveSubmenu())
 		Pull();
@@ -524,11 +543,13 @@ bool TopSubMenuItem::Key(dword key, int) {
 
 void TopSubMenuItem::GotFocus()
 {
+	LLOG("TopSubMenuItem::GotFocus");
 	Refresh();
 }
 
 void TopSubMenuItem::LostFocus()
 {
+	LLOG("TopSubMenuItem::LostFocus");
 	Refresh();
 }
 
@@ -593,7 +614,7 @@ void TopMenuItem::MouseLeave()
 void TopMenuItem::LeftUp(Point, dword)
 {
 	if(!isenabled) return;
-	WhenAction();
+	Action();
 	Refresh();
 }
 
@@ -615,7 +636,7 @@ void TopMenuItem::LostFocus()
 bool TopMenuItem::Key(dword key, int count)
 {
 	if(isenabled && key == K_ENTER) {
-		WhenAction();
+		Action();
 		return true;
 	}
 	return false;
@@ -623,12 +644,12 @@ bool TopMenuItem::Key(dword key, int count)
 
 Size TopMenuItem::GetMinSize() const
 {
-	return AddFrameSize(GetTextSize(text, StdFont()) + Size(12, 7));
+	return AddFrameSize(GetTextSize(text, StdFont()) + Zsz(10, 5));
 }
 
 int TopMenuItem::GetStdHeight(Font font)
 {
-	return font.Info().GetHeight() + 7;
+	return font.Info().GetHeight() + Zy(7);
 }
 
 void TopMenuItem::SyncState()
@@ -639,4 +660,4 @@ void TopMenuItem::SyncState()
 	}
 }
 
-END_UPP_NAMESPACE
+}

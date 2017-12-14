@@ -1,9 +1,13 @@
 #include <Core/Core.h>
 #include <plugin/bz2/bz2.h>
-#include "lib/bzlib.h"
 
+#ifdef flagWIN32
+	#include "lib/bzlib.h"
+#else
+	#include <bzlib.h>
+#endif
 
-NAMESPACE_UPP
+namespace Upp {
 
 static void* bzalloc_new(void *opaque, int items, int size)
 {
@@ -15,95 +19,7 @@ static void bzfree_new(void *opaque, void *addr)
 	delete[] (byte *)addr;
 }
 
-String BZ2Decompress(String s, Gate2<int, int> progress)
-{
-	if(s.IsEmpty())
-		return s;
-	bz_stream z;
-	Zero(z);
-	z.bzalloc = bzalloc_new;
-	z.bzfree = bzfree_new;
-	z.opaque = 0;
-	if(BZ2_bzDecompressInit(&z, 0, 0) != BZ_OK)
-		return String::GetVoid();
-	int buf_size = minmax(s.GetLength() / 2, 1024, 65536);
-	Buffer<char> output(buf_size);
-	z.next_in = (char *)s.Begin();
-	z.avail_in = s.GetLength();
-	z.next_out = output;
-	z.avail_out = buf_size;
-
-	String out;
-	while(BZ2_bzDecompress(&z) == BZ_OK)
-	{
-		if(z.avail_out == (dword)buf_size)
-		{ // no output generated - assume error
-			BZ2_bzDecompressEnd(&z);
-			return String::GetVoid();
-		}
-		out.Cat(output, buf_size - z.avail_out);
-		z.next_out = output;
-		z.avail_out = buf_size;
-		if(progress((int)(uintptr_t)((const char *)z.next_in - ~s), s.GetLength()))
-		{
-			BZ2_bzDecompressEnd(&z);
-			return String::GetVoid();
-		}
-	}
-	if(z.avail_out < (unsigned)buf_size)
-		out.Cat(output, buf_size - z.avail_out);
-
-	BZ2_bzDecompressEnd(&z);
-
-	return out;
-}
-
-String BZ2Decompress(Stream& strm, Gate2<int, int> progress)
-{
-	StringStream out;
-	BZ2Decompress(out, strm, progress);
-	return out;
-}
-
-String BZ2Compress(String s, Gate2<int, int> progress)
-{
-	if(s.IsEmpty())
-		return s;
-	bz_stream z;
-	Zero(z);
-	z.bzalloc = bzalloc_new;
-	z.bzfree = bzfree_new;
-	z.opaque = 0;
-	if(BZ2_bzCompressInit(&z, 9, 0, 30) != BZ_OK)
-		return String::GetVoid();
-	int buf_size = minmax(s.GetLength(), 1024, 65536);
-	Buffer<char> output(buf_size);
-	z.next_in = (char *)s.Begin();
-	z.avail_in = s.GetLength();
-	z.next_out = output;
-	z.avail_out = buf_size;
-
-	String out;
-	int res;
-	while((res = BZ2_bzCompress(&z, z.avail_in ? BZ_RUN : BZ_FINISH)) == BZ_RUN_OK || res == BZ_FINISH_OK)
-	{
-		out.Cat(output, buf_size - z.avail_out);
-		z.next_out = output;
-		z.avail_out = buf_size;
-		if(progress((int)(uintptr_t)((const char *)z.next_in - ~s), s.GetLength()))
-		{
-			BZ2_bzCompressEnd(&z);
-			return String::GetVoid();
-		}
-	}
-	out.Cat(output, buf_size - z.avail_out);
-	BZ2_bzCompressEnd(&z);
-	if(res != BZ_STREAM_END)
-		out = String::GetVoid();
-	return out;
-}
-
-void BZ2Decompress(Stream& out, Stream& in, Gate2<int, int> progress)
+void BZ2Decompress(Stream& out, Stream& in, Gate<int, int> progress)
 {
 	enum { BUF_SIZE = 65536 };
 	Buffer<char> input(BUF_SIZE), output(BUF_SIZE);
@@ -159,7 +75,7 @@ void BZ2Decompress(Stream& out, Stream& in, Gate2<int, int> progress)
 	BZ2_bzDecompressEnd(&z);
 }
 
-void BZ2Compress(Stream& out, Stream& in, Gate2<int, int> progress)
+void BZ2Compress(Stream& out, Stream& in, Gate<int, int> progress)
 {
 	enum { BUF_SIZE = 65536 };
 	Buffer<char> input(BUF_SIZE), output(BUF_SIZE);
@@ -213,4 +129,40 @@ void BZ2Compress(Stream& out, Stream& in, Gate2<int, int> progress)
 		out.SetError();
 }
 
-END_UPP_NAMESPACE
+String BZ2Compress(Stream& in, Gate<int, int> progress)
+{
+	StringStream out;
+	BZ2Compress(out, in, progress);
+	return out;
+}
+
+String BZ2Decompress(Stream& in, Gate<int, int> progress)
+{
+	StringStream out;
+	BZ2Decompress(out, in, progress);
+	return out;
+}
+
+String BZ2Compress(const void *data, int64 len, Gate<int, int> progress)
+{
+	MemReadStream in(data, len);
+	return BZ2Compress(in, progress);
+}
+
+String BZ2Decompress(const void *data, int64 len, Gate<int, int> progress)
+{
+	MemReadStream in(data, len);
+	return BZ2Decompress(in, progress);
+}
+
+String BZ2Compress(const String& data, Gate<int, int> progress)
+{
+	return BZ2Compress(~data, data.GetLength(), progress);
+}
+
+String BZ2Decompress(const String& data, Gate<int, int> progress)
+{
+	return BZ2Decompress(~data, data.GetLength(), progress);
+}
+
+}

@@ -1,17 +1,33 @@
 #include "Core.h"
 
-NAMESPACE_UPP
+namespace Upp {
 
-#define LLOG(x)    // LOG(x)
+#define LLOG(x)    // DLOG(x)
 #define LTIMING(x) // RTIMING(x)
 
 void CParser::ThrowError(const char *s) {
 	LLOG("CParser::Error: " << s);
-	LLOG(~String(term, min(strlen((const char *)term), 512U)));
+	LLOG(~String(term, min((int)strlen((const char *)term), 512)));
 	Pos pos = GetPos();
 	Error err(fn + Format("(%d,%d): ", line, pos.GetColumn()) + s);
 //	err.term = (const char *)term;
 	throw err;
+}
+
+CParser& CParser::SkipComments(bool b)
+{
+	skipcomments = b;
+	term = wspc;
+	Spaces0();
+	return *this;
+}
+
+CParser& CParser::NestComments(bool b)
+{
+	nestcomments = b;
+	term = wspc;
+	Spaces0();
+	return *this;
 }
 
 bool CParser::Spaces0() {
@@ -21,20 +37,62 @@ bool CParser::Spaces0() {
 	   !(term[0] == '/' && term[1] == '*'))
 		return false;
 	for(;;) {
-		if(term[0] == '/' && term[1] == '/') {
+		if(*term == LINEINFO_ESC) {
+			term++;
+			fn.Clear();
+			while(*term) {
+				if(*term == LINEINFO_ESC) {
+					++term;
+					break;
+				}
+				if(*term == '\3') {
+					line = atoi(++term);
+					while(*term) {
+						if(*term == LINEINFO_ESC) {
+							++term;
+							break;
+						}
+						term++;
+					}
+					break;
+				}
+				fn.Cat(*term++);
+			}
+			continue;
+		}
+		else
+		if(term[0] == '/' && term[1] == '/' && skipcomments) {
 			term += 2;
 			while(*term && *term != '\n')
 				term++;
 		}
 		else
-		if(term[0] == '/' && term[1] == '*') {
-			term += 2;
-			while(*term) {
-				if(term[0] == '*' && term[1] == '/') {
-					term += 2;
-					break;
+		if(term[0] == '/' && term[1] == '*' && skipcomments) {
+			if(nestcomments) {
+				int count = 1;
+				term += 2;
+				while(*term) {
+					if(term[0] == '*' && term[1] == '/') {
+						term += 2;
+						count--;
+						if (count == 0)
+							break;
+					}
+					else if(term[0] == '/' && term[1] == '*')
+						count++;
+					
+					if(*term++ == '\n') line++;
 				}
-				if(*term++ == '\n') line++;
+			}
+			else {
+				term += 2;
+				while(*term) {
+					if(term[0] == '*' && term[1] == '/') {
+						term += 2;
+						break;
+					}
+					if(*term++ == '\n') line++;
+				}
 			}
 		}
 		if(!*term) break;
@@ -46,6 +104,17 @@ bool CParser::Spaces0() {
 		term++;
 	}
 	return true;
+}
+
+String CParser::LineInfoComment(const String& file, int line, int column)
+{
+	return String().Cat() << (char)LINEINFO_ESC << file << '\3'
+	                      << line << '\3' << column << (char)LINEINFO_ESC;
+}
+
+String CParser::GetLineInfoComment(int tabsize) const
+{
+	return LineInfoComment(GetFileName(), GetLine(), GetColumn(tabsize));
 }
 
 const char *CParser::IsId0(const char *s) const {
@@ -70,34 +139,34 @@ bool CParser::Id0(const char *s) {
 	return true;
 }
 
-void CParser::PassId(const char *s) throw(Error) {
+void CParser::PassId(const char *s) {
 	LTIMING("PassId");
 	if(!Id(s))
-		ThrowError(String("отсутствует '") + s + "\'");
+		ThrowError(String("missing '") + s + "\'");
 }
 
-void CParser::PassChar(char c) throw(Error) {
+void CParser::PassChar(char c) {
 	LTIMING("PassChar");
 	if(!Char(c))
-		ThrowError(String("отсутствует '") + c + "\'");
+		ThrowError(String("missing '") + c + "\'");
 }
 
-void CParser::PassChar2(char c1, char c2) throw(Error) {
+void CParser::PassChar2(char c1, char c2) {
 	LTIMING("PassChar2");
 	if(!Char2(c1, c2))
-		ThrowError(String("отсутствует '") + c1 + c2 + "\'");
+		ThrowError(String("missing '") + c1 + c2 + "\'");
 }
 
-void CParser::PassChar3(char c1, char c2, char c3) throw(Error) {
+void CParser::PassChar3(char c1, char c2, char c3) {
 	LTIMING("PassChar3");
 	if(!Char3(c1, c2, c3))
-		ThrowError(String("отсутствует '") + c1 + c2 + c3 + "\'");
+		ThrowError(String("missing '") + c1 + c2 + c3 + "\'");
 }
 
-String CParser::ReadId() throw(Error) {
+String CParser::ReadId() {
 	LTIMING("ReadId");
 	if(!IsId())
-		ThrowError("отсутствует идентификатор");
+		ThrowError("missing id");
 	String result;
 	const char *b = term;
 	const char *p = b;
@@ -108,9 +177,9 @@ String CParser::ReadId() throw(Error) {
 	return String(b, (int)(uintptr_t)(p - b));
 }
 
-String CParser::ReadIdt() throw(Error) {
+String CParser::ReadIdt() {
 	if(!IsId())
-		ThrowError("отсутствует идентификатор");
+		ThrowError("missing id");
 	StringBuffer result;
 	int lvl = 0;
 	while(IsAlNum(*term) || *term == '_' || *term == '<' || *term == '>' ||
@@ -134,8 +203,8 @@ bool CParser::IsInt() const {
 	return IsDigit(*t);
 }
 
-int  CParser::ReadInt() throw(Error) {
-	LTIMING("ReadInt");
+int  CParser::Sgn()
+{
 	int sign = 1;
 	if(*term == '-') {
 		sign = -1;
@@ -145,81 +214,102 @@ int  CParser::ReadInt() throw(Error) {
 	if(*term == '+')
 		term++;
 	Spaces();
-	if(!IsDigit(*term))
-		ThrowError("отсутствует число");
-	int n = 0;
-	while(IsDigit(*term))
-		n = 10 * n + *term++ - '0';
-	DoSpaces();
-	return sign * n;
+	return sign;
 }
 
-int CParser::ReadInt(int min, int max) throw(Error)
+int  CParser::ReadInt() {
+	LTIMING("ReadInt");
+	int sign = Sgn();
+	uint32 n = ReadNumber(10);
+	if(sign > 0 ? n > INT_MAX : n > (uint32)INT_MAX + 1)
+		ThrowError("number is too big");
+	return sign * (int)n;
+}
+
+int CParser::ReadInt(int min, int max)
 {
 	int n = ReadInt();
 	if(n < min || n > max)
-		ThrowError("число выходит за диапазон");
+		ThrowError("number is out of range");
+	return n;
+}
+
+int64 CParser::ReadInt64()
+{
+	LTIMING("ReadInt64");
+	int sign = Sgn();
+	uint64 n = ReadNumber64(10);
+	if(sign > 0 ? n > INT64_MAX : n > (uint64)INT64_MAX + 1)
+		ThrowError("number is too big");
+	return sign * n;
+}
+
+int64 CParser::ReadInt64(int64 min, int64 max)
+{
+	int64 n = ReadInt64();
+	if(n < min || n > max)
+		ThrowError("number is out of range");
 	return n;
 }
 
 bool CParser::IsNumber(int base) const
 {
-	if(IsDigit(*term))
-		return true;
+    if(IsDigit(*term)) {
+        int q = *term - '0';
+        return q >= 0 && q < base;
+    }
 	int q = ToUpper(*term) - 'A';
-	return q >= 0 && q < base - 10;
+    return q >= 0 && q < base - 10;
 }
 
-uint32  CParser::ReadNumber(int base) throw(Error)
+uint32  CParser::ReadNumber(int base)
 {
 	LTIMING("ReadNumber");
 	uint32 n = 0;
 	int q = ctoi(*term);
 	if(q < 0 || q >= base)
-		ThrowError("отсутствует число");
+		ThrowError("missing number");
 	for(;;) {
 		int c = ctoi(*term);
 		if(c < 0 || c >= base)
 			break;
+		uint32 n1 = n;
 		n = base * n + c;
+		if(n1 > n)
+			ThrowError("number is too big");
 		term++;
 	}
 	DoSpaces();
 	return n;
 }
 
-uint64  CParser::ReadNumber64(int base) throw(Error)
+uint64  CParser::ReadNumber64(int base)
 {
 	LTIMING("ReadNumber");
 	uint64 n = 0;
 	int q = ctoi(*term);
 	if(q < 0 || q >= base)
-		ThrowError("отсутствует число");
+		ThrowError("missing number");
 	for(;;) {
 		int c = ctoi(*term);
 		if(c < 0 || c >= base)
 			break;
+		uint64 n1 = n;
 		n = base * n + c;
+		if(n1 > n)
+			ThrowError("number is too big");
 		term++;
 	}
 	DoSpaces();
 	return n;
 }
 
-double CParser::ReadDouble() throw(Error)
+double CParser::ReadDouble()
 {
 	LTIMING("ReadDouble");
-	int sign = 1;
-	if(*term == '-') {
-		sign = -1;
-		term++;
-	}
-	else
-	if(*term == '+')
-		term++;
-	Spaces();
-	if(!IsDigit(*term))
-		ThrowError("отсутствует число");
+	int sign = Sgn();
+	if(!IsDigit(*term) && *term != '.')
+		ThrowError("missing number");
 	double n = 0;
 	while(IsDigit(*term))
 		n = 10 * n + *term++ - '0';
@@ -233,12 +323,35 @@ double CParser::ReadDouble() throw(Error)
 	if(Char('e') || Char('E'))
 		n *= pow(10.0, ReadInt());
 	DoSpaces();
-	return sign * n;
+	n = sign * n;
+	if(!IsFin(n))
+		ThrowError("number is too big");
+	return n;
 }
 
-String CParser::ReadOneString(int delim, bool chkend) throw(Error) {
+dword CParser::ReadHex()
+{
+	int hex = 0;
+	while(IsXDigit(*++term))
+		hex = (hex << 4) + ctoi(*term);
+	return hex;
+}
+
+bool CParser::ReadHex(dword& hex, int n)
+{
+	hex = 0;
+	while(n--) {
+		if(!IsXDigit(*++term))
+			return false;
+		hex = (hex << 4) + ctoi(*term);
+	}
+	term++;
+	return true;
+}
+
+String CParser::ReadOneString(int delim, bool chkend) {
 	if(!IsChar(delim))
-		ThrowError("отсутствует строка");
+		ThrowError("missing string");
 	term++;
 	StringBuffer result;
 	for(;;) {
@@ -258,34 +371,42 @@ String CParser::ReadOneString(int delim, bool chkend) throw(Error) {
 			case 'r': result.Cat('\r'); term++; break;
 			case 'f': result.Cat('\f'); term++; break;
 			case 'x': {
-				int hex = 0;
-				if(IsXDigit(*++term)) {
-					hex = ctoi(*term);
-					if(IsXDigit(*++term)) {
-						hex = 16 * hex + (*term >= 'A' ? ToUpper(*term) - 'A' + 10 : *term - '0');
-						term++;
-					}
-				}
+				int hex = ReadHex();
 				result.Cat(hex);
 				break;
 			}
 			case 'u':
 				if(uescape) {
-					int hex = 0;
-					if(IsXDigit(*++term)) {
-						hex = ctoi(*term);
-						if(IsXDigit(*++term)) {
-							hex = 16 * hex + (*term >= 'A' ? ToUpper(*term) - 'A' + 10 : *term - '0');
-							if(IsXDigit(*++term)) {
-								hex = 16 * hex + (*term >= 'A' ? ToUpper(*term) - 'A' + 10 : *term - '0');
-								if(IsXDigit(*++term)) {
-									hex = 16 * hex + (*term >= 'A' ? ToUpper(*term) - 'A' + 10 : *term - '0');
-									term++;
-								}
+					dword hex;
+					if(!ReadHex(hex, 4))
+						ThrowError("Incomplete universal character");
+					if(hex >= 0xD800 && hex < 0xDBFF) {
+						if(term[0] == '\\' && term[1] == 'u') {
+							term++;
+							dword hex2;
+							if(!ReadHex(hex2, 4))
+								ThrowError("Incomplete universal character");
+							if(hex2 >= 0xDC00 && hex2 <= 0xDFFF) {
+								result.Cat(ToUtf8(((hex & 0x3ff) << 10) | (hex2 & 0x3ff) + 0x10000));
+								break;
 							}
 						}
+						ThrowError("Invalid UTF-16 surrogate pair");
 					}
-					result.Cat(WString(hex, 1).ToString());
+					else
+						result.Cat(ToUtf8(hex));
+				}
+				else
+					result.Cat(*term++);
+				break;
+			case 'U':
+				if(uescape) {
+					dword hex;
+					if(!ReadHex(hex, 8))
+						ThrowError("Incomplete universal character");
+					if(hex > 0x10ffff)
+						ThrowError("Universal character is out of unicode range");
+					result.Cat(ToUtf8(hex));
 				}
 				else
 					result.Cat(*term++);
@@ -305,9 +426,9 @@ String CParser::ReadOneString(int delim, bool chkend) throw(Error) {
 			}
 		}
 		else {
-			if(*term < ' ') {
+			if((byte)*term < ' ' && *term != '\t') {
 				if(chkend) {
-					ThrowError("Неоконченная строка");
+					ThrowError("Unterminated string");
 					return result;
 				}
 				if(*term == '\0')
@@ -320,12 +441,12 @@ String CParser::ReadOneString(int delim, bool chkend) throw(Error) {
 	return result;
 }
 
-String CParser::ReadOneString(bool chkend) throw(Error)
+String CParser::ReadOneString(bool chkend)
 {
 	return ReadOneString('\"', chkend);
 }
 
-String CParser::ReadString(int delim, bool chkend) throw(Error) {
+String CParser::ReadString(int delim, bool chkend) {
 	LTIMING("ReadString");
 	String result;
 	do
@@ -334,7 +455,7 @@ String CParser::ReadString(int delim, bool chkend) throw(Error) {
 	return result;
 }
 
-String CParser::ReadString(bool chkend) throw(Error)
+String CParser::ReadString(bool chkend)
 {
 	return ReadString('\"', chkend);
 }
@@ -351,7 +472,7 @@ void CParser::SkipTerm()
 {
 	LTIMING("SkipTerm");
 	if(IsId())
-		while(IsAlNum(*term) || *term == '_')
+		while(iscid(*term))
 			term++;
 	else
 	if(IsNumber())
@@ -378,6 +499,7 @@ CParser::Pos CParser::GetPos() const
 	p.line = line;
 	p.fn = fn;
 	p.ptr = term;
+	p.wspc = wspc;
 	p.lineptr = lineptr;
 	return p;
 }
@@ -386,6 +508,13 @@ int CParser::Pos::GetColumn(int tabsize) const
 {
 	int pos = 1;
 	for(const char *s = lineptr; s < ptr; s++) {
+		if(*s == CParser::LINEINFO_ESC) {
+			s++;
+			while(s < ptr && *s != CParser::LINEINFO_ESC)
+				if(*s++ == '\3')
+					pos = atoi(s);
+		}
+		else
 		if(*s == '\t')
 			pos = (pos + tabsize - 1) / tabsize * tabsize + 1;
 		else
@@ -394,47 +523,59 @@ int CParser::Pos::GetColumn(int tabsize) const
 	return pos;
 }
 
+int CParser::GetColumn(int tabsize) const
+{
+	return GetPos().GetColumn(tabsize);
+}
+
 void CParser::SetPos(const CParser::Pos& p)
 {
+	LLOG("SetPos " << p.fn << ":" << p.line);
 	line = p.line;
 	fn = p.fn;
 	term = p.ptr;
+	wspc = p.wspc;
 	lineptr = p.lineptr;
-	DoSpaces();
+	if(skipspaces)
+		DoSpaces();
 }
 
 CParser::CParser(const char *ptr)
-: term(ptr), lineptr(ptr)
+: term(ptr), wspc(ptr), lineptr(ptr)
 {
 	line = 1;
-	skipspaces = true;
-	uescape = false;
+	skipspaces = skipcomments = true;
+	nestcomments = false;
+	uescape = true;
 	Spaces();
 }
 
 CParser::CParser(const char *ptr, const char *fn, int line)
-: term(ptr), lineptr(ptr), line(line), fn(fn)
+: term(ptr), wspc(ptr), lineptr(ptr), line(line), fn(fn)
 {
-	skipspaces = true;
-	uescape = false;
+	skipspaces = skipcomments = true;
+	nestcomments = false;
+	uescape = true;
 	Spaces();
 }
 
 CParser::CParser()
 {
-	term = lineptr = NULL;
+	term = lineptr = wspc = NULL;
 	line = 0;
-	skipspaces = true;
-	uescape = false;
+	skipspaces = skipcomments = true;
+	nestcomments = false;
+	uescape = true;
 }
 
 void CParser::Set(const char *_ptr, const char *_fn, int _line)
 {
-	term = lineptr = _ptr;
+	term = lineptr = wspc = _ptr;
 	fn = _fn;
 	line = _line;
-	skipspaces = true;
-	Spaces();
+	if(skipspaces)
+		Spaces();
+	LLOG("Set " << fn << ":" << line);
 }
 
 void CParser::Set(const char *_ptr)
@@ -442,23 +583,41 @@ void CParser::Set(const char *_ptr)
 	Set(_ptr, "", 1);
 }
 
-
-inline void NextCStringLine(String& t, const char *linepfx, int& pl)
+inline void NextCStringLine(StringBuffer& t, const char *linepfx, int& pl)
 {
 	t << "\"\r\n" << (linepfx ? linepfx : "") << "\"";
 	pl = t.GetLength();
 }
 
+inline int HexDigit(int c)
+{
+	return "0123456789ABCDEF"[c & 15];
+}
+
+static inline void sCatHex(StringBuffer& t, word q)
+{
+	char h[6];
+	h[0] = '\\';
+	h[1] = 'u';
+	h[2] = HexDigit(q >> 12);
+	h[3] = HexDigit(q >> 8);
+	h[4] = HexDigit(q >> 4);
+	h[5] = HexDigit(q);
+	t.Cat(h, 6);
+}
+
 String AsCString(const char *s, const char *lim, int linemax, const char *linepfx, dword flags)
 {
-	String t;
+	StringBuffer t;
 	t.Cat('\"');
 	int pl = 0;
 	bool wasspace = false;
+	byte cs = GetDefaultCharset();
+	bool toutf8 = GetDefaultCharset() != CHARSET_UTF8;
 	while(s < lim) {
 		if(t.GetLength() - pl > linemax && (!(flags & ASCSTRING_SMART) || wasspace))
 			NextCStringLine(t, linepfx, pl);
-		wasspace = false;
+		wasspace = *s == ' ';
 		switch(*s) {
 		case '\a': t.Cat("\\a"); break;
 		case '\b': t.Cat("\\b"); break;
@@ -470,19 +629,44 @@ String AsCString(const char *s, const char *lim, int linemax, const char *linepf
 		case '\\': t.Cat("\\\\"); break;
 		case '\n': t.Cat("\\n"); wasspace = true; break;
 		default:
-			if(byte(*s) < 32 || (byte)*s >= 0x7f && (flags & ASCSTRING_OCTALHI) || (byte)*s == 0xff) {
-				char h[4];
-				int q = (byte)*s;
-				h[0] = '\\';
-				h[1] = (3 & (q >> 6)) + '0';
-				h[2] = (7 & (q >> 3)) + '0';
-				h[3] = (7 & q) + '0';
-				t.Cat(h, 4);
+			if(flags & ASCSTRING_JSON) {
+				if((byte)*s < 32) {
+					sCatHex(t, (byte)*s++);
+				}
+				else
+				if((byte)*s >= 0x7f) {
+					if((byte)*s == 0x7f) {
+						sCatHex(t, 0x7f);
+						s++;
+					}
+					else {
+						const char *s0 = s;
+						dword c = toutf8 ? ToUnicode((byte)*s++, cs) : FetchUtf8(s, lim);
+						if(c < 0x10000)
+							t.Cat(s0, s);
+						else {
+							c -= 0x10000;
+							sCatHex(t, wchar(0xD800 + (0x3ff & (c >> 10))));
+							sCatHex(t, wchar(0xDC00 + (0x3ff & c)));
+						}
+					}
+				}
+				else
+					t.Cat(*s++);
+				continue; // skip s++
 			}
 			else {
-				t.Cat(*s);
-				if(*s == ' ')
-					wasspace = true;
+				if(byte(*s) < 32 || (byte)*s >= 0x7f && (flags & ASCSTRING_OCTALHI) || (byte)*s == 0xff || (byte)*s == 0x7f) {
+					char h[4];
+					int q = (byte)*s;
+					h[0] = '\\';
+					h[1] = (3 & (q >> 6)) + '0';
+					h[2] = (7 & (q >> 3)) + '0';
+					h[3] = (7 & q) + '0';
+					t.Cat(h, 4);
+				}
+				else
+					t.Cat(*s);
 			}
 			break;
 		}
@@ -502,4 +686,4 @@ String AsCString(const String& s, int linemax, const char *linepfx, dword flags)
 	return AsCString(s, s.End(), linemax, linepfx, flags);
 }
 
-END_UPP_NAMESPACE
+}

@@ -1,12 +1,10 @@
 description "Esc scripting language interpreter\377";
 
-optimize_speed;
-
 uses
 	Core;
 
 file
-	Esc.h,
+	Esc.h options(BUILDER_OPTION) PCH,
 	EscValue.cpp,
 	EscArray.cpp,
 	EscMap.cpp,
@@ -14,7 +12,7 @@ file
 	EscRun.cpp,
 	EscStdLib.cpp,
 	Value.cpp,
-	"Инфо" readonly separator,
+	Info readonly separator,
 	srcdoc.tpp,
 	Copying;
 

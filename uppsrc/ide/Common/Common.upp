@@ -1,7 +1,11 @@
-description "\377B";
+description "TheIDE - common dialogs and interfaces\377B";
+
+uses
+	ide\Core,
+	CtrlLib;
 
 file
-	Common.h,
+	Common.h options(BUILDER_OPTION) PCH,
 	ComDlg.cpp,
 	Module.cpp,
 	Util.cpp,

@@ -1,6 +1,6 @@
 #include "Docking.h"
 
-NAMESPACE_UPP
+namespace Upp {
 
 #define HIGHLIGHT_DURATION 1000
 
@@ -70,7 +70,7 @@ void DockConfigDlg::RefreshTree(bool dogroups)
 	if (dogroups) {
 		tree.NoRoot(true).Clear();
 		groups.Clear();
-		n.Set(-1, t_("Все")).CanSelect(false).CanOpen(true);
+		n.Set(-1, t_("All")).CanSelect(false).CanOpen(true);
 		all = tree.Add(0, n);
 		for (int i = 0; i < dockers.GetCount(); i++) {
 			String s = dockers[i]->GetGroup();
@@ -112,7 +112,7 @@ void DockConfigDlg::OnTreeContext(Bar& bar)
 		menu.GroupMenu(bar, (String)tree.GetValue((p==0) ? id : p));
 		if (p == 0 && id != all) {
 			bar.Separator();
-			bar.Add(t_("Удалить группу"), THISBACK1(DeleteGroup, id));	
+			bar.Add(t_("Delete Group"), THISBACK1(DeleteGroup, id));	
 		}			
 	}
 }
@@ -121,10 +121,10 @@ void DockConfigDlg::OnSaveLayout()
 {
 	int ix = ListIndex();
 	String s = (ix >= 0) ? (String)list.Get(ix) : Null;
-	if (EditText(s, t_("Новая Раскладка"), t_("Название раскладки:"), 25)) {
+	if (EditText(s, t_("New Layout"), t_("Layout name:"), 25)) {
 		if (!s.IsEmpty()) {
 			ix = dock.GetLayouts().Find(s);
-			if (ix < 0 || PromptOKCancel(Format(t_("Переписать раскладку '%s'?"), s))) {
+			if (ix < 0 || PromptOKCancel(Format(t_("Overwrite layout '%s'?"), s))) {
 				dock.SaveLayout(s);
 				if (ix < 0) {
 					list.Add(s);
@@ -150,7 +150,7 @@ void DockConfigDlg::OnLoadLayout()
 void DockConfigDlg::OnDeleteLayout()
 {
 	int ix = ListIndex();
-	if (!PromptOKCancel(Format(t_("Удалить раскладку '%s'?"), (String)list.Get(ix)))) return;
+	if (!PromptOKCancel(Format(t_("Delete layout '%s'?"), (String)list.Get(ix)))) return;
 	dock.DeleteLayout((String)list.Get(ix));
 	list.Remove(ix);
 }
@@ -176,7 +176,7 @@ void DockConfigDlg::OnListCursor()
 void DockConfigDlg::OnNewGroup()
 {
 	String s;
-	if (EditText(s, t_("Новая Группа"), t_("Название группы:"), 25)) {
+	if (EditText(s, t_("New Group"), t_("Group name:"), 25)) {
 		if (!s.IsEmpty()) {
 			if (groups.Find(s) < 0) {
 				int id = tree.Add(0, Image(), Value(-1), Value(s));
@@ -185,7 +185,7 @@ void DockConfigDlg::OnNewGroup()
 				OnTreeCursor();			
 			}
 			else {
-				PromptOK(t_("Группа '%s' уже существует."));
+				PromptOK(t_("Group '%s' already exists."));
 				OnNewGroup();
 			}
 		}
@@ -205,7 +205,7 @@ void DockConfigDlg::OnDeleteGroup()
 void DockConfigDlg::DeleteGroup(int id)
 {	
 	String s = (String)tree.GetValue(id);
-	if (!PromptOKCancel(Format(t_("Удалить группу '%s'?"), s))) return;
+	if (!PromptOKCancel(Format(t_("Delete group '%s'?"), s))) return;
 	int ix = groups.Find(s);
 	if (ix >= 0) {
 		String g = Null;
@@ -247,8 +247,7 @@ void DockConfigDlg::OnTreeDrag()
 {
 	if (tree.GetCursor() >= 0 && tree.GetParent(tree.GetCursor()) == 0)
 		return;
-	tree.DoDragAndDrop(InternalClip(tree, "dockwindowdrag"),
-	                       tree.GetDragSample(), DND_MOVE) == DND_MOVE;
+	tree.DoDragAndDrop(InternalClip(tree, "dockwindowdrag"), tree.GetDragSample(), DND_MOVE);
 }
 
 void DockConfigDlg::OnTreeDrop(int parent, int ii, PasteClip& d)
@@ -329,28 +328,28 @@ String DockConfigDlg::DockerString(DockableCtrl *dc) const
 String DockConfigDlg::PositionString(DockableCtrl *dc) const
 {
 	if (dc->IsFloating())
-		return t_("Плавающее");
+		return t_("Floating");
 	else if (dc->IsTabbed())
-		return t_("Вкладкой");	
+		return t_("Tabbed");	
 	else if (dc->IsDocked()) {
 		int align = dc->GetDockAlign();
 		switch (align) {
 		case DockWindow::DOCK_LEFT:
-			return Format(t_("Помещено(%s)"), t_("Слева"));
+			return Format(t_("Docked(%s)"), t_("Left"));
 		case DockWindow::DOCK_TOP:
-			return Format(t_("Помещено(%s)"), t_("Вверху"));
+			return Format(t_("Docked(%s)"), t_("Top"));
 		case DockWindow::DOCK_RIGHT:
-			return Format(t_("Помещено(%s)"), t_("Справа"));
+			return Format(t_("Docked(%s)"), t_("Right"));
 		case DockWindow::DOCK_BOTTOM:
-			return Format(t_("Помещено(%s)"), t_("Внизу"));
+			return Format(t_("Docked(%s)"), t_("Bottom"));
 		default:
-			return t_("Помещено");
+			return t_("Docked");
 		}
 	}
 	else if (dc->IsAutoHide())
-		return t_("Автоскрытие");
+		return t_("Auto-Hide");
 	else 
-		return t_("Скрыто");
+		return t_("Hidden");
 }
 
-END_UPP_NAMESPACE
+}

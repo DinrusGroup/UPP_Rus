@@ -1,6 +1,6 @@
 #include "CtrlLib.h"
 
-NAMESPACE_UPP
+namespace Upp {
 
 void StaticText::Paint(Draw& w)
 {
@@ -85,9 +85,10 @@ CH_COLOR(LabelBoxColor, SColorShadow());
 
 LabelBox::LabelBox()
 {
+	color = Null;
 	LabelBase::SetInk(LabelBoxTextColor, LabelBoxDisabledTextColor);
 	SetVAlign(ALIGN_TOP);
-	#ifdef flagWINGL
+	#if defined(flagWINGL) || defined(flagLINUXGL)
 	ClipToBounds(false);
 	#endif
 }
@@ -122,7 +123,7 @@ void LabelBox::Paint(Draw& w)
 	Size ts = PaintLabel(w, d + 2, ty, sz.cx, lsz.cy, !IsShowEnabled(), false, false, VisibleAccessKeys());
 	w.Begin();
 	w.ExcludeClip(d, ty, ts.cx + 4, ts.cy);
-	if(GUI_GlobalStyle() >= GUISTYLE_XP) {
+	if(GUI_GlobalStyle() >= GUISTYLE_XP || !IsNull(color)) {
 		if(hline) {
 			d = sz.cy / 2;
 			w.DrawRect(0, d - 1, sz.cx, 1, SColorLight);
@@ -137,22 +138,23 @@ void LabelBox::Paint(Draw& w)
 			w.DrawRect(d + 1, 0, 1, sz.cy, SColorLight);
 		}
 		else {
-			w.DrawRect(0, d + 2, 1, sz.cy - d - 4, LabelBoxColor);
-			w.DrawRect(sz.cx - 1, d + 2, 1, sz.cy - d - 4, LabelBoxColor);
-			w.DrawRect(2, sz.cy - 1, sz.cx - 4, 1, LabelBoxColor);
-			w.DrawRect(2, d, sz.cx - 4, 1, LabelBoxColor);
+			Color c = Nvl(color, LabelBoxColor);
+			w.DrawRect(0, d + 2, 1, sz.cy - d - 4, c);
+			w.DrawRect(sz.cx - 1, d + 2, 1, sz.cy - d - 4, c);
+			w.DrawRect(2, sz.cy - 1, sz.cx - 4, 1, c);
+			w.DrawRect(2, d, sz.cx - 4, 1, c);
 
-			w.DrawRect(1, d + 1, 2, 1, LabelBoxColor);
-			w.DrawRect(1, d + 2, 1, 1, LabelBoxColor);
+			w.DrawRect(1, d + 1, 2, 1, c);
+			w.DrawRect(1, d + 2, 1, 1, c);
 
-			w.DrawRect(sz.cx - 3, d + 1, 2, 1, LabelBoxColor);
-			w.DrawRect(sz.cx - 2, d + 2, 1, 1, LabelBoxColor);
+			w.DrawRect(sz.cx - 3, d + 1, 2, 1, c);
+			w.DrawRect(sz.cx - 2, d + 2, 1, 1, c);
 
-			w.DrawRect(1, sz.cy - 2, 2, 1, LabelBoxColor);
-			w.DrawRect(1, sz.cy - 3, 1, 1, LabelBoxColor);
+			w.DrawRect(1, sz.cy - 2, 2, 1, c);
+			w.DrawRect(1, sz.cy - 3, 1, 1, c);
 
-			w.DrawRect(sz.cx - 3, sz.cy - 2, 2, 1, LabelBoxColor);
-			w.DrawRect(sz.cx - 2, sz.cy - 3, 1, 1, LabelBoxColor);
+			w.DrawRect(sz.cx - 3, sz.cy - 2, 2, 1, c);
+			w.DrawRect(sz.cx - 2, sz.cy - 3, 1, 1, c);
 		}
 	}
 	else {
@@ -245,6 +247,15 @@ Size ImageCtrl::GetMinSize() const
 	return img.GetSize();
 }
 
+
+Picture& Picture::Background(Color color)
+{
+	background = color;
+	Transparent(IsNull(color));
+	Refresh();
+	return *this;
+}
+
 void Picture::Paint(Draw& w) {
 	Size sz = GetSize();
 	w.DrawRect(0, 0, sz.cx, sz.cy, background);
@@ -320,6 +331,15 @@ SeparatorCtrl& SeparatorCtrl::SetSize(int w)
 	return *this;
 }
 
+SeparatorCtrl& SeparatorCtrl::SetStyle(const Style& s)
+{
+	if(&s != style) {
+		style = &s;
+		Refresh();
+	}
+	return *this;
+}
+
 SeparatorCtrl::SeparatorCtrl()
 {
 	NoWantFocus();
@@ -356,4 +376,4 @@ void DisplayCtrl::SetDisplay(const Display& d)
 	pr.SetDisplay(d);
 }
 
-END_UPP_NAMESPACE
+}

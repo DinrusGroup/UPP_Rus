@@ -1,6 +1,6 @@
 #include "Sql.h"
 
-NAMESPACE_UPP
+namespace Upp {
 
 void SqlBool::SetTrue() {
 	priority = TRUEVAL;
@@ -51,7 +51,7 @@ SqlBool operator!=(const SqlVal& a, const SqlVal& b) {
 
 SqlBool IsSame(const SqlVal& a, const SqlVal& b)
 {
-	return SqlBool(a, SqlCase(MY_SQL, "<=>")(" is not distinct from "), b, SqlS::COMP);
+	return SqlBool(a, SqlCode(MY_SQL, "<=>")(" is not distinct from "), b, SqlS::COMP);
 }
 
 SqlBool operator&&(const SqlBool& a, const SqlBool& b) {
@@ -87,12 +87,12 @@ SqlBool NotNull(const SqlVal& a) {
 }
 
 SqlBool SqlFirstRow() {
-	return SqlCol("ROWNUM") == 1;
+	return SqlRowNum() == 1;
 }
 
 SqlBool Like(const SqlVal& a, const SqlVal& b, bool cs) {
-	return SqlBool(a, SqlCase
-			(MY_SQL, " like binary ")
+	return SqlBool(a, SqlCode
+			(MY_SQL, cs ? " like binary " : " like ")
 			(PGSQL, cs ? " like " : " ilike ")
 			(" like "),	b, SqlS::COMP);
 }
@@ -102,7 +102,7 @@ SqlBool LikeUpperAscii(const SqlVal& a, const SqlVal& b) {
 }
 
 SqlBool NotLike(const SqlVal& a, const SqlVal& b, bool cs) {
-	return SqlBool(a, SqlCase
+	return SqlBool(a, SqlCode
 			(PGSQL, cs ? " not like " : " not ilike ")
 			(" not like "), b, SqlS::COMP);
 }
@@ -136,11 +136,11 @@ SqlBool NotExists(const SqlSet& set) {
 }
 
 SqlBool LeftJoin(SqlVal v1, SqlVal v2) {
-	return SqlCol(~v1 + "(+)") == v2;
+	return SqlId(~v1 + "(+)") == v2;
 }
 
 SqlBool RightJoin(SqlVal v1, SqlVal v2) {
-	return v1 == SqlCol(~v2 + "(+)");
+	return v1 == SqlId(~v2 + "(+)");
 }
 
 SqlBool Join(SqlId tab1, SqlId tab2, SqlId key) {
@@ -148,11 +148,11 @@ SqlBool Join(SqlId tab1, SqlId tab2, SqlId key) {
 }
 
 SqlBool LeftJoin(SqlId tab1, SqlId tab2, SqlId key) {
-	return SqlCol(~key.Of(tab1) + "(+)") == key.Of(tab2);
+	return SqlId(key.Of(tab1).Quoted() + "(+)") == key.Of(tab2).Quoted();
 }
 
 SqlBool RightJoin(SqlId tab1, SqlId tab2, SqlId key) {
-	return key.Of(tab1) == SqlCol(~key.Of(tab2) + "(+)");
+	return key.Of(tab1).Quoted() == SqlId(key.Of(tab2).Quoted() + "(+)");
 }
 
-END_UPP_NAMESPACE
+}

@@ -1,7 +1,7 @@
 #ifndef _Gis3_Coords_method_h_
 #define _Gis3_Coords_method_h_
 
-NAMESPACE_UPP
+namespace Upp {
 
 class GisCoordsLonLat : public GisCoords::Data
 {
@@ -31,18 +31,6 @@ class GisCoordsSphericalData
 {
 public:
 	double                base_parallel;
-};
-
-class SphericalLatitudeFunction : public GisFunction
-{
-public:
-	SphericalLatitudeFunction(double alpha, double k, double R, double e, double U0)
-	: alpha(alpha), k(k), R(R), e(e), U0(U0) {}
-
-	virtual double Get(double x) const;
-
-private:
-	double alpha, k, R, e, U0;
 };
 
 class GisCoordsSpherical : public GisCoords::Data
@@ -203,21 +191,22 @@ class GisCoordsAzimuthal : public GisCoords::Data
 {
 public:
 	typedef GisCoordsAzimuthal CLASSNAME;
-	GisCoordsAzimuthal(Pointf pole = Pointf(0, 90));
+	GisCoordsAzimuthal(const Pointf& pole = Pointf(0, 90),
+		const Sizef& scale = Sizef(1, 1), const Sizef& offset = Sizef(0, 0));
 //	GisCoordsAzimuthal(const GisCoordsAzimuthal& a)
 
-	virtual GisCoords     DeepCopy() const { return new GisCoordsAzimuthal(*this); }
+	virtual GisCoords     DeepCopy() const;
 
 	virtual int           GetBranchCount() const;
 	virtual Array<Pointf> LonLatBoundary(const Rectf& lonlat_extent, int branch) const;
 	virtual GisBSPTree    GetBranchTree(const Rectf& lonlat_extent) const;
 
 	virtual Pointf        LonLat(Pointf xy) const;
-	virtual Rectf         LonLatExtent(const Rectf& xy_extent) const;
+	//virtual Rectf         LonLatExtent(const Rectf& xy_extent) const;
 	virtual Pointf        Project(Pointf lonlat, int branch) const;
-	virtual Rectf         ProjectExtent(const Rectf& lonlat_extent) const;
-	virtual double        ProjectDeviation(Pointf lonlat1, Pointf lonlat2, int branch) const;
-	virtual double        ProjectRatio(Pointf lonlat, int branch) const;
+	//virtual Rectf         ProjectExtent(const Rectf& lonlat_extent) const;
+	//virtual double        ProjectDeviation(Pointf lonlat1, Pointf lonlat2, int branch) const;
+	//virtual double        ProjectRatio(Pointf lonlat, int branch) const;
 
 //	virtual String        ToString() const;
 	virtual Array<GisCoords::Arg> EnumArgs();
@@ -230,10 +219,13 @@ private:
 
 public:
 	Pointf                pole;
+	Pointf                gauss_pole;
+	Sizef                 scale;
+	Sizef                 offset;
 	GisOrientation        orientation;
-	double                R, Rdeg, E, c;
+	GisCoordsGaussLatitude gauss;
 };
 
-END_UPP_NAMESPACE
+}
 
 #endif

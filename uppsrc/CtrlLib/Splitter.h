@@ -10,29 +10,31 @@ public:
 
 public:
 	struct Style : ChStyle<Style> {
-		Value vert[2], horz[2];
-		int width;
+		Value  vert[2], horz[2];
+		int    width;
+		bool   dots;
 	};
 
-protected:
+protected: // Because of docking... (will be private)
 	Vector<int> pos;
 	Vector<int> mins;
 	Vector<int> minpx;
-	int         width;
 	int         style;
 	int         mouseindex;
 	bool        vert;
 	int         inset;
 	const Style *chstyle;
 
-	int       ClientToPos(Point client) const;
-	int       PosToClient(int pos) const;
-	int       FindIndex(Point client) const;
-	int       GetChildCount() const;
-	int       GetMins(int i) const;
+	int         FindIndex(Point client) const;
+	int         GetMins(int i) const;
+	int         GetBarWidth() const;
+
+	static void PaintDots(Draw& w, const Rect& r, bool vert);
+	
+	friend class SplitterFrame;
 
 public:
-	Callback  WhenSplitFinish;
+	Event<>   WhenSplitFinish;
 
 	void      Set(Ctrl& l, Ctrl& r);
 
@@ -41,17 +43,23 @@ public:
 
 	int       GetCount() const                     { return GetChildCount(); }
 
+	int       PosToClient(int pos) const;
+	int       ClientToPos(Point client) const;
+
 	void      Zoom(int i);
 	void      NoZoom()                             { Zoom(-1); }
 	int       GetZoom() const                      { return style; }
 
 	void      SetMin(int i, int w)                 { mins.At(i, 0) = w; }
 	void      SetMinPixels(int i, int w)           { minpx.At(i, 0) = w; }
+	
+	int       GetSplitWidth() const;
 
 	void      Add(Ctrl& pane);
 	Splitter& operator<<(Ctrl& pane)               { Add(pane); return *this; }
-
-	void      Remove(Ctrl& ctrl);
+	void      Insert(int pos, Ctrl& pane);
+	void      Remove(Ctrl& pane);
+	void      Swap(Ctrl& pane, Ctrl& newpane);
 
 	static const Style& StyleDefault();
 

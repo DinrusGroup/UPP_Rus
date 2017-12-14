@@ -5,7 +5,11 @@
 
 #include <Core/Core.h>
 
-NAMESPACE_UPP
+#ifdef flagCFONTS
+#define CUSTOM_FONTSYS
+#endif
+
+namespace Upp {
 
 class Drawing;
 class Draw;
@@ -13,37 +17,23 @@ class Painting;
 class SystemDraw;
 class ImageDraw;
 
-#ifdef _MULTITHREADED
-void EnterGMutex();
-void EnterGMutex(int n);
-void LeaveGMutex();
-int  LeaveGMutexAll();
-
-struct DrawLock {
-	DrawLock()  { EnterGMutex(); }
-	~DrawLock() { LeaveGMutex(); }
-};
-#else
-inline void EnterGMutex() {}
-inline void EnterGMutex(int n) {}
-inline void LeaveGMutex() {}
-inline int  LeaveGMutexAll() { return 0; }
-
-struct DrawLock {
-	DrawLock() {}
-	~DrawLock() {}
-};
-#endif
-
 #include "Image.h"
 
 const int FONT_V = 40;
+
+struct FontGlyphConsumer {
+	virtual void Move(Pointf p) = 0;
+	virtual void Line(Pointf p) = 0;
+	virtual void Quadratic(Pointf p1, Pointf p2) = 0;
+	virtual void Cubic(Pointf p1, Pointf p2, Pointf p3) = 0;
+	virtual void Close() = 0;
+};
 
 #include "FontInt.h"
 
 class FontInfo;
 
-class Font : AssignValueTypeNo<Font, FONT_V, Moveable<Font> >{
+class Font : public ValueType<Font, FONT_V, Moveable<Font> >{
 	union {
 		int64 data;
 		struct {
@@ -65,19 +55,23 @@ class Font : AssignValueTypeNo<Font, FONT_V, Moveable<Font> >{
 
 	static Font AStdFont;
 	static Size StdFontSize;
+	static bool std_font_override;
 
-	static const Vector<FaceInfo>& List();
+	static void SetStdFont0(Font font);
+	static Vector<FaceInfo>& FaceList();
 	static void SyncStdFont();
 	static void InitStdFont();
 
 	const CommonFontInfo& Fi() const;
 	
-	friend void sInitFonts();
+	friend void   sInitFonts();
+	friend String GetFontDataSys(Font font);
 	
 public:
 	enum {
 		FIXEDPITCH  = 0x0001,
 		SCALEABLE   = 0x0002,
+		TTF         = 0x0004,
 		SPECIAL     = 0x0010,
 	};
 
@@ -85,7 +79,10 @@ public:
 	static String GetFaceName(int index);
 	static int    FindFaceNameIndex(const String& name);
 	static dword  GetFaceInfo(int index);
+	static void   SetFace(int index, const String& name, dword info);
+	static void   SetFace(int index, const String& name);
 
+	static void   SetDefaultFont(Font font);
 	static void   SetStdFont(Font font);
 	static Font   GetStdFont();
 	static Size   GetStdFontSize();
@@ -121,8 +118,11 @@ public:
 	bool   IsNonAntiAliased() const { return v.flags & FONT_NON_ANTI_ALIASED; }
 	bool   IsTrueTypeOnly() const   { return v.flags & FONT_TRUE_TYPE_ONLY; }
 	String GetFaceName() const;
+	String GetFaceNameStd() const;
 	dword  GetFaceInfo() const;
 	int64  AsInt64() const          { return data; }
+	
+	void   RealizeStd();
 
 	Font& Face(int n)               { v.face = n; return *this; }
 	Font& Height(int n)             { v.height = n; return *this; }
@@ -151,7 +151,6 @@ public:
 	Font  operator()() const        { return *this; }
 	Font  operator()(int n) const   { return Font(*this).Height(n); }
 
-
 	int   GetAscent() const                  { return Fi().ascent; }
 	int   GetDescent() const                 { return Fi().descent; }
 	int   GetCy() const                      { return Fi().height; }
@@ -172,13 +171,19 @@ public:
 	int   GetRightSpace(int c) const;
 	bool  IsFixedPitch() const               { return Fi().fixedpitch; }
 	bool  IsScaleable() const                { return Fi().scaleable; }
-	bool  IsSpecial() const                  { return !(GetFaceInfo() & SPECIAL); }
+	bool  IsSpecial() const                  { return GetFaceInfo() & SPECIAL; }
+	bool  IsTrueType() const                 { return Fi().ttf; }
 
-#ifdef PLATFORM_POSIX
-	String GetPath() const                   { return Fi().path; }
-#endif
+	String GetTextFlags() const;
+	void   ParseTextFlags(const char *s);
+	
+	String GetData() const;
+	
+	void   Render(FontGlyphConsumer& sw, double x, double y, int ch) const;
 
 	void  Serialize(Stream& s);
+	void  Jsonize(JsonIO& jio);
+	void  Xmlize(XmlIO& xio);
 
 	bool  operator==(Font f) const  { return v.face == f.v.face && v.flags == f.v.flags &&
 	                                        v.width == f.v.width && v.height == f.v.height; }
@@ -191,8 +196,8 @@ public:
 	Font(int face, int height)      { v.face = face; v.height = height; v.flags = 0; v.width = 0; }
 	Font(const Nuller&)             { SetNull(); }
 
-	operator Value() const          { return RichValue<Font>(*this); }
-	Font(const Value& q)            { *this = RichValue<Font>::Extract(q); }
+	operator Value() const          { return RichToValue(*this); }
+	Font(const Value& q)            { *this = q.Get<Font>(); }
 
 // BW compatibility
 	FontInfo Info() const;
@@ -200,7 +205,7 @@ public:
 
 
 //BW compatibility
-class FontInfo {
+class FontInfo { // Obsolete!
 	Font font;
 	friend class Font;
 public:
@@ -222,9 +227,6 @@ public:
 	bool   IsScaleable() const                { return font.IsScaleable(); }
 	int    GetFontHeight() const              { return font.GetHeight(); }
 	Font   GetFont() const                    { return font; }
-#ifdef PLATFORM_POSIX
-	String GetFileName() const                { return font.GetPath(); }
-#endif
 };
 
 struct ComposedGlyph {
@@ -364,9 +366,11 @@ void SColorDkShadow_Write(Color c);
 
 
 inline Color InvertColor() { return Color(255, 0); }
-inline Color DefaultInk() { return Black(); } //TODO!
+inline Color DefaultInk() { return Black(); } //TODO?
 
-class Painting : AssignValueTypeNo<Painting, 48, Moveable<Painting> > {
+Drawing AsDrawing(const Painting& pw);
+
+class Painting : public ValueType<Painting, 48, Moveable<Painting> > {
 	String     cmd;
 	ValueArray data;
 	Sizef      size;
@@ -379,14 +383,16 @@ public:
 
 	void    Clear()                             { size = Null; data.Clear(); cmd.Clear(); }
 	void    Serialize(Stream& s)                { s % cmd % data % size; }
+	void    Xmlize(XmlIO& xio)                  { XmlizeBySerialize(xio, *this); }
+	void    Jsonize(JsonIO& jio)                { JsonizeBySerialize(jio, *this); }
 	bool    IsNullInstance() const              { return cmd.IsEmpty(); }
 	void    SetNull()                           { size = Null; }
 	bool    operator==(const Painting& b) const { return cmd == b.cmd && data == b.data && size == b.size; }
 	unsigned GetHashValue() const               { return CombineHash(cmd, data); }
 	String  ToString() const                    { return "painting " + AsString(size); }
 
-	operator Value() const                      { return RichValue<Painting>(*this); }
-	Painting(const Value& q)                    { *this = RichValue<Painting>::Extract(q); }
+	operator Value() const                      { return RichToValue(*this); }
+	Painting(const Value& q)                    { *this = q.Get<Painting>(); }
 
 	Painting()                                  { SetNull(); }
 	Painting(const Nuller&)                     { SetNull(); }
@@ -404,9 +410,8 @@ void PaintImageBuffer(ImageBuffer& ib, const Painting& p, int mode = MODE_ANTIAL
 void PaintImageBuffer(ImageBuffer& ib, const Drawing& p, int mode = MODE_ANTIALIASED);
 
 class Draw : NoCopy {
-private:
 	struct DrawingPos;
-
+	
 public:
 	enum {
 		DOTS = 0x001,
@@ -414,6 +419,7 @@ public:
 		PRINTER = 0x004,
 		NATIVE = 0x008,
 		DATABANDS = 0x010,
+		DRAWTEXTLINES = 0x020,
 	};
 
 	virtual dword GetInfo() const = 0;
@@ -433,7 +439,9 @@ public:
 	virtual Rect GetPaintRect() const;
 
 	virtual	void DrawRectOp(int x, int y, int cx, int cy, Color color) = 0;
-	virtual void DrawImageOp(int x, int y, int cx, int cy, const Image& img, const Rect& src, Color color) = 0;
+	virtual void SysDrawImageOp(int x, int y, const Image& img, Color color);
+	virtual void SysDrawImageOp(int x, int y, const Image& img, const Rect& src, Color color);
+	virtual void DrawImageOp(int x, int y, int cx, int cy, const Image& img, const Rect& src, Color color);
 	virtual void DrawDataOp(int x, int y, int cx, int cy, const String& data, const char *id);
 	virtual void DrawLineOp(int x1, int y1, int x2, int y2, int width, Color color) = 0;
 
@@ -458,6 +466,8 @@ public:
 	virtual void EndNative();
 
 	virtual int  GetCloffLevel() const;
+	
+	virtual void Escape(const String& data);
 
 	virtual ~Draw();
 
@@ -560,9 +570,11 @@ public:
 
 	void DrawDrawing(const Rect& r, const Drawing& iw) { DrawDrawingOp(r, iw); }
 	void DrawDrawing(int x, int y, int cx, int cy, const Drawing& iw);
+	void DrawDrawing(int x, int y, const Drawing& iw);
 
 	void DrawPainting(const Rect& r, const Painting& iw) { DrawPaintingOp(r, iw); }
 	void DrawPainting(int x, int y, int cx, int cy, const Painting& iw);
+	void DrawPainting(int x, int y, const Painting& iw);
 
 	void DrawText(int x, int y, int angle, const wchar *text, Font font = StdFont(),
 		          Color ink = DefaultInk, int n = -1, const int *dx = NULL);
@@ -590,7 +602,7 @@ public:
 		          Color ink = DefaultInk, const int *dx = NULL);
 
 	static void SinCos(int angle, double& sina, double& cosa);
-
+	
 	// deprecated:
 	static void SetStdFont(Font font)                   { UPP::SetStdFont(font); }
 	static Font GetStdFont()                            { return UPP::GetStdFont(); }
@@ -617,7 +629,7 @@ public:
 	template <class T>	static void Register(const char *id)  { AddFormat(id, &DataDrawer::FactoryFn<T>); }
 };
 
-class Drawing : AssignValueTypeNo<Drawing, 49, Moveable<Drawing> > {
+class Drawing : public ValueType<Drawing, 49, Moveable<Drawing> > {
 	Size       size;
 	String     data;
 	ValueArray val;
@@ -639,19 +651,21 @@ public:
 	void Append(Drawing& dw);
 
 	void Serialize(Stream& s);
+	void Xmlize(XmlIO& xio)        { XmlizeBySerialize(xio, *this); }
+	void Jsonize(JsonIO& jio)      { JsonizeBySerialize(jio, *this); }
 
 	bool    IsNullInstance() const             { return data.IsEmpty(); }
-	void    SetNull()                          { size = Null; }
+	void    SetNull()                          { size = Null; data.Clear(); }
 
 	bool    operator==(const Drawing& b) const { return val == b.val && data == b.data && size == b.size; }
 	String  ToString() const                   { return "drawing " + AsString(size); }
 	unsigned GetHashValue() const              { return CombineHash(data, val); }
 
-	operator Value() const         { return RichValue<Drawing>(*this); }
-	Drawing(const Value& src);
+	operator Value() const                     { return RichToValue(*this); }
+	Drawing(const Value& src)                  { *this = src.Get<Drawing>(); }
 
-	Drawing()                      { SetNull(); }
-	Drawing(const Nuller&)         { SetNull(); }
+	Drawing()                                  { SetNull(); }
+	Drawing(const Nuller&)                     { SetNull(); }
 };
 
 class DrawingDraw : public Draw {
@@ -688,6 +702,8 @@ public:
 
 	virtual void DrawDrawingOp(const Rect& target, const Drawing& w);
 	virtual void DrawPaintingOp(const Rect& target, const Painting& w);
+	
+	virtual void Escape(const String& data);
 	
 private:
 	Size         size;
@@ -783,6 +799,8 @@ public:
 	virtual void DrawPaintingOp(const Rect& target, const Painting& w);
 
 public:
+	static bool IsAvailable();
+
 	operator Image() const;
 	
 	ImageAnyDraw(Size sz);
@@ -808,7 +826,7 @@ void AddRefreshRect(Vector<Rect>& invalid, const Rect& _r);
 void DrawRect(Draw& w, const Rect& rect, const Image& img, bool ralgn = false); //??? TODO
 void DrawRect(Draw& w, int x, int y, int cx, int cy, const Image& img, bool ra = false);
 
-#ifdef flagWINGL
+#if defined(flagWINGL) || defined(flagLINUXGL)
 void DrawTiles(Draw& w, int x, int y, int cx, int cy, const Image& img, const Size& isz, const Rect& src);
 void DrawTiles(Draw& w, const Rect& rect, const Image& img, const Size& isz, const Rect& src);
 #endif
@@ -873,14 +891,18 @@ void DrawTLText(Draw& draw, int x, int y, int cx, const wchar *text, Font font =
                 Color ink = SColorText(), int accesskey = 0);
 
 
-typedef String (*DrawingToPdfFnType)(const Array<Drawing>& report, Size pagesize, int margin, bool pdfa);
+struct PdfSignatureInfo;
+typedef String (*DrawingToPdfFnType)(const Array<Drawing>& report, Size pagesize, int margin,
+                                     bool pdfa, const PdfSignatureInfo *sign);
 
 void SetDrawingToPdfFn(DrawingToPdfFnType Pdf);
 DrawingToPdfFnType GetDrawingToPdfFn();
 
 #include "Display.h"
 #include "Cham.h"
+#include "DDARasterizer.h"
+#include "SDraw.h"
 
-END_UPP_NAMESPACE
+}
 
 #endif

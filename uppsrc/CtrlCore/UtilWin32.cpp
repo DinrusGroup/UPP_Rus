@@ -2,18 +2,13 @@
 
 #ifdef GUI_WIN
 
-NAMESPACE_UPP
+namespace Upp {
 
 SystemDraw&  ScreenInfo();
 
 bool ScreenInPaletteMode()
 {
 	return ScreenInfo().PaletteMode();
-}
-
-Size GetScreenSize()
-{
-	return ScreenInfo().GetPageSize();
 }
 
 HRGN GetFrameRgn(const Rect& rect, int n) {
@@ -70,6 +65,10 @@ void DrawDragRect(SystemDraw& w, const Rect& _rect1, const Rect& _rect2, const R
 	w.EndGdi();
 }
 
+void FinishDragRect(Ctrl& q)
+{
+}
+
 static uint64 sGetAniPat(uint64 src, int pos)
 {
 	uint64 out = 0;
@@ -90,6 +89,6 @@ void DrawDragRect(Ctrl& q, const Rect& rect1, const Rect& rect2, const Rect& cli
 	DrawDragRect(w, rect1, rect2, clip, n, color, sGetAniPat(pattern, animation));
 }
 
-END_UPP_NAMESPACE
+}
 
 #endif

@@ -13,10 +13,10 @@
 #define DOUBLE_(x)                 COLUMN_("real", double, x, 0, 0)
 #define DOUBLE_ARRAY_(x, items)    COLUMN_ARRAY_("real", double, x, 0, 0, items)
 
-#define STRING(x, n)               COLUMN("text", String, x, 0, 0)
-#define STRING_ARRAY(x, n, items)  COLUMN_ARRAY("text", String, x, 0, 0, items)
-#define STRING_(x, n)              COLUMN_("text", String, x, 0, 0)
-#define STRING_ARRAY_(x, n, items) COLUMN_ARRAY_("text", String, x, 0, 0, items)
+#define STRING(x, n)               COLUMN("text", String, x, n, 0)
+#define STRING_ARRAY(x, n, items)  COLUMN_ARRAY("text", String, x, n, 0, items)
+#define STRING_(x, n)              COLUMN_("text", String, x, n, 0)
+#define STRING_ARRAY_(x, n, items) COLUMN_ARRAY_("text", String, x, n, 0, items)
 
 #define DATE(x)                    COLUMN("date", Date, x, 0, 0)
 #define DATE_ARRAY(x, items)       COLUMN_ARRAY("date", Date, x, 0, 0, items)
@@ -33,13 +33,16 @@
 #define BOOL_(x)                   COLUMN_("text", bool, x, 0, 0)
 #define BOOL_ARRAY_(x, items)      COLUMN_ARRAY_("text", bool, x, 0, 0, items)
 
-#define BLOB(x)                    COLUMN("blob", String, x, 0, 0)
-#define BLOB_(x)                   COLUMN_("blob", String, x, 0, 0)
+#define BLOB(x)                    COLUMN("blob", String, x, INT_MAX/2, 0)
+#define BLOB_(x)                   COLUMN_("blob", String, x, INT_MAX/2, 0)
 
-#define LONGRAW(x)                 COLUMN("blob", String, x, 0, 0)
-#define LONGRAW_(x)                COLUMN_("blob", String, x, 0, 0)
+#define LONGRAW(x)                 COLUMN("blob", String, x, INT_MAX/2, 0)
+#define LONGRAW_(x)                COLUMN_("blob", String, x, INT_MAX/2, 0)
 
+#ifndef PRIMARY_KEY
 #define PRIMARY_KEY                INLINE_ATTRIBUTE("primary key")
+#endif
+
 #define AUTO_INCREMENT
 #define NOT_NULL                   INLINE_ATTRIBUTE("not null")
 

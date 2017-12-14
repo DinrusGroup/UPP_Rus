@@ -1,7 +1,7 @@
 #define GUI_WIN
 #define GUI_WIN32
 
-NAMESPACE_UPP
+namespace Upp {
 
 class SystemDraw : public Draw {
 public:
@@ -19,7 +19,7 @@ public:
 	virtual Rect GetPaintRect() const;
 
 	virtual	void DrawRectOp(int x, int y, int cx, int cy, Color color);
-	virtual void DrawImageOp(int x, int y, int cx, int cy, const Image& img, const Rect& src, Color color);
+	virtual void SysDrawImageOp(int x, int y, const Image& img, const Rect& src, Color color);
 	virtual void DrawLineOp(int x1, int y1, int x2, int y2, int width, Color color);
 
 	virtual void DrawPolyPolylineOp(const Point *vertices, int vertex_count,
@@ -95,7 +95,7 @@ private:
 
 protected:
 	dword style;
-	HDC   handle;
+	HDC   handle, dcMem;
 	Point actual_offset;
 
 	SystemDraw();
@@ -110,6 +110,9 @@ public:
 	bool PaletteMode()                                  { return palette; }
 
 	static void Flush()                                 { GdiFlush(); }
+
+	static Image Win32IconCursor(LPCSTR id, int iconsize, bool cursor);
+	static HICON IconWin32(const Image& img, bool cursor = false);
 
 	COLORREF GetColor(Color color) const;
 	
@@ -131,8 +134,10 @@ public:
 	HDC   GetHandle()                    { return handle; }
 	operator HDC() const                 { return handle; }
 	void  Unselect();
-	void  Attach(HDC ahandle)            { handle = ahandle; Init(); }
-	HDC   Detach()                       { Unselect(); HDC h = handle; handle = NULL; return h; }
+	void  Attach(HDC ahandle);
+	HDC   Detach();
+	
+	HDC   GetCompatibleDC()              { return dcMem; }
 
 	SystemDraw(HDC hdc);
 	virtual ~SystemDraw();
@@ -259,7 +264,6 @@ Image Win32Icon(LPCSTR id, int iconsize = 0);
 Image Win32Icon(int id, int iconsize = 0);
 Image Win32Cursor(LPCSTR id);
 Image Win32Cursor(int id);
-HICON IconWin32(const Image& img, bool cursor = false);
 Image Win32DllIcon(const char *dll, int ii, bool large);
 
 class BackDraw : public SystemDraw {
@@ -322,7 +326,7 @@ public:
 	~ImageDraw();
 };
 
-END_UPP_NAMESPACE
+}
 
 #define GUIPLATFORM_KEYCODES_INCLUDE "Win32Keys.h"
 
@@ -340,18 +344,18 @@ END_UPP_NAMESPACE
 
 #define GUIPLATFORM_TOPWINDOW_DECLS_INCLUDE "Win32Top.h"
 
-NAMESPACE_UPP
+namespace Upp {
 
 inline unsigned GetHashValue(const HWND& hwnd)
 {
 	return (unsigned)(intptr_t)hwnd;
 }
-END_UPP_NAMESPACE
+}
 
 #ifdef PLATFORM_WIN32
 #ifndef PLATFORM_WINCE
 
-#include <ShellAPI.h>
+#include <shellapi.h>
 
 #endif
 #endif

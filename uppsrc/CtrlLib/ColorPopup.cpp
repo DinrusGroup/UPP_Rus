@@ -1,6 +1,6 @@
 #include "CtrlLib.h"
 
-NAMESPACE_UPP
+namespace Upp {
 
 static struct {
 	const char  *name;
@@ -61,6 +61,8 @@ INITBLOCK {
 
 void ColorPopUp::Hint(Color c)
 {
+	if(IsNull(c) || c == VoidColor)
+		return;
 	for(int i = 0; i < 17; i++)
 		if(hint[i] == c) {
 			memmove(&hint[i], &hint[i + 1], (17 - i) * sizeof(Color));
@@ -96,35 +98,6 @@ Color ReadColor(CParser& p)
 	return Color(minmax(r, 0, 255), minmax(g, 0, 255), minmax(b, 0, 255));
 }
 
-
-static int sCharFilterNoDigit(int c)
-{
-	return IsDigit(c) ? 0 : c;
-}
-
-static int sCharFilterHex(int c)
-{
-	return c >= 'a' && c <= 'f' || c >= 'A' && c <= 'F' || IsDigit(c) ? c : 0;
-}
-
-Color ColorFromText(const char *s)
-{
-	Vector<String> h = Split(s, sCharFilterNoDigit);
-	if(h.GetCount() == 3) {
-		int r = atoi(h[0]);
-		int g = atoi(h[1]);
-		int b = atoi(h[2]);
-		if(r >= 0 && r <= 255 && g >= 0 && g <= 255 && b >= 0 && b <= 255)
-			return Color(r, g, b);
-	}
-	String hex = Filter(s, sCharFilterHex);
-	if(hex.GetCount() == 6 || hex.GetCount() == 8) {
-		dword w = (dword)ScanInt64(~hex, NULL, 16);
-		return Color(byte(w >> 16), byte(w >> 8), byte(w));
-	}
-	return Null;
-}
-
 ColorPopUp::~ColorPopUp() {}
 
 int ColorPopUp::GetColorCount() const
@@ -156,21 +129,21 @@ Color ColorPopUp::GetColor(int i) const
 
 int ColorPopUp::GetCy()
 {
-	return ((GetColorCount() + 17) / 18) * 16 +
-			(norampwheel ? 0 : 2) +
-	        (notnull ? 0 : StdFont().Info().GetHeight() + 3 + 2);
+	return ((GetColorCount() + 17) / 18) * DPI(16) +
+			(norampwheel ? 0 : DPI(2)) +
+	        (notnull ? 0 : StdFont().Info().GetHeight() + DPI(3 + 2)) +
+	        (withvoid ? StdFont().Info().GetHeight() + DPI(3 + 2) : 0);
 }
 
 void ColorPopUp::DrawFilledFrame(Draw &w, int x, int y, int cx, int cy, Color fcol, Color bcol)
 {
 	DrawFrame(w, x, y, cx, cy, fcol);
-	w.DrawRect(x + 1, y + 1, cx - 2, cy - 2, bcol);
+	w.DrawRect(x + DPI(1), y + DPI(1), cx - DPI(2), cy - DPI(2), bcol);
 }
 
 void ColorPopUp::DrawFilledFrame(Draw &w, Rect &r, Color fcol, Color bcol)
 {
-	DrawFrame(w, r.left, r.top, r.Width(), r.Height(), fcol);
-	w.DrawRect(r.left + 1, r.top + 1, r.Width() - 2, r.Height() - 2, bcol);
+	DrawFilledFrame(w, r.left, r.top, r.GetWidth(), r.GetHeight(), fcol, bcol);
 }
 
 void ColorPopUp::Paint(Draw& w)
@@ -180,14 +153,30 @@ void ColorPopUp::Paint(Draw& w)
 
 	w.DrawRect(sz, SColorMenu);
 
-	int y = 1;
+	int y = DPI(1);
+
+	if(withvoid) {
+		Size fsz = GetTextSize(nulltext, StdFont());
+		Rect r(1, y, sz.cx - DPI(1), fsz.cy + y + DPI(2));
+		DrawFrame(w, r, SColorText);
+		w.DrawText((sz.cx - fsz.cx) / 2, y, voidtext, StdFont(), SColorText());
+		y = r.bottom + DPI(3);
+		if(colori == 997)
+		{
+			r.Inflate(1);
+			if(GetMouseLeft())
+				DrawFrame(w, r, SColorShadow, SColorLight);
+			else
+				DrawFrame(w, r, GUI_GlobalStyle() >= GUISTYLE_XP ? SColorText : SColorHighlight);
+		}
+	}
 
 	if(!notnull) {
 		Size fsz = GetTextSize(nulltext, StdFont());
-		Rect r(1, y, sz.cx - 1, fsz.cy + y + 2);
+		Rect r(1, y, sz.cx - DPI(1), fsz.cy + y + DPI(2));
 		DrawFrame(w, r, SColorText);
 		w.DrawText((sz.cx - fsz.cx) / 2, y, nulltext, StdFont(), SColorText());
-		y = r.bottom + 3;
+		y = r.bottom + DPI(3);
 		if(colori == 998)
 		{
 			r.Inflate(1);
@@ -200,34 +189,36 @@ void ColorPopUp::Paint(Draw& w)
 
 	int i = 0;
 	for(;;) {
-		for(int x = 0; x < 18 * 16; x += 16) {
+		for(int x = 0; x < 18 * DPI(16); x += DPI(16)) {
 			if(i >= GetColorCount()) {
 				if(!norampwheel) {
-					Rect r(8 * 16 + 1, cy + 4, 10 * 16 - 1, sz.cy - 4);
+					Rect r(DPI(8 * 16 + 1), cy + DPI(4), DPI(10 * 16 - 1), sz.cy - DPI(4) - DPI(24));
 					DrawFilledFrame(w, r, SColorText, color);
 
 					r.Inflate(1);
-					if(colori == 999)
+					if(colori == 999) {
 						if(GetMouseLeft())
 							DrawFrame(w, r, SColorShadow, SColorLight);
 						else
 							DrawFrame(w, r, GUI_GlobalStyle() >= GUISTYLE_XP ? SColorText : SColorHighlight);
+					}
 				}
 				return;
 			}
 
-			DrawFilledFrame(w, x + 1, y, 14, 14, SColorText, GetColor(i));
+			DrawFilledFrame(w, x + DPI(1), y, DPI(14), DPI(14), SColorText, GetColor(i));
 			if(i < 18 && scolors)
-				DrawFrame(w, x + 2, y + 1, 12, 12, Blend(SColorLight, SColorHighlight));
+				DrawFrame(w, x + DPI(2), y + DPI(1), DPI(12), DPI(12), Blend(SColorLight, SColorHighlight));
 
-			if(i == colori)
+			if(i == colori) {
 				if(GetMouseLeft())
-					DrawFrame(w, x, y - 1, 16, 16, SColorShadow, SColorLight);
+					DrawFrame(w, x, y - DPI(1), DPI(16), DPI(16), SColorShadow, SColorLight);
 				else
-					DrawFrame(w, x, y - 1, 16, 16, GUI_GlobalStyle() >= GUISTYLE_XP ? SColorText : SColorHighlight);
+					DrawFrame(w, x, y - DPI(1), DPI(16), DPI(16), GUI_GlobalStyle() >= GUISTYLE_XP ? SColorText : SColorHighlight);
+			}
 			i++;
 		}
-		y += 16;
+		y += DPI(16);
 	}
 }
 
@@ -235,15 +226,21 @@ int ColorPopUp::Get(Point p)
 {
 	if(p.y >= GetCy())
 		return 999;
+	if(withvoid) {
+		int y0 = StdFont().Info().GetHeight() + DPI(4);
+		if(p.y < y0)
+			return 997;
+		p.y -= y0;
+	}
 	if(!notnull) {
-		int y0 = StdFont().Info().GetHeight() + 4;
+		int y0 = StdFont().Info().GetHeight() + DPI(4);
 		if(p.y < y0)
 			return 998;
 		p.y -= y0;
 	}
 	Size sz = GetSize();
 	if(p.x >= 0 && p.x < sz.cx && p.y >= 0)
-		return p.x / 16 + p.y / 16 * 18;
+		return p.x / DPI(16) + p.y / DPI(16) * 18;
 	return -1;
 }
 
@@ -313,11 +310,14 @@ Color ColorPopUp::Get() const
 	if(colori == 999)
 		return color;
 	else
+	if(colori == 997)
+		return VoidColor();
+	else
 		return Null;
 }
 
 void ColorPopUp::PopupDeactivate() {
-	if(popup && popup->IsOpen() && !animating) {
+	if(popup && popup->IsOpen() && !animating && open) {
 		popup.Clear();
 		IgnoreMouseClick();
 		WhenCancel();
@@ -326,8 +326,8 @@ void ColorPopUp::PopupDeactivate() {
 
 void ColorPopUp::PopUp(Ctrl *owner, Color c)
 {
-	int cy = norampwheel ? 0 : 110;
-	Size sz = AddFrameSize(18 * 16, GetCy() + cy);
+	int cy = norampwheel ? 0 : DPI(110);
+	Size sz = AddFrameSize(18 * DPI(16), GetCy() + cy);
 	Rect wr = GetWorkArea();
 	Rect r = owner->GetScreenRect();
 	int x = r.left;
@@ -347,14 +347,15 @@ void ColorPopUp::PopUp(Ctrl *owner, Color c)
 
 	Rect rt = RectC(x, y, sz.cx, sz.cy);
 
+	open = false;
 	popup.Create();
 	popup->color = this;
 	popup->Add(*this);
 	popup->SetRect(RectC(start.x, start.y, 3, 3));
 
 	if(!norampwheel) {
-		ramp.LeftPos(0, 18*7).VSizePos(GetCy(), 0);
-		wheel.LeftPos(18*9 - 1, 18*7).VSizePos(GetCy(), 0);
+		ramp.LeftPos(0, DPI(18*7)).VSizePos(GetCy(), 0);
+		wheel.LeftPos(DPI(18*9 - 1), DPI(18*7)).VSizePos(GetCy(), 0);
 	}
 	ramp <<= c;
 	wheel <<= c;
@@ -374,6 +375,7 @@ void ColorPopUp::PopUp(Ctrl *owner, Color c)
 	if(!popup->IsOpen())
 		popup->PopUp(owner, true, true, true);
 	SetFocus();
+	open = true;
 }
 
 void ColorPopUp::Select()
@@ -382,13 +384,23 @@ void ColorPopUp::Select()
 	Finish();
 }
 
+void ColorPopUp::Layout()
+{
+	if(norampwheel)
+		settext.Hide();
+	else
+		settext.LeftPos(DPI(8 * 16), DPI(2 * 16)).BottomPos(DPI(2), DPI(24));
+}
+
 ColorPopUp::ColorPopUp()
 {
 	norampwheel = false;
 	notnull = false;
+	withvoid = false;
 	scolors = false;
 	animating = false;
 	hints = false;
+	open = false;
 	SetFrame(MenuFrame());
 	Add(ramp);
 	Add(wheel);
@@ -396,7 +408,27 @@ ColorPopUp::ColorPopUp()
 	wheel <<= THISBACK(Wheel);
 	ramp.WhenLeftDouble = wheel.WhenLeftDouble = THISBACK(Select);
 	BackPaint();
-	nulltext = t_("(прозрачный)");
+	nulltext = t_("(transparent)");
+	voidtext = t_("(none)");
+	
+	settext.SetImage(CtrlImg::color_edit());
+	settext << [=] {
+		String text;
+		if(!IsNull(color) && color != VoidColor())
+			text = ColorToHtml(color);
+		EditText(text, "Set Color", "Color value");
+		Color c = ColorFromText(text);
+		if(IsNull(c))
+			return;
+		color = c;
+		ramp <<= wheel <<= c;
+		colori = 999;
+		WhenAction();
+		Refresh();
+		Finish();
+	};
+	
+	Add(settext);
 }
 
-END_UPP_NAMESPACE
+}

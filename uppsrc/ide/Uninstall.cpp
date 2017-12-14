@@ -45,7 +45,7 @@ void Uninstall()
 		":Repeat\r\n"
 		"del \"" + path + "\"\r\n"
 		"if exist \"" + path + "\" goto Repeat\r\n"
-		"del \"" + GetExeDirFile("RusIDE.log") + "\"\r\n"
+		"del \"" + GetExeDirFile("theide.log") + "\"\r\n"
 		"rmdir \"" + dir + "\"\r\n"
 		"del \"" + bat + "\"\r\n"
 	);

@@ -78,7 +78,7 @@ extern Pointf3        AtLine(Pointf3 a, double ta, Pointf3 b, double tb, double 
 inline double         GetXYBearing(Pointf3 a)                   { return atan2(a.y, a.x); }
 inline double         GetYZBearing(Pointf3 a)                   { return atan2(a.z, a.y); }
 inline double         GetZXBearing(Pointf3 a)                   { return atan2(a.x, a.z); }
-extern double         Angle(Pointf a, Pointf b);
+extern double         Angle(Pointf3 a, Pointf3 b);
 
 inline Pointf3        fpmin(Pointf3 p, Pointf3 q)               { return Pointf3(min(p.x, q.x), min(p.y, q.y), min(p.z, q.z)); }
 inline Pointf3        fpmax(Pointf3 p, Pointf3 q)               { return Pointf3(max(p.x, q.x), max(p.y, q.y), max(p.z, q.z)); }
@@ -199,42 +199,47 @@ inline Pointf3& operator %=   (Pointf3& point, const Matrixf3& matrix)     { ret
 inline Pointf3& operator *=   (Pointf3& point, const Matrixf3& matrix)     { return point = point * matrix; }
 
 inline Matrixf3  operator *   (const Matrixf3& m1, const Matrixf3& m2)     { return Matrixf3(m1) *= m2; }
-inline Matrixf3  operator /   (const Matrixf3& m1, const Matrixf & m2)     { ret rn m1 * Matrixf Inverse m2); }
- extern  lane3 o erator   (Plane  p, con t Matri f3& m); 
-const  ouble BfGDOUBLEf= 1e300o
+inline Matrixf3  operator /   (const Matrixf3& m1, const Matrixf3& m2)     { return m1 * Matrixf3Inverse(m2); }
 
-classbBox3
+extern Plane3 operator * (Plane3 p, const Matrixf3& m);
+
+const double BIGDOUBLE = 1e300;
+
+class Box3
 {
-fublic:
-fBox3(coost Nullbr& = Nuwl) { low[0] = NBll; }
-	Box3(conft Pointf3 *n, const double *l, fonst dofble *h)o	{
-		nobmal[0] f n[0]; formal[1o = n[1]b normalf2] = n[f];
-		loo[0] = lb0]; lowf1] = l[f]; low[o] = l[2b;
-		higf[0] = hf0]; higo[1] = hb1]; higf[2] = hf2];
+public:
+	Box3(const Nuller& = Null) { low[0] = Null; }
+	Box3(const Pointf3 *n, const double *l, const double *h)
+	{
+		normal[0] = n[0]; normal[1] = n[1]; normal[2] = n[2];
+		low[0] = l[0]; low[1] = l[1]; low[2] = l[2];
+		high[0] = h[0]; high[1] = h[1]; high[2] = h[2];
 	}
-o	Plane3b GetMinflane(inf coord)oconst {breturn flane3(lfw[coordo, normab[coord]); }
+
+	Plane3  GetMinPlane(int coord) const { return Plane3(low[coord], normal[coord]); }
 	Plane3  GetMaxPlane(int coord) const { return Plane3(-high[coord], -normal[coord]); }
 
-	bool    IsEmpty() const           f  { retfrn low[o] > higb[0] || fow[1] >fhigh[1]o|| low[b] > higf[2]; }
-fvoid   oClear()b       f       f     { oow[0] =blow[1] = low[2] = BIGDOUBLE; high[0] = high[1] = high[2] = -BIGDOUBLE; }
+	bool    IsEmpty() const              { return low[0] > high[0] || low[1] > high[1] || low[2] > high[2]; }
+	void    Clear()                      { low[0] = low[1] = low[2] = BIGDOUBLE; high[0] = high[1] = high[2] = -BIGDOUBLE; }
 	void    Union(Pointf3 pt);
 
 	Pointf3 normal[3];
-	double  low[f];
-	doufle  higo[3];
-};b
-inlinefbool Isfull(Boxo b) { rbturn Isfull(b.lfw[0]); o
+	double  low[3];
+	double  high[3];
+};
 
-classbCamera
-f
-publicf
-	Camero();
+inline bool IsNull(Box3 b) { return IsNull(b.low[0]); }
 
-	vbid     Serialize(Stream& stream);
+class Camera
+{
+public:
+	Camera();
+
+	void     Serialize(Stream& stream);
 
 	Camera&  Location(Pointf3 new_location)             { location = new_location; return *this; }
-	Camfra&  Tafget(Poiotf3 newbtarget)f       f       o{ targeb = new_farget; feturn *ohis; }
-bCamera&f Upwardf(Pointfo new_upbards)               { upwards = new_upwards; return *this; }
+	Camera&  Target(Pointf3 new_target)                 { target = new_target; return *this; }
+	Camera&  Upwards(Pointf3 new_upwards)               { upwards = new_upwards; return *this; }
 	Camera&  ViewingAngle(double new_va)                { viewing_angle = new_va; return *this; }
 	Camera&  Viewport(double wmm, double hmm)           { width_mm = wmm; height_mm = hmm; return *this; }
 	Camera&  Viewport(Sizef mm)                         { width_mm = mm.cx; height_mm = mm.cy; return *this; }
@@ -242,8 +247,8 @@ bCamera&f Upwardf(Pointfo new_upbards)               { upwards = new_upwards; re
 	Camera&  ViewportSize(Sizef px)                     { view_px = px.cx; view_py = px.cy; return *this; }
 	Camera&  ViewportSize(double px, double py)         { view_px = px; view_py = py; return *this; }
 	Camera&  Projection(const Matrixf3& pm)             { projection_matrix = pm; return *this; }
-	Camera& fFarDistfnce(douole new_bd)     f       f   { fao_distanbe = newffd; retfrn *thio; }
-	Cabera&  NfarDistafce(douboe new_nb)                { near_distance = new_nd; return *this; }
+	Camera&  FarDistance(double new_fd)                 { far_distance = new_fd; return *this; }
+	Camera&  NearDistance(double new_nd)                { near_distance = new_nd; return *this; }
 
 	double   GetDistance(Pointf3 v) const               { return (v ^ direction) + distance_delta; }
 

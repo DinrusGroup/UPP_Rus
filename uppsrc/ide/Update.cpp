@@ -5,7 +5,11 @@
 
 #ifdef PLATFORM_POSIX
 
-GLOBAL_VAR(UpdaterConfig,UpdaterCfg);
+UpdaterConfig& UpdaterCfg()
+{
+	static UpdaterConfig s;
+	return s;
+}
 
 void Ide::CheckUpdates(bool verbose){
 	LLOG("CheckUpdates, verbose="<<verbose);
@@ -28,9 +32,9 @@ void Ide::CheckUpdatesManual(){
 		String err=su.GetError();
 		if(err=="CANCEL") return;
 		if(!err.IsEmpty()){
-			Exclamation("Не удаётся проверка обновлений. "+err);
+			Exclamation("Unable to check for updates. "+err);
 		}else{
-			PromptOK("Обновлений не найдено. Вы используете версию "+su.GetLocal()+".");
+			PromptOK("No update found. You are using version "+su.GetLocal()+".");
 		}
 		UpdaterCfg().ignored=tmp;
 	}

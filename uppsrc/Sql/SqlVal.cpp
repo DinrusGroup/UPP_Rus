@@ -1,45 +1,69 @@
 #include "Sql.h"
 
-NAMESPACE_UPP
+namespace Upp {
 
-SqlCol SqlCol::As(const char *as) const
+SqlId SqlId::Of(const char *of) const
 {
-	return name + SqlCase(MSSQL | PGSQL, " as ")(" ") + as;
+	return String().Cat() << of << (char)SQLC_OF << ToString();
 }
 
-SqlCol SqlId::Of(const char *of) const
+SqlId SqlId::Of(SqlId id) const
 {
-	return of + ('.' + ToString());
+	return id.IsNull() ? ToString() : String().Cat() << id.ToString() << (char)SQLC_OF << ToString();
 }
 
-SqlCol SqlId::Of(SqlId id) const
+void SqlId::PutOf0(String& s, const SqlId& b) const
 {
-	return id.IsNull() ? ToString() : id.ToString() + '.' + ToString();
+	s << ToString() << (char)SQLC_OF << ~b;
+}
+
+void SqlId::PutOf(String& s, const SqlId& b) const
+{
+	s << (char)SQLC_COMMA;
+	PutOf0(s, b);
 }
 
 SqlId SqlId::operator[](const SqlId& id) const
 {
-	return id.IsNull() ? ToString() : ToString() + '.' + id.ToString();
+	return Of(id);
 }
 
 SqlId SqlId::As(const char *as) const
 {
-	return id.IsNull() ? ToString() : ToString() + SqlCase(MSSQL | PGSQL, " as ")(" ") + as;
+	return id.IsNull() ? ToString() : String().Cat() << ToString() << (char)SQLC_AS << as;
+}
+
+SqlId SqlId::operator()(SqlId p) const
+{
+	String x;
+	PutOf0(x, p);
+	return x;
 }
 
 SqlId SqlId::operator [] (int i) const
 {
-	return SqlId(ToString() + FormatInt(i));
+	return ToString() + FormatInt(i);
 }
 
 SqlId SqlId::operator&(const SqlId& s) const
 {
-	return SqlId(ToString() + "$" + s.ToString());
+	return ToString() + "$" + s.ToString();
+}
+
+SqlId SqlId::operator()(const S_info& table) const
+{
+	String x;
+	for(int i = 0; i < table.GetCount(); i++)
+		if(i)
+			PutOf(x, table.GetId(i));
+		else
+			PutOf0(x, table.GetId(i));
+	return x;
 }
 
 String SqlS::operator()() const
 {
-	return '(' + text + ')';
+	return String().Cat() << '(' << text << ')';
 }
 
 String SqlS::operator()(int at) const
@@ -52,28 +76,40 @@ String SqlS::operator()(int at, byte cond) const
 	if(at <= priority)
 		return text;
 	StringBuffer out;
-	out << SqlCase(cond, "(")() << text << SqlCase(cond, ")")();
+	out << SqlCode(cond, "(")() << text << SqlCode(cond, ")")();
 	return out;
 }
 
-SqlS::SqlS(const SqlS& a, const char *o, const SqlS& b, int pr, int prb) {
-	text = a(pr) + o + b(prb);
-	priority = pr;
-}
-
-SqlS::SqlS(const SqlS& a, const char *o, const SqlS& b, int pr) {
-	text = a(pr) + o + b(pr);
+void SqlS::Init(const SqlS& a, const char *o, int olen, const SqlS& b, int pr, int prb)
+{
+	StringBuffer s;
+	if(a.priority < pr) {
+		s.Cat('(');
+		s.Cat(~a);
+		s.Cat(')');
+	}
+	else
+		s.Cat(~a);
+	s.Cat(o, olen);
+	if(b.priority < prb) {
+		s.Cat('(');
+		s.Cat(~b);
+		s.Cat(')');
+	}
+	else
+		s.Cat(~b);
+	text = s;
 	priority = pr;
 }
 
 SqlVal SqlVal::As(const char *as) const {
 	SqlVal v;
-	v.SetHigh(text + ~SqlCase(MSSQL | PGSQL, " as ")(" ") + as);
+	v.SetHigh(String().Cat() << text << (char)SQLC_AS << '\t' << as << '\t');
 	return v;
 }
 
 SqlVal SqlVal::As(const SqlId& id) const {
-	return As(~~id);
+	return As(~id.ToString());
 }
 
 SqlVal::SqlVal(const String& x) {
@@ -136,28 +172,16 @@ SqlVal::SqlVal(const Nuller&) {
 	SetNull();
 }
 
-SqlVal::SqlVal(SqlId id) {
-	SetHigh(id.ToString());
+SqlVal::SqlVal(const SqlId& id) {
+	SetHigh(id.Quoted());
 }
 
 SqlVal::SqlVal(const SqlId& (*id)())
 {
-	SetHigh((*id)().ToString());
+	SetHigh((*id)().Quoted());
 }
 
-SqlVal::SqlVal(SqlCol id) {
-	SetHigh(id.ToString());
-}
-/*
-SqlVal::SqlVal(const SqlSelect& x) {
-	SetHigh('(' + ((SqlStatement) x).GetText() + ')');
-}
-
-SqlVal::SqlVal(const SqlBool& x) {
-	SetHigh(~x);
-}
-*/
-SqlVal::SqlVal(const Case& x) {
+SqlVal::SqlVal(const SqlCase& x) {
 	SetHigh(~x);
 }
 
@@ -186,7 +210,7 @@ SqlVal operator%(const SqlVal& a, const SqlVal& b) {
 }
 
 SqlVal operator|(const SqlVal& a, const SqlVal& b) {
-	return SqlVal(a, SqlCase(ORACLE|PGSQL|SQLITE3, " || ")(" + "), b, SqlS::MUL);		// Added (SQLITE3, " || ")
+	return SqlVal(a, SqlCode(ORACLE|PGSQL|SQLITE3, "||")(" + "), b, SqlS::MUL);
 }
 
 SqlVal& operator+=(SqlVal& a, const SqlVal& b)     { return a = a + b; }
@@ -197,28 +221,55 @@ SqlVal& operator%=(SqlVal& a, const SqlVal& b)     { return a = a % b; }
 SqlVal& operator|=(SqlVal& a, const SqlVal& b)     { return a = a | b; }
 
 SqlVal SqlFunc(const char *name, const SqlVal& a) {
-	return SqlVal(name + a(), SqlS::FN);
+	return SqlVal(String().Cat() << name << '(' << ~a << ')', SqlS::FN);
 }
 
 SqlVal SqlFunc(const char *n, const SqlVal& a, const SqlVal& b) {
-	return SqlVal(String(n) + '(' + ~a + ", " + ~b + ')', SqlS::FN);
+	return SqlVal(String(n).Cat() << '(' + ~a << ", " << ~b << ')', SqlS::FN);
 }
 
 SqlVal SqlFunc(const char *n, const SqlVal& a, const SqlVal& b, const SqlVal& c) {
-	return SqlVal(String(n) + '(' + ~a + ", " + ~b + ", " + ~c + ')', SqlS::FN);
+	return SqlVal(String(n).Cat() << '(' << ~a << ", " << ~b << ", " << ~c << ')', SqlS::FN);
 }
 
 SqlVal SqlFunc(const char *n, const SqlVal& a, const SqlVal& b, const SqlVal& c, const SqlVal& d) {
-	return SqlVal(String(n) + '(' + ~a + ", " + ~b + ", " + ~c + ", " + ~d + ')', SqlS::FN);
+	return SqlVal(String(n).Cat() << '(' << ~a << ", " << ~b << ", " << ~c << ", " << ~d << ')', SqlS::FN);
 }
 
 SqlVal SqlFunc(const char *name, const SqlSet& set) {
 	return SqlVal(name + set(), SqlS::FN);
 }
 
+SqlBool SqlBoolFunc(const char *name, const SqlBool& a) {
+	return SqlBool(String().Cat() << name << '(' << ~a << ')', SqlS::FN);
+}
+
+SqlBool SqlBoolFunc(const char *n, const SqlBool& a, const SqlBool& b) {
+	return SqlBool(String(n).Cat() << '(' + ~a << ", " << ~b << ')', SqlS::FN);
+}
+
+SqlBool SqlBoolFunc(const char *n, const SqlBool& a, const SqlBool& b, const SqlBool& c) {
+	return SqlBool(String(n).Cat() << '(' << ~a << ", " << ~b << ", " << ~c << ')', SqlS::FN);
+}
+
+SqlBool SqlBoolFunc(const char *n, const SqlBool& a, const SqlBool& b, const SqlBool& c, const SqlBool& d) {
+	return SqlBool(String(n).Cat() << '(' << ~a << ", " << ~b << ", " << ~c << ", " << ~d << ')', SqlS::FN);
+}
+
 SqlVal Decode(const SqlVal& exp, const SqlSet& variants) {
 	ASSERT(!variants.IsEmpty());
-	return SqlVal("decode("  + ~exp  + ", " + ~variants + ')', SqlS::FN);
+	Vector<SqlVal> v = variants.Split();
+	ASSERT(v.GetCount() > 1);
+	SqlCase cs(exp == v[0], v[1]);
+	int i;
+	for(i = 2; i + 1 < v.GetCount(); i += 2)
+		cs(exp == v[i], v[i + 1]);
+	if(i < v.GetCount())
+		cs(v[i]);
+	else
+		cs(Null);
+	return SqlVal(SqlCode(ORACLE, "decode("  + ~exp  + ", " + ~variants + ')')('(' + ~cs + ')'),
+	              SqlS::FN);
 }
 
 SqlVal Distinct(const SqlVal& exp) {
@@ -247,9 +298,9 @@ SqlVal Count(const SqlSet& exp)
 	return SqlFunc("count", exp);
 }
 
-SqlVal SqlAll()
+SqlId SqlAll()
 {
-	return SqlCol("*");
+	return SqlId("*");
 }
 
 SqlVal SqlCountRows()
@@ -277,6 +328,10 @@ SqlVal Avg(const SqlVal& a) {
 	return SqlFunc("avg", a);
 }
 
+SqlVal Abs(const SqlVal& a) {
+	return SqlFunc("abs", a);
+}
+
 SqlVal Stddev(const SqlVal& a) {
 	return SqlFunc("stddev", a);
 }
@@ -286,17 +341,15 @@ SqlVal Variance(const SqlVal& a) {
 }
 
 SqlVal Greatest(const SqlVal& a, const SqlVal& b) {
-	return SqlFunc(SqlCase
-						(SQLITE3, "max")
-						("greatest"),
-					a, b);
+	return SqlVal(SqlCode(MSSQL, '(' + ~Case(a < b, b)(a) + ')')
+	                     (~SqlFunc(SqlCode(SQLITE3, "max")("greatest"), a, b)),
+	              SqlS::FN);
 }
 
 SqlVal Least(const SqlVal& a, const SqlVal& b) {
-	return SqlFunc(SqlCase
-						(SQLITE3, "min")
-						("least"),
-					a, b);
+	return SqlVal(SqlCode(MSSQL, '(' + ~Case(a > b, b)(a) + ')')
+	                     (~SqlFunc(SqlCode(SQLITE3, "min")("least"), a, b)),
+	              SqlS::FN);
 }
 
 SqlVal ConvertCharset(const SqlVal& exp, const SqlVal& charset) { //TODO Dialect!
@@ -304,8 +357,9 @@ SqlVal ConvertCharset(const SqlVal& exp, const SqlVal& charset) { //TODO Dialect
 	return exp.IsEmpty() ? exp : SqlFunc("convert", exp, charset);
 }
 
-SqlVal ConvertAscii(const SqlVal& exp) { //TODO Dialect!
-	return ConvertCharset(exp, "US7ASCII");
+SqlVal ConvertAscii(const SqlVal& exp) {
+	return SqlVal(SqlCode(MSSQL, String().Cat() << "((" << ~exp << ") collate SQL_Latin1_General_Cp1251_CS_AS)")
+			             (~ConvertCharset(exp, "US7ASCII")), SqlS::FN); // This is Oracle really, TODO: Add other dialects
 }
 
 SqlVal Upper(const SqlVal& exp) {
@@ -317,7 +371,7 @@ SqlVal Lower(const SqlVal& exp) {
 }
 
 SqlVal Length(const SqlVal& exp) {
-	return exp.IsEmpty() ? exp : SqlFunc("length", exp);
+	return exp.IsEmpty() ? exp : SqlFunc(SqlCode(MSSQL, "len")("length"), exp);
 }
 
 SqlVal UpperAscii(const SqlVal& exp) {
@@ -330,7 +384,7 @@ SqlVal Substr(const SqlVal& a, const SqlVal& b) {
 
 SqlVal Substr(const SqlVal& a, const SqlVal& b, const SqlVal& c)
 {
-	return SqlFunc("SUBSTR", a, b, c);
+	return SqlFunc(SqlCode(MSSQL, "substring")("substr"), a, b, c);
 }
 
 SqlVal Instr(const SqlVal& a, const SqlVal& b) {
@@ -352,8 +406,12 @@ SqlVal Wild(const char* s) {
 	return result;
 }
 
-SqlVal SqlDate(const SqlVal& year, const SqlVal& month, const SqlVal& day) {//TODO Dialect!
-	return SqlFunc("to_date", year|"."|month|"."|day, "SYYYY.MM.DD");
+SqlVal SqlDate(const SqlVal& year, const SqlVal& month, const SqlVal& day) {
+	return SqlVal(SqlCode(ORACLE, ~SqlFunc("to_date", year|"."|month|"."|day, "SYYYY.MM.DD")) // Similiar to common, but keep proved version to be sure...
+	                     (MSSQL, ~SqlFunc("datefromparts", year, month, day))
+	                     ("to_date(to_char(" + ~day + ", '00') || to_char(" + ~month +
+	                               ", '00') || to_char(" + ~year + ",'9999'), 'DDMMYYYY')"),
+	SqlS::FN);
 }
 
 SqlVal AddMonths(const SqlVal& date, const SqlVal& months) {//TODO Dialect!
@@ -372,12 +430,22 @@ SqlVal NextDay(const SqlVal& date) {//TODO Dialect!
 	return SqlFunc("next_day", date);
 }
 
+SqlVal SqlCurrentDate() {
+	return SqlVal(SqlCode(SQLITE3, "date('now')")
+	                     ("current_date"), SqlVal::HIGH);
+}
+
+SqlVal SqlCurrentTime() {
+	return SqlVal(SqlCode(SQLITE3, "datetime('now')")
+	                     ("current_timestamp"), SqlVal::HIGH);
+}
+
 SqlVal Cast(const char* type, const SqlId& a) {
 	return SqlFunc(type, a);
 }
 
 SqlVal SqlNvl(const SqlVal& a, const SqlVal& b) {
-	return SqlFunc(SqlCase
+	return SqlFunc(SqlCode
 						(PGSQL, "coalesce")
 						(MY_SQL|SQLITE3, "ifnull")
 						(MSSQL, "isnull")
@@ -401,36 +469,48 @@ SqlVal Coalesce(const SqlVal& exp1, const SqlVal& exp2, const SqlVal& exp3, cons
 	return SqlFunc("coalesce", exp1, exp2, exp3, exp4);
 }
 
-SqlVal Prior(SqlId a) {
-	return SqlVal("prior " + ~a, SqlS::UNARY);
+SqlVal Coalesce(const SqlSet& exps) {
+	return SqlFunc("coalesce", exps);
 }
 
-SqlVal NextVal(SqlId a) {
-	return SqlVal(SqlCase
-	                 (PGSQL, "nextval('" + ~a + "')")
-	                 (~a + ".NEXTVAL")
+SqlVal Prior(const SqlId& a) {
+	return SqlVal("prior " + a.Quoted(), SqlS::UNARY);
+}
+
+SqlVal NextVal(const SqlId& a) {
+	return SqlVal(SqlCode
+	                 (PGSQL, "nextval('" + a.ToString() + "')")
+	                 (MSSQL, "next value for " + a.Quoted())
+	                 (a.Quoted() + ".NEXTVAL")
 	              , SqlS::HIGH);
 }
 
-SqlVal CurrVal(SqlId a) {
-	return SqlVal(SqlCase
-				    (PGSQL, "currval('" + ~a + "')")
-				    (~a + ".CURRVAL")
+SqlVal CurrVal(const SqlId& a) {
+	return SqlVal(SqlCode
+				    (PGSQL, "currval('" + a.ToString() + "')")
+				    (a.Quoted() + ".CURRVAL")
 				  , SqlS::HIGH);
+}
+
+SqlVal SqlTxt(const char *s)
+{
+	SqlVal v;
+	v.SetHigh(s);
+	return v;
 }
 
 SqlVal SqlRowNum()
 {
-	return SqlCol("ROWNUM");
+	return SqlTxt("ROWNUM");
 }
 
 SqlVal SqlArg() {
-	return SqlCol("?");
+	return SqlTxt("?");
 }
 
-SqlVal OuterJoin(SqlCol col)
+SqlVal OuterJoin(const SqlId& col)
 {
-	return SqlCol(~col + "(+)");
+	return SqlId(col.Quoted() + "(+)");
 }
 
 SqlVal SqlBinary(const char *s, int l)
@@ -445,4 +525,4 @@ SqlVal SqlBinary(const String& data)
 	return SqlBinary(~data, data.GetCount());
 }
 
-END_UPP_NAMESPACE
+}

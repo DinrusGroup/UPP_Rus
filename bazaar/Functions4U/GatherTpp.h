@@ -1,12 +1,15 @@
 #ifndef _GatherTpp_h_
 #define _GatherTpp_h_
 
+NAMESPACE_UPP
+
 class GatherTpp {
 public:
-	//GatherTpp();
 	void AddFolder(const char *folder) {rootFolders.Add(folder);};
 	bool Load(String indexFile, Gate2<int, int> progress = false);
 	
+	String Www(const char *topic, int lang, String topicLocation = "topic://uppweb/www/");
+
 	int FindTopic(const String name);
 	Topic &GetTopic(int id);
 	Topic &AddTopic(const String name);
@@ -20,22 +23,29 @@ private:
 	Upp::Array <String> rootFolders;
 	String dir;	
 	VectorMap<String, String> escape;
-	VectorMap<String, String> links;
+public:
 	VectorMap<String, String> labels;
+	VectorMap<String, String> links;
 	VectorMap<String, String> reflink;
 	VectorMap<String, Topic> tt;
-	
-	Htmls header;
+
+private:
 	String keywords;	//
 	String title;		//
 	String indexTopic;
 
 	String TopicFileName(const char *topic);
 	String GatherTopics(const char *topic);
+public:
 	void GatherRefLinks(const char *upp);
+private:
 	void ExportPage(int i, String htmlFolder, String keywords = "");
 	String QtfAsHtml(const char *qtf, Index<String>& css, const VectorMap<String, String>& links,
     	const VectorMap<String, String>& labels, const String& outdir, const String& fn = Null);
 };
+
+String ChangeTopicLanguage(const String &topic, int lang);
+	
+END_UPP_NAMESPACE
 
 #endif

@@ -1,6 +1,6 @@
 #include "CtrlLib.h"
 
-NAMESPACE_UPP
+namespace Upp {
 
 class FetchColorCtrl : public Button
 {
@@ -83,7 +83,7 @@ Image FetchColorCtrl::CursorImage(Point pt, dword keyflags)
 
 const Display& StdColorDisplayNull()
 {
-	static ColorDisplayNull display(t_("(нет цвета)"));
+	static ColorDisplayNull display(t_("(no color)"));
 	return display;
 }
 
@@ -343,7 +343,6 @@ int WheelRampCtrl::LevelToClient(int l) const
 void WheelRampCtrl::Paint(Draw& draw)
 {
 	if(!cache || cache.GetSize() != wheel_rect.GetSize() || cache_level != (ramp ? h16 : v16)) {
-		Size size = max(GetSize(), Size(1, 1));
 		cache = ramp ? PaintRamp(wheel_rect.GetSize()) : PaintWheel(wheel_rect.GetSize());
 		cache_level = (ramp ? h16 : v16);
 	}
@@ -469,7 +468,6 @@ enum { PREC = 64 };
 Image WheelRampCtrl::PaintRamp(Size size)
 {
 	ImageDraw iw(size);
-	Size rcsize = wheel_rect.Size();
 	ImageBuffer ib(PREC, PREC);
 	for(int y = 0; y < PREC; y++) {
 		RGBA *scan = ib[y];
@@ -841,7 +839,7 @@ private:
 	void          OnSizeCustom();
 	void          UpdateColorIndex();
 
-	static Index<PalCtrl *, PtrHash>& GetActive();
+	static Index<PalCtrl *>& GetActive();
 
 public:
 	enum
@@ -906,7 +904,7 @@ PalCtrl::Config& PalCtrl::GlobalConfig()
 	return x;
 }
 
-typedef Index<PalCtrl *, PtrHash> PalCtrlIndex;
+typedef Index<PalCtrl *> PalCtrlIndex;
 
 PalCtrlIndex& PalCtrl::GetActive()
 {
@@ -1103,31 +1101,31 @@ void PalCtrl::RightDown(Point pt, dword keyflags)
 {
 	MenuBar bar;
 	set_index = ClientToIndex(pt);
-	bar.Add(set_index >= 0 && !IsNull(color), t_("Установить цвет"), THISBACK(OnSetColor))
-		.Help(t_("Записать текущий цвет в слот выделенной палитры"));
-	bar.Add(t_("Дефолтная палитра"), THISBACK(OnStandard))
-		.Help(t_("Восстановить дефолтную системную палитру"));
+	bar.Add(set_index >= 0 && !IsNull(color), t_("Set color"), THISBACK(OnSetColor))
+		.Help(t_("Write current color to selected palette slot"));
+	bar.Add(t_("Default palette"), THISBACK(OnStandard))
+		.Help(t_("Restore default system palette"));
 	bar.MenuSeparator();
-	bar.Add(t_("Сохранить как.."), THISBACK(OnSave))
-		.Help(t_("Сохранить информацию о палитре в файл на диске"));
-	bar.Add(t_("Загрузить"), THISBACK(OnLoad))
-		.Help(t_("Загрузить ранее сохранённую палитру"));
+	bar.Add(t_("Save as.."), THISBACK(OnSave))
+		.Help(t_("Store palette information into a disk file"));
+	bar.Add(t_("Load"), THISBACK(OnLoad))
+		.Help(t_("Load previously saved palette"));
 	bar.MenuSeparator();
 	bool is_small = (cellcount.cx == 4 && cellcount.cy == 4);
 	bool is_medium = (cellcount.cx == 8 && cellcount.cy == 8);
 	bool is_large = (cellcount.cx == 16 && cellcount.cy == 16);
-	bar.Add(t_("Маленькая"), THISBACK(OnSizeSmall))
+	bar.Add(t_("Small"), THISBACK(OnSizeSmall))
 		.Check(is_small)
 		.Help(t_("Set up palette size 4 times 4 colors"));
-	bar.Add(t_("Средняя"), THISBACK(OnSizeMedium))
+	bar.Add(t_("Medium"), THISBACK(OnSizeMedium))
 		.Check(is_medium)
 		.Help(t_("Set up palette size 8 times 8 colors"));
-	bar.Add(t_("Большая"), THISBACK(OnSizeLarge))
+	bar.Add(t_("Large"), THISBACK(OnSizeLarge))
 		.Check(is_large)
 		.Help(t_("Set up palette size 16 times 16 colors (maximum size)"));
-	bar.Add(t_("Особая..."), THISBACK(OnSizeCustom))
+	bar.Add(t_("Custom..."), THISBACK(OnSizeCustom))
 		.Check(!is_small && !is_medium && !is_large)
-		.Help(t_("Выбрать особый размер палитры"));
+		.Help(t_("Select custom palette size"));
 	bar.Execute();
 }
 
@@ -1164,32 +1162,32 @@ void PalCtrl::OnStandard()
 
 void PalCtrl::OnSave()
 {
-	recent_file = SelectFileSaveAs("Палитра (*.pal)\n*.pal");
+	recent_file = SelectFileSaveAs("Palette (*.pal)\n*.pal");
 	if(recent_file.GetCount())
 	{
 		StringStream stream;
 		SerializePalette(stream);
 		if(!SaveFile(recent_file, stream))
-			Exclamation(NFormat(t_("Ошибка при записи файла [* \1%s\1]."), recent_file));
+			Exclamation(NFormat(t_("Error writing file [* \1%s\1]."), recent_file));
 	}
 }
 
 void PalCtrl::OnLoad()
 {
-	recent_file = SelectFileOpen("Палитра (*.pal)\n*.pal");
+	recent_file = SelectFileOpen("Palette (*.pal)\n*.pal");
 	if(recent_file.GetCount())
 	{
 		FileIn fi(recent_file);
 		if(!fi.IsOpen())
 		{
-			Exclamation(NFormat(t_("Ошибка при открытии файла [* \1%s\1]."), recent_file));
+			Exclamation(NFormat(t_("Error opening file [* \1%s\1]."), recent_file));
 			return;
 		}
 		SerializePalette(fi);
 		fi.Close();
 		if(fi.IsError())
 		{
-			Exclamation(NFormat(t_("Ошибка при чтении палитры из файла [* \1%s\1]."), recent_file));
+			Exclamation(NFormat(t_("Error reading palette from file [* \1%s\1]."), recent_file));
 			return;
 		}
 		Refresh();
@@ -1220,7 +1218,7 @@ void PalCtrl::OnSizeCustom()
 {
 	WithPalCtrlSizeLayout<TopWindow> dlg;
 //	CtrlLayoutOKCancel(dlg, DlgPalCtrlSizeHelpTitle());
-	CtrlLayoutOKCancel(dlg, t_("Размеры палитры"));
+	CtrlLayoutOKCancel(dlg, t_("Palette dimensions"));
 	dlg.HelpTopic("DlgPalCtrlSize");
 	dlg.rows <<= cellcount.cy;
 	dlg.columns <<= cellcount.cx;
@@ -1315,7 +1313,7 @@ private:
 };
 
 ColorSelectorImpl::ColorSelectorImpl(ColorSelector& parent)
-: paint_color_display(t_("(прозрачный)"))
+: paint_color_display(t_("(transparent)"))
 , parent(parent), wheel(false), ramp(true)
 {
 	Transparent();
@@ -1324,7 +1322,7 @@ ColorSelectorImpl::ColorSelectorImpl(ColorSelector& parent)
 
 //	dialog.palette_tab.Background(SLtGray);
 
-	palette_tab.Add(pal.HSizePos(4, 4).VSizePos(4, 4), t_("Палитра"));
+	palette_tab.Add(pal.HSizePos(4, 4).VSizePos(4, 4), t_("Palette"));
 	pal <<= THISBACK(OnPalCtrl);
 
 	palette_tab.Add(wheel.HSizePos(4, 4).VSizePos(4, 4), t_("Wheel"));
@@ -1553,7 +1551,7 @@ DlgSelectColor::DlgSelectColor()
 {
 	palette.Transparent().NoWantFocus() << selector.SizePos();
 //	CtrlLayoutOKCancel(*this, DlgSelectColorHelpTitle());
-	CtrlLayoutOKCancel(*this, t_("Выбрать цвет"));
+	CtrlLayoutOKCancel(*this, t_("Select color"));
 //RegisterHelpTopicObjectTitle(DlgSelectColor, );
 	HelpTopic("DlgSelectColor");
 	Sizeable().MaximizeBox();
@@ -1610,4 +1608,4 @@ void ColorCtrl::DoAction()
 		SetDataAction(GetConvert().Scan(new_color));
 }
 
-END_UPP_NAMESPACE
+}

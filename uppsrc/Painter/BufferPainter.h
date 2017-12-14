@@ -31,20 +31,24 @@ private:
 	double w2;
 	double qmiter;
 	double fid;
+	double tw;
 
 	Pointf p0, v0, o0, a0, b0;
 	Pointf p1, v1, o1, a1, b1;
 	Pointf p2;
 	int    linecap;
 	int    linejoin;
+	Rectf  preclip;
+	int    lines;
 	
 	void   Finish();
 	void   Round(const Pointf& p, const Pointf& v1, const Pointf& v2, double r);
 	void   Cap(const Pointf& p0, const Pointf& v0, const Pointf& o0,
 	           const Pointf& a0, const Pointf& b0);
+	bool   PreClipped(Pointf p2, Pointf p3);
 
 public:	
-	void Init(double width, double miterlimit, double tolerance, int linecap, int linejoin);
+	void Init(double width, double miterlimit, double tolerance, int linecap, int linejoin, const Rect& preclip);
 };
 
 class Dasher : public LinearPathFilter {
@@ -93,7 +97,7 @@ inline void AlphaBlend(RGBA& t, const RGBA& c)
 	t.r = c.r + (alpha * t.r >> 8);
 	t.g = c.g + (alpha * t.g >> 8);
 	t.b = c.b + (alpha * t.b >> 8);
-	t.a = c.a + (alpha * t.a >> 8);
+	t.a = c.a + ((256 - c.a) * t.a >> 8);
 }
 
 inline void AlphaBlendCover8(RGBA& t, const RGBA& c, int cover)
@@ -150,7 +154,8 @@ public:
 
 	void LineRaw(int x1, int y1, int x2, int y2);
 	
-	void SetClip(const Rectf& rect);
+	void  SetClip(const Rectf& rect);
+	Rectf GetClip() const                     { return cliprect; }
 
 	int  MinY() const                         { return min_y; }
 	int  MaxY() const                         { return max_y; }
@@ -201,6 +206,10 @@ public:
 	Point  Get();
 };
 
+struct PainterTarget : LinearPathConsumer {
+	virtual void Fill(double width, SpanSource *ss, const RGBA& color);
+};
+
 class BufferPainter : public Painter {
 protected:
 	virtual void   ClearOp(const RGBA& color);
@@ -224,9 +233,13 @@ protected:
 	virtual void   FillOp(const Pointf& p1, const RGBA& color1,
 	                      const Pointf& p2, const RGBA& color2,
 	                      int style);
-	virtual void   FillOp(const Pointf& f, const RGBA& color1, 
+	virtual void   FillOp(const RGBA& color1, const RGBA& color2, const Xform2D& transsrc,
+	                      int style);
+	virtual void   FillOp(const Pointf& f, const RGBA& color1,
 	                      const Pointf& c, double r, const RGBA& color2,
 	                      int style);
+	virtual void   FillOp(const Pointf& f, const RGBA& color1, const RGBA& color2,
+	                      const Xform2D& transsrc, int style);
 
 	virtual void   StrokeOp(double width, const RGBA& rgba);
 	virtual void   StrokeOp(double width, const Image& image, const Xform2D& transsrc,
@@ -234,9 +247,15 @@ protected:
 	virtual void   StrokeOp(double width, const Pointf& p1, const RGBA& color1,
 	                        const Pointf& p2, const RGBA& color2,
 	                        int style);
-	virtual void   StrokeOp(double width, const Pointf& f, const RGBA& color1, 
+	virtual void   StrokeOp(double width, const RGBA& color1, const RGBA& color2,
+	                        const Xform2D& transsrc,
+	                        int style);
+	virtual void   StrokeOp(double width, const Pointf& f, const RGBA& color1,
 	                        const Pointf& c, double r, const RGBA& color2,
 	                        int style);
+	virtual void   StrokeOp(double width, const Pointf& f,
+	                        const RGBA& color1, const RGBA& color2,
+	                        const Xform2D& transsrc, int style);
 
 	virtual void   ClipOp();
 
@@ -265,10 +284,10 @@ private:
 	};
 	struct LinearData {
 		Pointf p;
-	};	
+	};
 	struct QuadraticData : LinearData {
 		Pointf p1;
-	};	
+	};
 	struct CubicData : QuadraticData {
 		Pointf p2;
 	};
@@ -277,7 +296,7 @@ private:
 		int  _filler;
 		Font fnt;
 	};
-	struct Path {	
+	struct Path {
 		Vector<byte> type;
 		Vector<byte> data;
 	};
@@ -304,10 +323,14 @@ private:
 		bool                            onpath;
 	};
 	
+	PainterTarget             *alt = NULL;
+	double                     alt_tolerance = Null;
+	ImageBuffer                dummy;
 	ImageBuffer&               ib;
 	int                        mode;
 	Buffer<int16>              subpixel;
 	int                        render_cx;
+	bool                       dopreclip;
 
 	Attr                       attr;
 	Attr                       pathattr;
@@ -323,8 +346,8 @@ private:
 
 	Path         path;
 	Pointf       current, ccontrol, qcontrol, move;
-	Rectf        pathrect;
 	bool         ischar;
+	Pointf       path_min, path_max;
 	
 	Rasterizer   rasterizer;
 	Buffer<RGBA> span;
@@ -347,7 +370,10 @@ private:
 	void             RenderImage(double width, const Image& image, const Xform2D& transsrc,
 	                             dword flags);
 	void             RenderRadial(double width, const Pointf& f, const RGBA& color1,
-	                            const Pointf& c, double r, const RGBA& color2, int style);
+	                              const Pointf& c, double r, const RGBA& color2,
+	                              const Xform2D& m, int style);
+	void             RenderRadial(double width, const Pointf& f, const RGBA& color1, const RGBA& color2,
+	                              const Xform2D& transsrc, int style);
 	void             MakeGradient(RGBA color1, RGBA color2, int cx);
 	void             Gradient(const RGBA& color1, const RGBA& color2, const Pointf& p1, const Pointf& p2);
 	void             ColorStop0(Attr& a, double pos, const RGBA& color);
@@ -358,6 +384,11 @@ private:
 public:
 	ImageBuffer&       GetBuffer()                             { return ib; }
 	const ImageBuffer& GetBuffer() const                       { return ib; }
+	
+	BufferPainter&     PreClip(bool b = true)                  { dopreclip = b; return *this; }
 
 	BufferPainter(ImageBuffer& ib, int mode = MODE_ANTIALIASED);
+	BufferPainter(PainterTarget& t, double tolerance = Null);
 };
+
+#include "Interpolator.hpp"

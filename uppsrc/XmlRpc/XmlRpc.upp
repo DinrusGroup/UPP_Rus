@@ -1,12 +1,11 @@
 description "XML-RPC support package (both server and client stuff)\377";
 
 uses
-	Web;
+	Web,
+	Core/Rpc;
 
 file
 	XmlRpc.h,
-	Value.cpp,
-	Xml.cpp,
 	Client.cpp,
 	Server.cpp,
 	xrs readonly separator,

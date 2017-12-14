@@ -1,57 +1,43 @@
 #include "ide.h"
 
-void Ide::SetupEditor(int f, String hl, String fn)
+void Ide::SetupEditor(int f, String hl, String path)
 {
-	String ext = ToLower(GetFileExt(fn));
+	if(IsNull(hl)) {
+		hl = EditorSyntax::GetSyntaxForFilename(path);
+		if(IsNull(hl))
+			hl = EditorSyntax::GetSyntaxForFilename(ToLower(path));
+		if(IsNull(hl) && IsNull(GetFileExt(path))) {
+			FileIn in(path);
+			String h = in.Get(4096);
+			try {
+				CParser p(h);
+				while(!p.IsEof()) {
+					if(p.Char('#')) {
+						if(p.Id("define") || p.Id("ipathdef") || p.Id("ifdef") || p.Id("include") || p.Id("pragma")) {
+							hl = "cpp";
+							break;
+						}
+					}
+					p.SkipTerm();
+				}
+			}
+			catch(CParser::Error) {}
+		}
+	}
 	switch(f) {
 	case 1:  editor.SetFont(font1); break;
 	case 2:  editor.SetFont(font2); break;
 	case 3:  editor.SetFont(consolefont); break;
 	default: editor.SetFont(editorsplit.GetZoom() < 0 && editorsplit.IsHorz() ? veditorfont :
-	                        ext == ".t" ? tfont : editorfont); break;
+	                        hl == "t" ? tfont : editorfont); break;
 	}
-	if(IsNull(hl)) {
-		if(ext == ".c" || ext == ".cpp" || ext == ".cc" || ext == ".cxx" ||
-		   ext == ".h" || ext == ".hpp" || ext == ".hh" || ext == ".hxx" ||
-		   ext == ".m" || ext == ".d"   || ext == ".di" || ext == ".mm"  ||
-		   ext == ".icpp")
-			editor.Highlight(CodeEditor::HIGHLIGHT_CPP);
-		else
-		if(ext == ".usc")
-			editor.Highlight(CodeEditor::HIGHLIGHT_USC);
-		else
-		if(ext == ".java")
-			editor.Highlight(CodeEditor::HIGHLIGHT_JAVA);
-		else
-		if(ext == ".t" || ext == ".jt")
-			editor.Highlight(CodeEditor::HIGHLIGHT_T);
-		else
-		if(ext == ".lay")
-			editor.Highlight(CodeEditor::HIGHLIGHT_LAY);
-		else
-		if(ext == ".sch")
-			editor.Highlight(CodeEditor::HIGHLIGHT_SCH);
-		else
-		if(ext == ".sql")
-			editor.Highlight(CodeEditor::HIGHLIGHT_SQL);
-		//else
-	//	if(ext == ".d" || ext == ".di")
-		//	editor.Highlight(CodeEditor::HIGHLIGHT_DINRUS);
-		else
-			editor.Highlight(CodeEditor::HIGHLIGHT_NONE);
-	}
-	else {
-		if(hl == "cpp")
-			editor.Highlight(CodeEditor::HIGHLIGHT_CPP);
-		else
-		if(hl == "esc")
-			editor.Highlight(CodeEditor::HIGHLIGHT_USC);
-		else
-		if(hl == "java")
-			editor.Highlight(CodeEditor::HIGHLIGHT_JAVA);
-		else
-			editor.Highlight(CodeEditor::HIGHLIGHT_NONE);
-	}
+	editor.Highlight(hl);
+
+	editor.WarnWhiteSpace(warnwhitespace &&
+	                      findarg(hl, "cpp", "java", "js", "cs", "json", "css", "lay", "sch", "t", "usc") >= 0);
+
+	editor.WordwrapComments(wordwrap_comments);
+	editor.WordWrap(wordwrap);
 }
 
 void Ide::SetupEditor()
@@ -59,16 +45,20 @@ void Ide::SetupEditor()
 	if(!IsActiveFile())
 		return;
 	Package::File& f = ActiveFile();
-	SetupEditor(f.font, f.highlight, GetFileExt(GetActiveFileName()));
+	String p = GetActiveFileName();
+	if(p != HELPNAME)
+		p = GetActiveFilePath();
+	SetupEditor(f.font, f.highlight, p);
+	editor.SyncNavigatorPlacement();
 }
 
 void Ide::FileCursor()
 {
 	WorkspaceWork::FileCursor();
 	if(IsActiveFile() && !filelist[filelist.GetCursor()].isdir) {
-		const Package::File& f = ActiveFile();
+		Package::File& f = ActiveFile();
 		editor.SetEditable(!f.readonly);
-		editor.TabSize(f.tabsize > 0 ? f.tabsize : editortabsize);
+		editor.TabSize(f.tabsize > 0 ? f.tabsize : actual.tabsize > 0 ? actual.tabsize : editortabsize);
 		SetupEditor();
 		String headername;
 		if(insert_include)
@@ -85,7 +75,8 @@ void Ide::FileCursor()
 		if(p != HELPNAME)
 			p = GetActiveFilePath();
 		EditFile0(p, f.charset ? f.charset : actual.charset ? actual.charset : default_charset,
-		          false, headername);
+		          Nvl(f.spellcheck_comments, actual.spellcheck_comments, spellcheck_comments),
+		          headername);
 	}
 }
 
@@ -125,17 +116,19 @@ void Ide::FileProperties()
 {
 	if(!IsActiveFile()) return;
 	WithFileFormatLayout<TopWindow> d;
-	CtrlLayoutOKCancel(d, "Свойства файла");
+	CtrlLayoutOKCancel(d, "File properties");
 	Package::File& f = ActiveFile();
 	DlCharsetD(d.charset);
-	d.font.Add(0, "Нормальный");
-	d.font.Add(1, "Маленький");
-	d.font.Add(2, "Особый");
-	d.font.Add(3, "Консоль");//ASResource::AS_CLOSE_COMMENT
-	d.highlight.Add(Null, "По Умолчанию");
-	d.highlight.Add("cpp", "C++");
-	d.highlight.Add("java", "Java");
-	d.highlight.Add("esc", "Esc");
+	d.font.Add(0, "Normal");
+	d.font.Add(1, "Small");
+	d.font.Add(2, "Special");
+	d.font.Add(3, "Console");
+	d.highlight.Add(Null, "Default");
+	for(int i = 0; i < EditorSyntax::GetSyntaxCount(); i++) {
+		String desc = EditorSyntax::GetSyntaxDescription(i);
+		if(desc.GetCount())
+			d.highlight.Add(EditorSyntax::GetSyntax(i), desc);
+	}
 	d.tabsize <<= f.tabsize > 0 ? f.tabsize : Null;
 	d.tabsize <<= d.Breaker(111);
 	d.tabsize.MinMax(1, 100);
@@ -144,6 +137,13 @@ void Ide::FileProperties()
 	d.font <<= d.Breaker(111);
 	d.highlight <<= f.highlight;
 	d.highlight <<= d.Breaker(111);
+	d.line_endings.Add(CRLF, "CRLF");
+	d.line_endings.Add(LF, "LF");
+	d.line_endings <<= findarg(Nvl(editfile_line_endings, line_endings), LF, DETECT_LF) >= 0 ? LF : CRLF;
+	d.line_endings.Enable(findarg(line_endings, DETECT_CRLF, DETECT_LF) >= 0);
+	d.spellcheck_comments.Add(Null, "Default");
+	DlSpellerLangs(d.spellcheck_comments);
+	d.spellcheck_comments <<= f.spellcheck_comments;
 	for(;;) {
 		switch(d.Run()) {
 		case IDCANCEL:
@@ -157,10 +157,16 @@ void Ide::FileProperties()
 			f.tabsize = Nvl((int)~d.tabsize);
 			f.font = Nvl((int)~d.font);
 			f.highlight = ~d.highlight;
+			f.spellcheck_comments = ~d.spellcheck_comments;
 			SavePackage();
 			PackageCursor();
 			filelist.SetCursor(c);
 			editor.ClearUndo();
+			if(editfile_line_endings != ~d.line_endings) {
+				editfile_line_endings = ~d.line_endings;
+				SaveFile(true);
+			}
+			MakeTitle();
 			return;
 		}
 		if(!IsNull(editfile)) {
@@ -177,7 +183,7 @@ void Ide::ChangeCharset()
 	Package::File& f = ActiveFile();
 	SaveFile();
 	WithCharsetLayout<TopWindow> dlg;
-	CtrlLayoutOKCancel(dlg, "Сохранить файл в кодировке");
+	CtrlLayoutOKCancel(dlg, "Save file with enconding");
 	DlCharsetD(dlg.charset);
 	dlg.charset <<= editor.GetCharset();
 	dlg.ActiveFocus(dlg.charset);
@@ -188,8 +194,8 @@ void Ide::ChangeCharset()
 		cs = (byte)(int)~dlg.charset;
 		int q = editor.GetInvalidCharPos(cs);
 		if(q >= 0) {
-			if(PromptYesNo("В файле содержатся символы, которые нельзя сохранить, используя установленную кодировку.&"
-			               "Всё равно сохранить? (Если вы выберите Да, то они будут заменены вопросительными знаками.)"))
+			if(PromptYesNo("File contains characters that cannot be saved using selected encoding.&"
+			               "Save anyway? (If you choose Yes, they will be replaced with question marks.)"))
 								break;
 			editor.SetCursor(q);
 			return;
@@ -234,12 +240,20 @@ bool Ide::IsProjectFile(const String& f) const
 	return false;
 }
 
-void Ide::ScanFile()
+void Ide::ScanFile(bool check_includes)
 {
 	if(IsCppBaseFile()) {
+		if(check_includes) {
+			String imd5 = IncludesMD5();
+			if(editfile_includes != imd5) {
+				editfile_includes = imd5;
+				SaveFile(true);
+				return;
+			}
+		}
 		String s = ~editor;
 		StringStream ss(s);
-		CodeBaseScan(ss, editfile);
+		CodeBaseScanFile(ss, editfile);
 	}
 }
 
@@ -268,6 +282,31 @@ String ConvertTLine(const String& line, int flag)
 
 void Ide::SaveFile(bool always)
 {
+	issaving++;
+	SaveFile0(always);
+	issaving--;
+}
+
+void Ide::SaveEditorFile(Stream& out)
+{
+	if(GetFileExt(editfile) == ".t") {
+		for(int i = 0; i < editor.GetLineCount(); i++) {
+			if(i) out.PutCrLf();
+			out.Put(ConvertTLine(editor.GetUtf8Line(i), ASCSTRING_OCTALHI));
+		}
+	}
+	else {
+		int le = line_endings;
+		if(le == DETECT_CRLF)
+			le = Nvl(editfile_line_endings, CRLF);
+		if(le == DETECT_LF)
+			le = Nvl(editfile_line_endings, LF);
+		editor.Save(out, editor.GetCharset(), le == LF ? TextCtrl::LE_LF : TextCtrl::LE_CRLF);
+	}
+}
+
+void Ide::SaveFile0(bool always)
+{
 	if(designer) {
 		String fn = designer->GetFileName();
 		Time tm = FileGetTime(fn);
@@ -275,7 +314,7 @@ void Ide::SaveFile(bool always)
 		if(tm != FileGetTime(fn))
 			TouchFile(fn);
 		if(IsProjectFile(fn) && ToUpper(GetFileExt(fn)) == ".LAY")
-			CodeBaseScanLay(fn);
+			CodeBaseScanFile(fn, auto_check);
 		return;
 	}
 
@@ -290,78 +329,36 @@ void Ide::SaveFile(bool always)
 	fd.filetime = edittime;
 	if(!editor.IsDirty() && !always)
 		return;
-#ifdef PLATFORM_POSIX
-	struct stat statbuf;
-	int statcode = stat(editfile, &statbuf);
-#endif
 	TouchFile(editfile);
-	String tmpfile = editfile + ".$tmp", outfile = editfile;
-	{
-		FileOut out(tmpfile);
-		if(!out.IsOpen()) {
-			Exclamation(NFormat("Ошибка при создании временного файла [* \1%s\1].", tmpfile));
-			return;
-		}
-		if(designer)
-			designer->Save();
-		else
-			if(GetFileExt(editfile) == ".t") {
-				for(int i = 0; i < editor.GetLineCount(); i++) {
-					if(i) out.PutCrLf();
-					out.Put(ConvertTLine(editor.GetUtf8Line(i), ASCSTRING_OCTALHI));
-				}
-			}
-			else
-				editor.Save(out, editor.GetCharset(), force_crlf);		
-		out.Close();
-		if(out.IsError()) {
-			Exclamation(NFormat("Ошибка при записи временного файла [* \1%s\1].", tmpfile));
-			return;
-		}
-	}
-
-	Progress progress;
-	int time = msecs();
 	for(;;) {
-		progress.SetTotal(10000);
-		progress.SetText(NFormat("Сохраняется '%s'", GetFileName(outfile)));
-		if(editfile != outfile || !FileExists(tmpfile))
-			return;
-		FileDelete(outfile);
-		if(FileMove(tmpfile, outfile))
+		FileOut out(editfile);
+		SaveEditorFile(out);
+		if(!out.IsError())
 			break;
-		console.Flush();
-		Sleep(200);
-		if(progress.SetPosCanceled(msecs(time) % progress.GetTotal()))
-		{
-			int art = Prompt(Ctrl::GetAppName(), CtrlImg::exclamation(),
-				"Не удаётся сохранить текущий файл.&"
-				"Повторить сохранение, игнорировать либо сохранить файл в другом месте?",
-				"Сохранить как...", "Повторить", "Игнорировать");
-			if(art < 0)
-				break;
-			if(art && AnySourceFs().ExecuteSaveAs()) {
-				outfile = editfile = AnySourceFs();
-				MakeTitle();
-				PosSync();
-				break;
-			}
-			progress.Reset();
+		int art = Prompt(Ctrl::GetAppName(), CtrlImg::exclamation(),
+			"Unable to save current file.&"
+			"Retry save, ignore it or save file to another location?",
+			"Save as...", "Retry", "Ignore");
+		if(art < 0)
+			break;
+		if(IsDeactivationSave())
+			return;
+		if(art && AnySourceFs().ExecuteSaveAs()) {
+			editfile = AnySourceFs();
+			MakeTitle();
+			PosSync();
+			break;
 		}
 	}
 
-#ifdef PLATFORM_POSIX
-	if(statcode == 0)
-		chmod(editfile, statbuf.st_mode);
-#endif
+	FindFile ff(editfile);
+	fd.filetime = edittime = ff.GetLastWriteTime();
 
-	if(!designer) {
-		FindFile ff(editfile);
-		fd.filetime = edittime = ff.GetLastWriteTime();
+	if(editor.IsDirty()) {
+		text_updated.Kill();
+		if(IsCppBaseFile())
+			CodeBaseScanFile(editfile, auto_check);
 	}
-
-	if(editor.IsDirty())
-		ScanFile();
 
 	editor.ClearDirty();
 
@@ -385,10 +382,12 @@ void Ide::FlushFile() {
 	if(!editfile.IsEmpty())
 		Filedata(editfile).undodata = editor.PickUndoData();
 	editfile.Clear();
+	editfile_repo = NOT_REPO_DIR;
+	editfile_isfolder = false;
+	repo_dirs = RepoDirs(true).GetCount(); // Perhaps not the best place, but should be ok
 	editor.Clear();
 	editor.Disable();
 	editorsplit.Ctrl::Remove();
-	editor.SetFrame(NullFrame());
 	designer.Clear();
 	SetBar();
 }
@@ -424,7 +423,11 @@ bool Ide::FileRemove()
 	return true;
 }
 
-void Ide::EditFile0(const String& path, byte charset, bool astext, const String& headername) {
+void Ide::EditFile0(const String& path, byte charset, int spellcheck_comments, const String& headername)
+{
+	text_updated.Kill();
+
+	AKEditor();
 	editor.CheckEdited(false);
 	editor.CloseAssist();
 	if(path.IsEmpty()) return;
@@ -432,23 +435,41 @@ void Ide::EditFile0(const String& path, byte charset, bool astext, const String&
 
 	editfile = path;
 	editor.SetCharset(charset);
+	editor.SpellcheckComments(spellcheck_comments);
 	AddLru();
+
+	editfile_isfolder = IsFolder(editfile) || IsHelpName(editfile);
+	repo_dirs = RepoDirs(true).GetCount(); // Perhaps not the best place, but should be ok
 	
-	if(!astext && !(debugger && (PathIsEqual(path, posfile[0]) || PathIsEqual(path, posfile[0])))
-	   && editastext.Find(path) < 0 && !IsNestReadOnly(editfile)) {
+	bool candesigner = !(debugger && !editfile_isfolder && (PathIsEqual(path, posfile[0]) || PathIsEqual(path, posfile[0])))
+	   && editastext.Find(path) < 0 && editashex.Find(path) < 0 && !IsNestReadOnly(editfile);
+	
+	if(candesigner) {
 		for(int i = 0; i < GetIdeModuleCount() && !designer; i++)
 			designer = GetIdeModule(i).CreateDesigner(this, path, charset);
-		if(designer) {
-			editpane.Add(designer->DesignerCtrl().SizePos());
-			designer->SetFocus();
-			if(filetabs)
-				tabs.SetAddFile(editfile);
-			MakeTitle();
-			SetBar();
-			return;
-		}
 	}
 
+	if(!designer && editastext.Find(path) < 0 &&
+	   (findarg(GetFileExt(path), ".log") < 0 &&
+	    findarg(charset, CHARSET_UTF8_BOM, CHARSET_UTF16_LE, CHARSET_UTF16_BE,
+	            CHARSET_UTF16_LE_BOM, CHARSET_UTF16_BE_BOM) < 0 &&
+	    FileIsBinary(path) || editashex.Find(path) >= 0))
+		designer.Create<FileHexView>().Open(path);
+	
+	ManageDisplayVisibility();
+	
+	if(designer) {
+		editpane.Add(designer->DesignerCtrl().SizePos());
+		designer->DesignerCtrl().SetFocus();
+		designer->RestoreEditPos();
+		if(filetabs)
+			tabs.SetAddFile(editfile);
+		MakeTitle();
+		SetBar();
+		editor.SyncNavigatorShow();
+		return;
+	}
+	
 	tabs.SetAddFile(editfile);
 	tabs.SetSplitColor(editfile2, Yellow);
 	editor.Enable();
@@ -464,7 +485,7 @@ void Ide::EditFile0(const String& path, byte charset, bool astext, const String&
 		if(edittime != fd.filetime || IsNull(fd.filetime))
 			fd.undodata.Clear();
 		FileIn in(editfile);
-		if(in)
+		if(in) {
 			if(tfile && editastext.Find(editfile) < 0) {
 				String f;
 				String ln;
@@ -485,17 +506,34 @@ void Ide::EditFile0(const String& path, byte charset, bool astext, const String&
 				editor.Set(f);
 				editor.SetCharset(CHARSET_UTF8);
 			}
-			else
-				editor.Load(in, charset);
+			else {
+				String s = in.Get(3);
+				if(s.GetCount() >= 2) {
+					if((byte)s[0] == 0xff && (byte)s[1] == 0xfe)
+						charset = CHARSET_UTF16_LE_BOM;
+					if((byte)s[0] == 0xfe && (byte)s[1] == 0xff)
+						charset = CHARSET_UTF16_BE_BOM;
+				}
+				if(s.GetCount() >= 3 && (byte)s[0] == 0xef && (byte)s[1] == 0xbb && (byte)s[2] == 0xbf)
+					charset = CHARSET_UTF8_BOM;
+				in.Seek(0);
+				int le = editor.Load(in, charset);
+				editfile_line_endings = le == TextCtrl::LE_CRLF ? CRLF : le == TextCtrl::LE_LF ? LF : (int)Null;
+			}
+		}
+		else
+			Exclamation("Failed to read the file.");
 		editor.SetEditPos(fd.editpos);
 		if(!IsNull(fd.columnline) && fd.columnline.y >= 0 && fd.columnline.y < editor.GetLineCount())
 			editor.SetCursor(editor.GetColumnLinePos(fd.columnline));
-		editor.SetPickUndoData(fd.undodata);
+		editor.SetPickUndoData(pick(fd.undodata));
 		editor.SetLineInfo(fd.lineinfo);
-		editor.SetLineInfoRem(fd.lineinforem);
-		if(ff.IsReadOnly() || IsNestReadOnly(editfile))
+		editor.SetLineInfoRem(pick(fd.lineinforem));
+		if(ff.IsReadOnly() || IsNestReadOnly(editfile) || editor.IsTruncated()) {
 			editor.SetReadOnly();
-		fd.undodata.Clear();
+			editor.NoShowReadOnly();
+		}
+		fd.ClearP();
 		PosSync();
 	}
 	else {
@@ -520,37 +558,105 @@ void Ide::EditFile0(const String& path, byte charset, bool astext, const String&
 	editor.SetFocus();
 	MakeTitle();
 	SetBar();
+	editor.SyncNavigatorShow();
 	editor.assist_active = IsProjectFile(editfile) && IsCppBaseFile();
 	editor.CheckEdited(true);
 	editor.Annotate(editfile);
 	editor.SyncNavigator();
+	editfile_repo = GetRepoKind(editfile);
+	editfile_includes = IncludesMD5();
+}
+
+String Ide::IncludesMD5()
+{ // keep track of includes for Assist++, so that we know when to save file and sync base
+	int n = min(editor.GetLineCount(), 1000); // ignore big files
+	Md5Stream md5;
+	for(int i = 0; i < n; i++) {
+		String l = editor.GetUtf8Line(i);
+		try {
+			CParser p(l);
+			if(p.Char('#') && p.Id("include"))
+				md5.Put(l);
+		}
+		catch(CParser::Error) {}
+	}
+	return md5.FinishString();
+}
+
+void Ide::EditFileAssistSync()
+{
+	ScanFile(false);
+	editor.Annotate(editfile);
+	editor.SyncNavigator();
+}
+
+void Ide::TriggerAssistSync()
+{
+	if(auto_rescan && editor.GetLength() < 500000) // Sanity
+		text_updated.KillSet(1000, THISBACK(EditFileAssistSync));
+}
+
+void Ide::EditAsHex()
+{
+	String path = editfile;
+	if(editashex.Find(path) >= 0)
+		return;
+	editastext.RemoveKey(editfile);
+	editashex.FindPut(editfile);
+	byte cs = editor.GetCharset();
+	int sc = editor.GetSpellcheckComments();
+	FlushFile();
+	EditFile0(path, cs, sc);
+}
+
+bool Ide::IsDesignerFile(const String& path)
+{
+	for(int i = 0; i < GetIdeModuleCount(); i++)
+		if(GetIdeModule(i).AcceptsFile(path))
+			return true;
+	return false;
+}
+
+void Ide::DoEditAsText(const String& path)
+{
+	editastext.FindAdd(path);
+	editashex.RemoveKey(editfile);
 }
 
 void Ide::EditAsText()
 {
 	String path = editfile;
-	editastext.FindPut(editfile);
+	if(editastext.Find(path) >= 0)
+		return;
+	if(!FileExists(path))
+		return;
+	DoEditAsText(path);
 	byte cs = editor.GetCharset();
+	int sc = editor.GetSpellcheckComments();
 	FlushFile();
-	EditFile0(path, cs);
+	EditFile0(path, cs, sc);
 }
 
 void Ide::EditUsingDesigner()
 {
 	String path = editfile;
+	if (editastext.Find(editfile) < 0 && editashex.Find(editfile) < 0)
+		return;
+	editashex.RemoveKey(editfile);
 	editastext.RemoveKey(editfile);
 	byte cs = editor.GetCharset();
+	int sc = editor.GetSpellcheckComments();
 	FlushFile();
-	EditFile0(path, cs);
+	EditFile0(path, cs, sc);
 }
 
 void Ide::AddEditFile(const String& path)
 {
-	actual.file.Add(path);
+	actual.file.AddPick(Package::File(path));
 	if(IsAux())
-		SaveLoadPackageNS();
+		SaveLoadPackageNS(false);
 	else
-		SaveLoadPackage();
+		SaveLoadPackage(false);
 	ShowFile(package.GetCount() - 1);
 	filelist.SetCursor(filelist.GetCount() - 1);
 }
@@ -617,17 +723,78 @@ void Ide::CheckFileUpdate()
 	if(tm == edittime) return;
 	edittime = tm;
 	if(editor.IsDirty() && !Prompt(Ctrl::GetAppName(), CtrlImg::exclamation(),
-		"Текущий файл изменён вне IDE, но также редактировался и в ней.&"
-		"Перезагрузить его или сохранить сделанные в IDE изменения ?",
-		"Перезагрузить", "Сохранить")) return;
+		"Current file was changed outside the IDE, but was also edited inside it.&"
+		"Would you like to reload the file or to keep changes made in the IDE ?",
+		"Reload", "Keep")) return;
 
-	if(IsCppBaseFile()) {
-		FileIn in(editfile);
-		CodeBaseScan(in, editfile);
-	}
+	if(IsCppBaseFile())
+		CodeBaseScanFile(editfile, auto_check);
 	ReloadFile();
 }
 
+static void GetLineIndex(String file, HashBase& hash, Vector<String>& lines)
+{
+	const char *p = file;
+	while(*p)
+	{
+		while(*p && *p != '\n' && (byte)*p <= ' ')
+			p++;
+		const char *b = p;
+		while(*p && *p++ != '\n')
+			;
+		const char *e = p;
+		while(e > b && (byte)e[-1] <= ' ')
+			e--;
+		String s(b, e);
+		hash.Add(GetHashValue(s));
+		lines.Add(s);
+	}
+}
+
+int LocateLine(String old_file, int old_line, String new_file)
+{
+	HashBase old_hash, new_hash;
+	Vector<String> old_lines, new_lines;
+	GetLineIndex(old_file, old_hash, old_lines);
+	GetLineIndex(new_file, new_hash, new_lines);
+	if(old_line <= 0)
+		return 0;
+	if(old_line >= old_lines.GetCount())
+		return new_lines.GetCount();
+	String line = old_lines[old_line];
+	//int hash = old_hash[old_line]; Mirek: unused
+	//int fore_count = old_lines.GetCount() - old_line - 1;
+	int best_match = 0, best_value = 0;
+	for(int r = 0; r < 10 && !best_value; r++)
+	{
+		int src = (r & 1 ? old_line + (r >> 1) + 1 : old_line - (r >> 1));
+		if(src < 0 || src >= old_lines.GetCount())
+			continue;
+		dword hash = old_hash[src];
+		for(int i = new_hash.Find(hash); i >= 0; i = new_hash.FindNext(i))
+			if(new_lines[i] == old_lines[src])
+			{
+				int max_back = min(i, src);
+				int max_fore = min(new_lines.GetCount() - i, old_lines.GetCount() - src) - 1;
+				if(max_back + max_fore <= best_value)
+					continue;
+				int back = 1;
+				while(back <= max_back && new_hash[i - back] == old_hash[src - back]
+					&& new_lines[i - back] == old_lines[src - back])
+					back++;
+				int fore = 1;
+				while(fore < max_fore && new_hash[i + fore] == old_hash[src + fore]
+					&& new_lines[i + fore] == old_lines[src + fore])
+					fore++;
+				if(back + fore > best_value)
+				{
+					best_value = back + fore;
+					best_match = minmax(i, 0, new_lines.GetCount());
+				}
+			}
+	}
+	return best_match;
+}
 
 void Ide::ReloadFile()
 {
@@ -638,7 +805,7 @@ void Ide::ReloadFile()
 	int ln = editor.GetCursorLine();
 	editfile.Clear();
 	int sc = filelist.GetSbPos();
-	EditFile0(fn, editor.GetCharset());
+	EditFile0(fn, editor.GetCharset(), editor.GetSpellcheckComments());
 	filelist.SetSbPos(sc);
 	int l = LocateLine(data, ln, ~editor);
 	editor.SetCursor(editor.GetPos(l));
@@ -646,10 +813,17 @@ void Ide::ReloadFile()
 
 void Ide::EditAnyFile() {
 	FileSel& fs = AnySourceFs();
+#if 0
 	fs.Multi(false);
 	if(!fs.ExecuteOpen()) return;
 	EditFile(fs);
 	FileSelected();
+#endif
+	if(fs.ExecuteOpen())
+		for(int i = 0; i < fs.GetCount(); i++) {
+			EditFile(fs[i]);
+			FileSelected();
+		}
 }
 
 void Ide::DragAndDrop(Point, PasteClip& d)
@@ -683,8 +857,8 @@ static String sExFiles(const char *fn, const char **ext, int cnt)
 
 String Ide::GetOpposite()
 {
-	static const char *cpp[] = { ".c", ".cpp", ".cc", ".cxx",".d" };
-	static const char *hdr[] = { ".h", ".hpp", ".hh", ".hxx",".di" };
+	static const char *cpp[] = { ".c", ".cpp", ".cc", ".cxx" };
+	static const char *hdr[] = { ".h", ".hpp", ".hh", ".hxx" };
 	if(IsNull(editfile) || designer)
 		return Null;
 	String ext = GetFileExt(editfile);
@@ -720,6 +894,8 @@ void Ide::PassEditor()
 	editor2.CheckEdited();
 	editor.SetFocus();
 	editor.ScrollIntoCursor();
+	editor2.Annotate(editfile2);
+	editor2.SpellcheckComments(editor.GetSpellcheckComments());
 }
 
 void Ide::ClearEditedFile()
@@ -735,7 +911,7 @@ void Ide::ClearEditedAll()
 		LineInfoRem lir = editor.GetLineInfoRem();
 		FileData& fd = Filedata(filedata.GetKey(i));
 		editor.SetLineInfo(fd.lineinfo);
-		editor.SetLineInfoRem(fd.lineinforem);
+		editor.SetLineInfoRem(pick(fd.lineinforem));
 		ClearEditedFile();
 		fd.lineinfo = editor.GetLineInfo();
 		fd.lineinforem = editor.GetLineInfoRem();
@@ -747,7 +923,7 @@ void Ide::SplitEditor(bool horz)
 {
 	if(editorsplit.GetZoom() < 0)
 		CloseSplit();
-	
+
 	if(horz)
 		editorsplit.Horz(editor2, editor);
 	else
@@ -797,26 +973,26 @@ void Ide::KeySplit(bool horz)
 
 void Ide::SyncEditorSplit()
 {
-	editor.topsbbutton.ScrollStyle().SetMonoImage(IdeImg::split()).Tip("Разделить (Ctrl+[-])");
+	editor.topsbbutton.ScrollStyle().SetMonoImage(IdeImg::split()).Tip("Split (Ctrl+[-])");
 	editor.topsbbutton <<= THISBACK1(SplitEditor, false);
-	editor.topsbbutton1.ScrollStyle().SetMonoImage(IdeImg::vsplit()).Tip("Разделить (Ctrl+[\\])");
+	editor.topsbbutton1.ScrollStyle().SetMonoImage(IdeImg::vsplit()).Tip("Split (Ctrl+[\\])");
 	editor.topsbbutton1 <<= THISBACK1(SplitEditor, true);
-	editor2.topsbbutton.ScrollStyle().SetMonoImage(IdeImg::split()).Tip("Разделить (Ctrl+[-])");
+	editor2.topsbbutton.ScrollStyle().SetMonoImage(IdeImg::split()).Tip("Split (Ctrl+[-])");
 	editor2.topsbbutton <<= THISBACK1(SplitEditor, false);
-	editor2.topsbbutton1.ScrollStyle().SetMonoImage(IdeImg::vsplit()).Tip("Разделить (Ctrl+[\\])");
+	editor2.topsbbutton1.ScrollStyle().SetMonoImage(IdeImg::vsplit()).Tip("Split (Ctrl+[\\])");
 	editor2.topsbbutton1 <<= THISBACK1(SplitEditor, true);
 	if(editorsplit.GetZoom() >= 0)
 		return;
 	if(editorsplit.IsVert()) {
-		editor.topsbbutton.ScrollStyle().SetMonoImage(IdeImg::closesplit()).Tip("Закрыть (Ctrl+[-])");
+		editor.topsbbutton.ScrollStyle().SetMonoImage(IdeImg::closesplit()).Tip("Close (Ctrl+[-])");
 		editor.topsbbutton <<= THISBACK(CloseSplit);
-		editor2.topsbbutton.ScrollStyle().SetMonoImage(IdeImg::closesplit()).Tip("Закрыть (Ctrl+[-])");
+		editor2.topsbbutton.ScrollStyle().SetMonoImage(IdeImg::closesplit()).Tip("Close (Ctrl+[-])");
 		editor2.topsbbutton <<= THISBACK(CloseSplit);
 	}
 	else {
-		editor.topsbbutton1.ScrollStyle().SetMonoImage(IdeImg::closesplit()).Tip("Закрыть (Ctrl+[\\])");
+		editor.topsbbutton1.ScrollStyle().SetMonoImage(IdeImg::closesplit()).Tip("Close (Ctrl+[\\])");
 		editor.topsbbutton1 <<= THISBACK(CloseSplit);
-		editor2.topsbbutton1.ScrollStyle().SetMonoImage(IdeImg::closesplit()).Tip("Закрыть (Ctrl+[\\])");
+		editor2.topsbbutton1.ScrollStyle().SetMonoImage(IdeImg::closesplit()).Tip("Close (Ctrl+[\\])");
 		editor2.topsbbutton1 <<= THISBACK(CloseSplit);
 	}
 }
@@ -825,6 +1001,10 @@ bool Ide::HotKey(dword key)
 {
 	if(designer && designer->DesignerCtrl().HotKey(key))
 		return true;
+	if(designer && dynamic_cast<FileHexView *>(~designer) && Match(IdeKeys::AK_EDITASHEX, key)) {
+		EditUsingDesigner();
+		return true;
+	}
 	return TopWindow::HotKey(key);
 }
 

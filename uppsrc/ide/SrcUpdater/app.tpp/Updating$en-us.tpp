@@ -27,7 +27,7 @@ topic "Automatic updates of sources";
 [s0; &]
 [s0; If user selected one of the methods allowing for source updates 
 (local copy or SVN) in the [^topic`:`/`/ide`/SrcUpdater`/app`/LinuxInstallGuide`$en`-us^ i
-nitial setup wizard], RusIDE will check periodically if there 
+nitial setup wizard], TheIDE will check periodically if there 
 is a newer version available. The check can also be initiated 
 manually from the [/ Setup] menu.&]
 [s0; &]
@@ -471,7 +471,7 @@ current and available version and asking what to do.&]
 [s0;i150;O0; [/ Ignore this version.] This suppresses the `"updates 
 available state`" until next version is found or you click on 
 [/ Check for sources..]&]
-[s0;i150;O0; [/ Ask me later.] This just postpones the dialog. RusIDE 
+[s0;i150;O0; [/ Ask me later.] This just postpones the dialog. TheIDE 
 will still offer you to update through the [/ Install updates..] 
 icon.&]
 [s0;i150;O0; [/ Update now.] Initiates the update.&]

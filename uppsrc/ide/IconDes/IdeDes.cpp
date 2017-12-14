@@ -1,91 +1,5 @@
 #include "IconDes.h"
 
-#include <plugin/bmp/bmp.h>
-#include <plugin/png/png.h>
-
-bool IdeIconDes::Load(const char *_filename)
-{
-	Clear();
-	filename = _filename;
-	filetime = FileGetTime(filename);
-	Array<ImlImage> m;
-	int f;
-	if(!LoadIml(LoadFile(filename), m, f))
-		return false;
-	format = f;
-	for(int i = 0; i < m.GetCount(); i++)
-		AddImage(m[i].name, m[i].image, m[i].exp);
-	return true;
-}
-
-
-void IdeIconDes::Save()
-{
-	if(format == 1) {
-		for(int i = 0; i < GetCount(); i++) {
-			Image m = GetImage(i);
-			Point p = m.Get2ndSpot();
-			if(m.GetKind() == IMAGE_ALPHA || p.x || p.y) {
-				if(PromptYesNo("Унаследованный файловый формат не поддерживает рисунков "
-				               "с полным альфа-каналом или вторым hotspot - "
-				               "эта информация будет потеряна.&"
-				               "Хотите преобразовать файл в новый формат?")) {
-					format = 0;
-				}
-				break;
-			}
-		}
-	}
-	StoreToGlobal(*this, "icondes-ctrl");
-	Array<ImlImage> m;
-	VectorMap<Size, Image> exp;
-	String folder = GetFileFolder(filename);
-	for(int i = 0; i < GetCount(); i++) {
-		ImlImage& c = m.Add();
-		c.name = GetName(i);
-		c.image = GetImage(i);
-		c.exp = GetExport(i);
-		if(c.exp) {
-			Size sz = c.image.GetSize();
-			exp.GetAdd(sz) = c.image;
-			PNGEncoder png;
-			png.SaveFile(AppendFileName(folder, String().Cat() << "icon" << sz.cx << 'x' << sz.cy << ".png"), c.image);
-		}
-	}
-	String d = SaveIml(m, format);
-	if(!SaveChangedFileFinish(filename, d))
-		return;
-	filetime = FileGetTime(filename);
-	if(exp.GetCount())
-		SaveFile(AppendFileName(folder, "icon.ico"), WriteIcon(exp.GetValues()));
-}
-
-void IdeIconDes::ToolEx(Bar& bar)
-{
-	bar.Separator();
-	bar.Add("Свойства файла..", IconDesImg::FileProperties(), THISBACK(FileProperties));
-}
-
-void IdeIconDes::FileProperties()
-{
-	WithFilePropertiesLayout<TopWindow> dlg;
-	CtrlLayoutOKCancel(dlg, "Свойства файла");
-	dlg.format <<= format;
-	if(dlg.Run() == IDOK)
-		format = ~dlg.format;
-}
-
-void IdeIconDes::Serialize(Stream& s)
-{
-	SerializeSettings(s);
-}
-
-struct IdeIconEditPos : IconDes::EditPos, Moveable<IdeIconEditPos> {
-	Time filetime;
-
-	IdeIconEditPos() { filetime = Null; }
-};
-
 static VectorMap<String, IdeIconEditPos>& sEP()
 {
 	static VectorMap<String, IdeIconEditPos> x;
@@ -133,9 +47,11 @@ void SerializeIconDesPos(Stream& s)
 	}
 }
 
-String IdeIconDes::GetFileName() const
+void IdeIconDes::RestoreEditPos()
 {
-	return filename;
+	IdeIconEditPos& ep = sEP().GetAdd(filename);
+	if(ep.filetime == filetime)
+		SetEditPos(ep);
 }
 
 bool IsImlFile(const char *path)
@@ -143,18 +59,8 @@ bool IsImlFile(const char *path)
 	return ToLower(GetFileExt(path)) == ".iml";
 }
 
-void IdeIconDes::EditMenu(Bar& bar)
-{
-	EditBar(bar);
-	ToolEx(bar);
-	bar.Add("Список", THISBACK(ListMenu));
-	bar.Add("Выбор", THISBACK(SelectBar));
-	bar.Add("Рисунок", THISBACK(ImageBar));
-	bar.Add("Нарисовать", THISBACK(DrawBar));
-	bar.Add("Настройки", THISBACK(SettingBar));
-}
-
 struct IconDesModule : public IdeModule {
+	virtual String       GetID() { return "IconDesModule"; }
 	virtual void CleanUsc() {}
 	virtual bool ParseUsc(CParser& p) { return false; }
 	virtual Image FileIcon(const char *path) {
@@ -165,15 +71,12 @@ struct IconDesModule : public IdeModule {
 			IdeIconDes *d = new IdeIconDes;
 			LoadFromGlobal(*d, "icondes-ctrl");
 			if(d->Load(path)) {
-				IdeIconEditPos& ep = sEP().GetAdd(path);
-				if(ep.filetime == d->filetime)
-					d->SetEditPos(ep);
 				return d;
 			}
 			delete d;
 			return NULL;
 		}
-		return false;
+		return NULL;
 	}
 	virtual void Serialize(Stream& s) {
 		int version = 0;
@@ -193,17 +96,24 @@ void IdeIconDes::CopyId(const String& n)
 	AppendClipboardText(n);
 }
 
+void IdeIconDes::FindId(const String& id)
+{
+	FindName(id);
+}
+
 void IdeIconDes::ListMenuEx(Bar& bar)
 {
+	if(IsSingleMode())
+		return;
 	String n = GetCurrentName();
 	String c = GetFileTitle(filename);
 	c.Set(0, ToUpper(c[0]));
 	c = c.EndsWith("Img") ? c : c + "Img";
 	c << "::" << n << "()";
 	bar.Separator();
-	bar.Add(n.GetCount(), "Копировать '" + c + '\'', CtrlImg::copy(), THISBACK1(CopyId, c));
+	bar.Add(n.GetCount(), "Copy '" + c + '\'', CtrlImg::copy(), THISBACK1(CopyId, c));
 }
 
-INITBLOCK {
+INITIALIZER(IconDes) {
 	RegisterGlobalConfig("icondes-ctrl");
 }

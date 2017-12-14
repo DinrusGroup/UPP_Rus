@@ -1,13 +1,14 @@
 #include "Core.h"
 
-NAMESPACE_UPP
+namespace Upp {
 
-#define LLOG(x)           // LOG(x)
+#define LLOG(x)           // DLOG(x)
 #define LDUMP(x)          // DUMP(x)
 #define LLOGHEXDUMP(x, s) // LOGHEXDUMP(x, s)
 
-void BlockStream::SetBufferSize(dword size) {
-	int64 p;
+void BlockStream::SetBufferSize(dword size)
+{
+	int64 p = 0;
 	if(IsOpen()) {
 		p = GetPos();
 		Flush();
@@ -223,8 +224,7 @@ void BlockStream::SetSize(int64 size)
 	int64 pos = GetPos();
 	Flush();
 	Seek(0);
-	SetStreamSize(/*mediasize = streamsize =*/ size); // 06-08-29 TRC
-	// during call to SetStreamSize, mediasize must still contain the old file size
+	SetStreamSize(size);
 	streamsize = size;
 	Seek(pos < size ? pos : size);
 }
@@ -258,6 +258,7 @@ void BlockStream::OpenInit(dword mode, int64 _filesize) {
 	if(!buffer)
 		SetBufferSize(4096);
 	if(mode == APPEND) SeekEnd();
+	ClearError();
 }
 
 // ---------------------------- File stream -----------------------------
@@ -322,30 +323,18 @@ bool FileStream::Open(const char *name, dword mode) {
 	LLOG("Open " << name << " mode: " << mode);
 	Close();
 	int iomode = mode & ~SHAREMASK;
-	if(IsWinNT())
-		handle = UnicodeWin32().CreateFileW(ToSystemCharsetW(name),
-			iomode == READ ? GENERIC_READ : GENERIC_READ|GENERIC_WRITE,
-			(mode & NOREADSHARE ? 0 : FILE_SHARE_READ)
-			| (mode & NOWRITESHARE ? 0 : FILE_SHARE_WRITE)
-			| (mode & DELETESHARE ? FILE_SHARE_DELETE : 0),
-			NULL,
-			iomode == READ ? OPEN_EXISTING : iomode == CREATE ? CREATE_ALWAYS : OPEN_ALWAYS,
-			FILE_ATTRIBUTE_NORMAL|FILE_FLAG_SEQUENTIAL_SCAN,
-			NULL
-		);
-	else
-		handle = CreateFile(ToSystemCharset(name),
-			iomode == READ ? GENERIC_READ : GENERIC_READ|GENERIC_WRITE,
-			(mode & NOREADSHARE ? 0 : FILE_SHARE_READ)
-			| (mode & NOWRITESHARE ? 0 : FILE_SHARE_WRITE)
-			| (mode & DELETESHARE ? FILE_SHARE_DELETE : 0),
-			NULL,
-			iomode == READ ? OPEN_EXISTING : iomode == CREATE ? CREATE_ALWAYS : OPEN_ALWAYS,
-			FILE_ATTRIBUTE_NORMAL|FILE_FLAG_SEQUENTIAL_SCAN,
-			NULL
-		);
+	handle = CreateFileW(ToSystemCharsetW(name),
+		iomode == READ ? GENERIC_READ : GENERIC_READ|GENERIC_WRITE,
+		(mode & NOREADSHARE ? 0 : FILE_SHARE_READ)
+		| (mode & NOWRITESHARE ? 0 : FILE_SHARE_WRITE)
+		| (mode & DELETESHARE ? FILE_SHARE_DELETE : 0),
+		NULL,
+		iomode == READ ? OPEN_EXISTING : iomode == CREATE ? CREATE_ALWAYS : OPEN_ALWAYS,
+		FILE_ATTRIBUTE_NORMAL|FILE_FLAG_SEQUENTIAL_SCAN,
+		NULL
+	);
 	if(handle == INVALID_HANDLE_VALUE) {
-		SetError();
+		SetLastError();
 		return FALSE;
 	}
 	dword fsz_lo, fsz_hi;
@@ -389,6 +378,11 @@ FileStream::~FileStream() {
 	Close();
 }
 
+bool FileOut::Open(const char *fn)
+{
+	return FileStream::Open(fn, FileStream::CREATE|FileStream::NOWRITESHARE);
+}
+
 #endif
 
 #ifdef PLATFORM_POSIX
@@ -410,7 +404,7 @@ void FileStream::SetStreamSize(int64 pos)
 	while(pos > len) {
 		static char buffer[1024];
 		int64 diff = pos - len;
-		int chunk = (diff > sizeof(buffer) ? sizeof(buffer) : (int)diff);
+		int chunk = (diff > (int64)sizeof(buffer) ? sizeof(buffer) : (int)diff);
 		if(write(handle, buffer, chunk) != chunk) {
 			SetLastError();
 			LSEEK64_(handle, cur, SEEK_SET);
@@ -468,15 +462,22 @@ FileTime FileStream::GetTime() const {
 
 bool FileStream::Open(const char *name, dword mode, mode_t tmode) {
 	Close();
+	LLOG("Open " << name);
 	int iomode = mode & ~SHAREMASK;
 	handle = open(ToSystemCharset(name), iomode == READ ? O_RDONLY :
 	                    iomode == CREATE ? O_CREAT|O_RDWR|O_TRUNC :
 	                    O_RDWR|O_CREAT,
 	              tmode);
 	if(handle >= 0) {
+		if((mode & NOWRITESHARE) && flock(handle, LOCK_EX|LOCK_NB) < 0) {
+			close(handle);
+			handle = -1;
+			return false;
+		}
 		int64 fsz = LSEEK64_(handle, 0, SEEK_END);
 		if(fsz >= 0) {
 			OpenInit(mode, fsz);
+			LLOG("OPEN handle " << handle);
 			return true;
 		}
 	}
@@ -486,6 +487,7 @@ bool FileStream::Open(const char *name, dword mode, mode_t tmode) {
 
 void FileStream::Close() {
 	if(!IsOpen()) return;
+	LLOG("CLOSE handle " << handle);
 	Flush();
 	if(close(handle) < 0)
 		SetLastError();
@@ -509,6 +511,11 @@ FileStream::~FileStream() {
 	Close();
 }
 
+bool FileOut::Open(const char *fn, mode_t acm)
+{
+	return FileStream::Open(fn, FileStream::CREATE|FileStream::NOWRITESHARE, acm);
+}
+
 #endif
 
-END_UPP_NAMESPACE
+}

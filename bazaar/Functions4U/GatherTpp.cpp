@@ -1,11 +1,58 @@
 #ifdef flagGUI
 #include <CtrlLib/CtrlLib.h>
-#include <ide/Browser/Browser.h>
+#include <PdfDraw/PdfDraw.h>
+//#include <ide/Browser/Browser.h>
 
-using namespace Upp;
-
-#include "Functions4U/Functions4U.h"
+#include <Functions4U/Functions4U.h>
 #include "GatherTpp.h"
+#include <Functions4U/Html/htmld.h>
+
+NAMESPACE_UPP
+
+static Topic ReadTopic(const char *text)
+{
+	Topic topic;
+	CParser p(text);
+	try {
+		if(p.Id("topic")) {
+			topic.title = p.ReadString();
+			p.Char(';');
+			topic.text = p.GetPtr();
+			return topic;
+		}
+		while(!p.IsEof()) {
+			if(p.Id("TITLE")) {
+				p.PassChar('(');
+				topic.title = p.ReadString();
+				p.PassChar(')');
+			} else if(p.Id("REF")) {
+				p.PassChar('(');
+				p.ReadString();
+				p.PassChar(')');
+			} else if(p.Id("TOPIC_TEXT")) {
+				p.PassChar('(');
+				topic.text << p.ReadString();
+				p.PassChar(')');
+			} else if(p.Id("COMPRESSED")) {
+				StringBuffer b;
+				b.Reserve(1024);
+				while(p.IsInt()) {
+					b.Cat(p.ReadInt());
+					p.PassChar(',');
+				}
+				topic.text = ZDecompress(~b, b.GetLength());
+			} else {
+				topic.text << p.GetPtr();
+				break;
+			}
+		}
+	}
+	catch(CParser::Error e) {
+		topic.text = String::GetVoid();
+		topic.title = e;
+	}
+	return topic;
+}
 
 struct ScanTopicIterator : RichText::Iterator {
 	VectorMap<String, String> *reflink;
@@ -62,7 +109,6 @@ struct GatherLinkIterator : RichText::Iterator {
 			if(!IsNull(l)) {
 				if(l[0] == ':') {
 					int q = reflink->Find(l);
-					int w = q;
 					if(q < 0)
 						q = reflink->Find(l + "::class");
 					if(q < 0)
@@ -102,11 +148,12 @@ void QtfAsPdf(PdfDraw &pdf, const char *qtf)
 	UPP::Print(pdf, txt, page);
 }
 
-Htmls RoundFrame(Htmls data, String border, Color bg)
+HtmlsD RoundFrame(HtmlsD data, String border, Color bg)
 {
-	return HtmlPackedTable().BgColor(bg).Width(-100)
-	          .Attr("style", "border-style: solid; border-width: 1px; border-color: #" + border + ";")
-	       / HtmlLine() / data;
+	return HtmlPackedTableD()
+				.BgColor(bg).Width(-100)
+				.Attr("style", "border-style: solid; border-width: 1px; border-color: #" + border + ";") 
+			/ HtmlLineD() / data;
 }
 
 bool ContainsAt(const String &source, const String &pattern, int pos)
@@ -145,8 +192,6 @@ void GatherTpp::ExportPage(int i, String htmlFolder, String keywords)
 	String path = links.GetKey(i);
 	
 	String text = GetText(path);
-	int h;
-	h = ParseQTF(tt[i].text).GetHeight(1000);
 	
 	String qtflangs;	
 	String strlang;
@@ -154,17 +199,16 @@ void GatherTpp::ExportPage(int i, String htmlFolder, String keywords)
 	String page = tt[i];
 	page = QtfAsHtml(page, css, links, labels, htmlFolder, links[i]);
 	
-	Color paper = SWhite;
 	Color bg = Color(210, 217, 210);
 
-	Htmls html;
+	HtmlsD html;
 	html << 
-		HtmlPackedTable().Width(-100) /
-		   	HtmlLine().ColSpan(3)  +
-		HtmlPackedTable().Width(-100) / (
-			HtmlLine().ColSpan(3).BgColor(bg).Height(6) / "" +
-			HtmlRow() / (
-				HtmlTCell().Width(-100).BgColor(bg) / (
+		HtmlPackedTableD().Width(-100) /
+		   	HtmlLineD().ColSpan(3)  +
+		HtmlPackedTableD().Width(-100) / (
+			HtmlLineD().ColSpan(3).BgColor(bg).Height(6) / "" +
+			HtmlRowD() / (
+				HtmlTCellD().Width(-100).BgColor(bg) / (
 					RoundFrame(page , "6E89AE;padding: 10px;", White)
 				)
 			)
@@ -183,9 +227,9 @@ void GatherTpp::ExportPage(int i, String htmlFolder, String keywords)
 	if(pageTitle != title)
 		pageTitle << " :: " << title;
 
-	Htmls content =
+	HtmlsD content =
 	    "<!DOCTYPE html PUBLIC \"-//W3C//DTD HTML 4.01 Transitional//EN\">\n" +
-		HtmlHeader(pageTitle, AsCss(css) +
+		HtmlHeaderD(pageTitle, AsCss(css) +
 			"a.l1         { text-decoration:none; font-size: 8pt; font-family: sans-serif; "
 			              "font-weight: normal; }\n"
 			"a.l1:link    { color:#000000; }\n"
@@ -205,7 +249,7 @@ void GatherTpp::ExportPage(int i, String htmlFolder, String keywords)
 	    .BgColor(bg)
 	    .Alink(Red).Link(Black).Vlink(Blue)
 	    / html;
-	SaveFile(AppendFileName(htmlFolder, links[i]), content);
+	SaveFile(AppendFileName(htmlFolder, links[i]), ~content);
 }
 
 String GatherTpp::TopicFileName(const char *topic)
@@ -231,24 +275,59 @@ String TopicFileNameHtml(const char *topic)
 	return tl.group + "$" + tl.package+ "$" + tl.topic + ".html";
 }
 
+String ChangeTopicLanguage(const String &topic, int lang) {
+	int pos = topic.ReverseFind('$');
+	if (pos < 0)
+		return "";			
+	String langtxt = ToLower(LNGAsText(lang));		
+	return topic.Left(pos+1) + langtxt + topic.Mid(pos+1+langtxt.GetCount()); 
+}
+
+String GetTopicLanguage(const String &topic) {
+	int pos = topic.ReverseFind('$');
+	if (pos < 0)
+		return "";			
+	return topic.Mid(pos+1, 5); 
+}
+
 String GatherTpp::GatherTopics(const char *topic, String& title)
 {
-	int q = tt.Find(topic);
+	static StaticCriticalSection mapl;
+	int q;
+	INTERLOCKED_(mapl)
+		q = tt.Find(topic);
 	if(q < 0) {
 		Topic p = ReadTopic(LoadFile(TopicFileName(topic)));
 		title = p.title;
 		String t = p;
-		if(IsNull(t)) 
-			return "index.html";
-		tt.Add(topic) = p;
-		GatherLinkIterator ti(&(reflink));
-		ParseQTF(t).Iterate(ti);
-		for(int i = 0; i < ti.link.GetCount(); i++) {
-			String dummy;
-			GatherTopics(ti.link[i], dummy);
+		if(IsNull(t)) {
+			String topicEng = ChangeTopicLanguage(topic, LNG_('E','N','U','S'));		
+			p = ReadTopic(LoadFile(TopicFileName(topicEng)));
+			String tt = p;
+			if(IsNull(tt)) 
+				return "index.html";
+			title = p.title;
+			p.title += " (translated)";			
+			String help = "topic://uppweb/www/contribweb$" + GetTopicLanguage(topic);
+			p.text = String("{{1f1t0/50b0/50@(240.240.240) [<A2 ") + t_("This page has not been translated yet") + 
+					"]. " + "[^" + help + "^ [<A2 " + t_("Do you want to translate it?") + "]]}}&&" + p.text;
 		}
-	} else 
-		title = tt[q].title;
+		INTERLOCKED_(mapl)
+			tt.Add(topic) = p;
+		GatherLinkIterator ti(&reflink);
+		ParseQTF(t).Iterate(ti);
+#ifdef MTC
+		CoWork work;
+		for(int i = 0; i < ti.link.GetCount(); i++)
+			work & callback2(sGatherTopics, &tt, ti.link[i]);
+#else
+		for(int i = 0; i < ti.link.GetCount(); i++)
+			GatherTopics(ti.link[i]);
+#endif
+	} else {
+		INTERLOCKED_(mapl)
+			title = tt[q].title;
+	}
 	return TopicFileNameHtml(topic);
 }
 
@@ -312,7 +391,7 @@ bool GatherTpp::MakeHtml(const char *folder, Gate2<int, int> progress) {
 bool GatherTpp::MakePdf(const char *filename, Gate2<int, int> progress) {
 	PdfDraw pdf;
 	for(int i = 0; i < tt.GetCount(); i++) {
-		if (progress(i+1, tt.GetCount()))
+		if (progress(int(0.6*(i+1)), tt.GetCount()))
 			return false;
 		bool dopdf = true;
 		for (int j = 0; j < i; ++j) {
@@ -324,7 +403,8 @@ bool GatherTpp::MakePdf(const char *filename, Gate2<int, int> progress) {
 		if (dopdf)
 			QtfAsPdf(pdf, tt[i]);
 	}
-	SaveFile(filename, pdf.Finish());
+	String rawPdf = pdf.Finish();		progress(9, 10);
+	SaveFile(filename, rawPdf);			progress(10, 10);
 	return true;	
 }
 
@@ -339,5 +419,15 @@ Topic &GatherTpp::GetTopic(int id) {
 Topic &GatherTpp::AddTopic(const String name) {
 	return tt.Add(name);
 }
+
+String GatherTpp::Www(const char *topic, int lang, String topicLocation) {
+	String strLang = ToLower(LNGAsText(lang));
+	String www = GatherTopics(String().Cat() << topicLocation << topic << "$" << strLang);
+	if (www != "index.html")
+		return www;
+	return GatherTopics(String().Cat() << topicLocation << topic << "$" << "en-us");
+}
+
+END_UPP_NAMESPACE
 
 #endif

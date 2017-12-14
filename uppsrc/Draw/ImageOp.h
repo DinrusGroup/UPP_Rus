@@ -6,10 +6,14 @@ Image WithHotSpots(const Image& m, int x1, int y1, int x2, int y2);
 Image WithHotSpot(const Image& m, int x1, int y1);
 
 void Over(ImageBuffer& dest, Point p, const Image& src, const Rect& srect);
+void Over(Image& dest, const Image& src);
 void Copy(ImageBuffer& dest, Point p, const Image& src, const Rect& srect);
+void Fill(ImageBuffer& dest, const Rect& rect, RGBA color);
 
 void  Copy(Image& dest, Point p, const Image& src, const Rect& srect);
 void  Over(Image& dest, Point p, const Image& src, const Rect& srect);
+Image GetOver(const Image& dest, const Image& src);
+void  Fill(Image& dest, const Rect& rect, RGBA color);
 
 void  OverStraightOpaque(ImageBuffer& dest, Point p, const Image& src, const Rect& srect);
 void  OverStraightOpaque(Image& dest, Point p, const Image& _src, const Rect& srect);
@@ -17,6 +21,8 @@ void  OverStraightOpaque(Image& dest, Point p, const Image& _src, const Rect& sr
 void  Crop(RasterEncoder& tgt, Raster& img, const Rect& rc);
 Image Crop(const Image& img, const Rect& rc);
 Image Crop(const Image& img, int x, int y, int cx, int cy);
+
+Image AutoCrop(const Image& m, RGBA c);
 
 Image ColorMask(const Image& src, Color transparent);
 
@@ -70,10 +76,10 @@ public:
 void DrawRasterData(Draw& w, int x, int y, int cx, int cy, const String& data);
 
 bool  Rescale(RasterEncoder& tgt, Size sz, Raster& src, const Rect& src_rc,
-              Gate2<int, int> progress = false);
-Image Rescale(const Image& src, Size sz, const Rect& src_rc, Gate2<int, int> progress = false);
-Image Rescale(const Image& src, Size sz, Gate2<int, int> progress = false);
-Image Rescale(const Image& src, int cx, int cy, Gate2<int, int> progress = false);
+              Gate<int, int> progress = Null);
+Image Rescale(const Image& src, Size sz, const Rect& src_rc, Gate<int, int> progress = Null);
+Image Rescale(const Image& src, Size sz, Gate<int, int> progress = Null);
+Image Rescale(const Image& src, int cx, int cy, Gate<int, int> progress = Null);
 
 struct ImageFilter9 {
 	virtual RGBA operator()(const RGBA **mx) = 0;
@@ -85,6 +91,7 @@ void  Filter(RasterEncoder& target, Raster& src, ImageFilter9& filter);
 
 Image Etched(const Image& img);
 Image Sharpen(const Image& img, int amount = 100);
+Image Dither(const Image& m, int dival = 394);
 
 Image RotateClockwise(const Image& img);
 Image RotateAntiClockwise(const Image& img);
@@ -117,6 +124,7 @@ int    ClassifyContent(const Image& m, const Rect& rect);
 Image  RecreateAlpha(const Image& overwhite, const Image& overblack);
 int    ImageMargin(const Image& m, int p, int dist);
 int    ImageMarginV(const Image& _m, int p, int dist);
+Rect   GetImageMargins(const Image& m, RGBA margin_color);
 
 struct ChPartMaker {
 	Image image;
@@ -132,6 +140,8 @@ struct ChPartMaker {
 	ChPartMaker(const Image& m);
 };
 
+Image Magnify(const Image& img, int nx, int ny);
+
 // Image cache
 
 struct ImageMaker {
@@ -139,6 +149,9 @@ struct ImageMaker {
 	virtual Image  Make() const = 0;
 	virtual ~ImageMaker() {}
 };
+
+void  SysImageRealized(const Image& img); // SystemDraw realized Image handle in GUI
+void  SysImageReleased(const Image& img); // SystemDraw dropped Image handle
 
 Image MakeImage(const ImageMaker& m);
 Image MakeImage(const Image& image, Image (*make)(const Image& image));
@@ -151,9 +164,49 @@ void  SetMakeImageCacheMax(int m);
 
 Image MakeImagePaintOnly(const ImageMaker& m);
 
-Image CachedRescale(const Image& m, Size sz, const Rect& src);
-Image CachedRescale(const Image& m, Size sz);
-Image CachedRescalePaintOnly(const Image& m, Size sz, const Rect& src);
-Image CachedRescalePaintOnly(const Image& m, Size sz);
+Image RescaleFilter(const Image& img, Size sz, const Rect& sr,
+                    double (*kernel_fn)(double x), int kernel_width, Gate<int, int> progress);
+Image RescaleFilter(const Image& img, Size sz,
+                    double (*kernel_fn)(double x), int kernel_width, Gate<int, int> progress);
+Image RescaleFilter(const Image& img, int cx, int cy,
+                    double (*kernel_fn)(double x), int kernel_width, Gate<int, int> progress);
 
-Image Magnify(const Image& img, int nx, int ny);
+enum {
+	FILTER_NEAREST = 0,
+	FILTER_BILINEAR = 1,
+	FILTER_BSPLINE = 2,
+	FILTER_COSTELLO = 3,
+	FILTER_BICUBIC_MITCHELL = 4,
+	FILTER_BICUBIC_CATMULLROM = 5,
+	FILTER_LANCZOS2 = 6,
+	FILTER_LANCZOS3 = 7,
+	FILTER_LANCZOS4 = 8,
+	FILTER_LANCZOS5 = 9,
+};
+
+Image RescaleFilter(const Image& img, Size sz, const Rect& sr, int filter, Gate<int, int> progress = Null);
+Image RescaleFilter(const Image& img, Size sz, int filter, Gate<int, int> progress = Null);
+Image RescaleFilter(const Image& img, int cx, int cy, int filter, Gate<int, int> progress = Null);
+
+Image CachedRescale(const Image& m, Size sz, const Rect& src, int filter = Null);
+Image CachedRescale(const Image& m, Size sz, int filter = Null);
+Image CachedRescalePaintOnly(const Image& m, Size sz, const Rect& src, int filter = Null);
+Image CachedRescalePaintOnly(const Image& m, Size sz, int filter = Null);
+
+Image CachedSetColorKeepAlpha(const Image& img, Color color);
+Image CachedSetColorKeepAlphaPaintOnly(const Image& img, Color color);
+
+void SetUHDMode(bool b = true);
+bool IsUHDMode();
+void SyncUHDMode();
+
+Image DPI(const Image& m);
+Image DPI(const Image& img, int expected);
+
+inline int   DPI(int a)   { return IsUHDMode() ? 2 * a : a; }
+inline Size  DPI(Size sz) { return IsUHDMode() ? 2 * sz : sz; }
+
+// Obsolete, replace with RescaleFilter!
+Image RescaleBicubic(const Image& src, Size sz, const Rect& src_rc, Gate<int, int> progress = Null);
+Image RescaleBicubic(const Image& img, Size sz, Gate<int, int> progress = Null);
+Image RescaleBicubic(const Image& img, int cx, int cy, Gate<int, int> progress = Null);

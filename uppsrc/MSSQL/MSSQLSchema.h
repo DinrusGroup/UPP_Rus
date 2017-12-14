@@ -18,15 +18,15 @@
 #define INT_(x)                    COLUMN_("integer", int, x, 0, 0)
 #define INT_ARRAY_(x, items)       COLUMN_ARRAY_("integer", int, x, 0, 0, items)
 
-#define DOUBLE(x)                  COLUMN("double precision", double, x, 0, 0)
-#define DOUBLE_ARRAY(x, items)     COLUMN_ARRAY("double precision", double, x, 0, 0, items)
-#define DOUBLE_(x)                 COLUMN_("double precision", double, x, 0, 0)
-#define DOUBLE_ARRAY_(x, items)    COLUMN_ARRAY_("double precision", double, x, 0, 0, items)
+#define DOUBLE(x)                  COLUMN("float", double, x, 0, 0)
+#define DOUBLE_ARRAY(x, items)     COLUMN_ARRAY("float", double, x, 0, 0, items)
+#define DOUBLE_(x)                 COLUMN_("float", double, x, 0, 0)
+#define DOUBLE_ARRAY_(x, items)    COLUMN_ARRAY_("float", double, x, 0, 0, items)
 
-#define DATE(x)                    COLUMN("datetime", Date, x, 0, 0)
-#define DATE_ARRAY(x, items)       COLUMN_ARRAY("datetime", Date, x, 0, 0, items)
-#define DATE_(x)                   COLUMN_("datetime", Date, x, 0, 0)
-#define DATE_ARRAY_(x, items)      COLUMN_ARRAY_("datetime", Date, x, 0, 0, items)
+#define DATE(x)                    COLUMN("date", Date, x, 0, 0)
+#define DATE_ARRAY(x, items)       COLUMN_ARRAY("date", Date, x, 0, 0, items)
+#define DATE_(x)                   COLUMN_("date", Date, x, 0, 0)
+#define DATE_ARRAY_(x, items)      COLUMN_ARRAY_("date", Date, x, 0, 0, items)
 
 #define TIME(x)                    COLUMN("datetime", Time, x, 0, 0)
 #define TIME_ARRAY(x, items)       COLUMN_ARRAY("datetime", Time, x, 0, 0, items)
@@ -41,12 +41,15 @@
 #define LONGRAW(x)                 COLUMN("varbinary(max)", String, x, 0, 0)
 #define LONGRAW_(x)                COLUMN_("varbinary(max)", String, x, 0, 0)
 
+#ifndef PRIMARY_KEY
 #define PRIMARY_KEY                INLINE_ATTRIBUTE("primary key")\
                                    ATTRIBUTE("alter table @t add constraint PK_@x primary key "\
                                              "(@c)",\
                                              "alter table @t drop constraint PK_@x;")\
                                    ATTRIBUTE("create index PKX_@x on @t(@c);", \
                                              "drop index PKX_@x;")
+#endif
+
 #define KEY                        INLINE_ATTRIBUTE("key")
 #define NOT_NULL                   INLINE_ATTRIBUTE("not null")
 #define IDENTITY                   INLINE_ATTRIBUTE("identity")
@@ -69,6 +72,25 @@
 #define TIMESTAMP(ts)              SCHEMA("-- " ts "\n\n", NULL)
 
 #define COMMENT(txt)               SCHEMA("-- " #txt "\n", NULL)
+
+#define SEQUENCE(x)                SCHEMA("create sequence " #x " start with 1;",\
+                                          "drop sequence " #x ";") \
+                                   UPGRADE("create sequence " #x " start with 1;")
+#define SEQUENCE_(x)               DOID(x) SEQUENCE(x)
+
+#define DUAL_PRIMARY_KEY(k1, k2)   INLINE_ATTRIBUTE(", primary key (" #k1 ", " #k2 ")")
+
+#define DUAL_UNIQUE(k1, k2)        ATTRIBUTE("alter table @t add constraint DQ_@t unique "\
+                                             "(" #k1 ", " #k2 ");",\
+                                             "alter table @t drop constraint DQ_@t;")
+
+#define UNIQUE_LIST(u, l)          ATTRIBUTE("alter table @t add constraint UQ_@t$" #u " unique "\
+                                             "(" l ");",\
+                                             "alter table @t drop constraint UQ_@t$" #u ";")
+
+#define SQLCHECK(n, ct)            ATTRIBUTE("alter table @t add constraint CHK_@t$" #n " check "\
+                                             "(" ct ");",\
+                                             "alter table @t drop constraint CHK_@t$" #n ";")
 
 #include <Sql/sch_model.h>
 
@@ -119,5 +141,15 @@
 
 #undef UNIQUE
 
+#undef REFERENCES
+
 #undef TIMESTAMP
 #undef COMMENT
+
+#undef SEQUENCE
+#undef SEQUENCE_
+
+#undef DUAL_PRIMARY_KEY
+#undef DUAL_UNIQUE
+#undef UNIQUE_LIST
+#undef SQLCHECK

@@ -1,11 +1,11 @@
 #include "Debuggers.h"
 
-#ifdef COMPILER_MSC
+#ifdef PLATFORM_WIN32
 
-#define LLOG(x) // LOG(x)
+#define LLOG(x)  // DLOG(x)
 
 #ifdef _DEBUG
-char * SymTagAsString( DWORD symTag )
+const char * SymTagAsString( DWORD symTag )
 {
 	switch( symTag )
 	{
@@ -26,7 +26,7 @@ char * SymTagAsString( DWORD symTag )
 	}
 }
 
-char * BaseTypeAsString( DWORD baseType )
+const char * BaseTypeAsString( DWORD baseType )
 {
 	switch ( baseType )
 	{
@@ -61,11 +61,11 @@ adr_t Pdb::GetAddress(FilePos p)
 	char h[MAX_PATH];
 	strcpy(h, p.path);
 	if(SymGetLineFromName(hProcess, NULL, h, p.line + 1, &dummy, &ln)) {
-		LLOG("GetAddress " << p.path << "(" << p.line << "): " << FormatIntHex(ln.Address));
+		LLOG("GetAddress " << p.path << "(" << p.line << "): " << Hex(ln.Address));
 		return ln.Address;
 	}
 	LLOG("GetAddress " << p.path << "(" << p.line << "): ??");
-	return NULL;
+	return 0;
 }
 
 Pdb::FilePos Pdb::GetFilePos(adr_t address)
@@ -75,70 +75,55 @@ Pdb::FilePos Pdb::GetFilePos(adr_t address)
 	IMAGEHLP_LINE ln;
 	ln.SizeOfStruct = sizeof(ln);
 	fp.address = address;
-	if(SymGetLineFromAddr(hProcess, address, &dummy, &ln) && FileExists(ln.FileName)) {
+	if(SymGetLineFromAddr(hProcess, (uintptr_t)address, &dummy, &ln) && FileExists(ln.FileName)) {
 		fp.line = ln.LineNumber - 1;
 		fp.path = ln.FileName;
 		fp.address = ln.Address;
 	}
-	LLOG("GetFilePos(" << FormatIntHex(address) << "): " << fp.path << ": " << fp.line);
+	LLOG("GetFilePos(" << Hex(address) << "): " << fp.path << ": " << fp.line);
 	return fp;
 }
 
-#define MAX_SYM_NAME 1024
+#define MAX_SYMB_NAME 1024
 
-Pdb::FnInfo Pdb::GetFnInfo(adr_t address)
+Pdb::FnInfo Pdb::GetFnInfo0(adr_t address)
 {
 	DWORD64 h;
 
-	ULONG64 buffer[(sizeof(SYMBOL_INFO) +
-	    MAX_SYM_NAME +
-	    sizeof(ULONG64) - 1) /
-	    sizeof(ULONG64)];
+	ULONG64 buffer[(sizeof(SYMBOL_INFO) + MAX_SYMB_NAME + sizeof(ULONG64) - 1) / sizeof(ULONG64)];
 	SYMBOL_INFO *f = (SYMBOL_INFO*)buffer;
 
 	f->SizeOfStruct = sizeof(SYMBOL_INFO);
-	f->MaxNameLen = MAX_SYM_NAME;
+	f->MaxNameLen = MAX_SYMB_NAME;
 
 	FnInfo fn;
 	if(SymFromAddr(hProcess, address, &h, f)) {
 		LLOG("GetFnInfo " << f->Name
 		     << ", type index: " << f->TypeIndex
 		     << ", Flags: " << FormatIntHex(f->Flags)
-		     << ", Address: " << FormatIntHex((dword)f->Address)
+		     << ", Address: " << Hex((dword)f->Address)
 		     << ", Size: " << FormatIntHex((dword)f->Size)
 		     << ", Tag: " << SymTagAsString(f->Tag));
 		fn.name = f->Name;
-		fn.address = (dword)f->Address;
+		fn.address = (adr_t)f->Address;
 		fn.size = f->Size;
 		fn.pdbtype = f->TypeIndex;
 	}
 	return fn;
 }
-/*
-Pdb::FnInfo Pdb::GetFnInfo(String name)
+
+Pdb::FnInfo Pdb::GetFnInfo(adr_t address)
 {
-	ULONG64 b[(sizeof(SYMBOL_INFO) + MAX_SYM_NAME + sizeof(ULONG64) - 1) / sizeof(ULONG64)];
-	SYMBOL_INFO *f = (SYMBOL_INFO*)b;
-
-	f->SizeOfStruct = sizeof(SYMBOL_INFO);
-	f->MaxNameLen = MAX_SYM_NAME;
-
-	FnInfo fn;
-	if(SymFromName(hProcess, const_cast<char *>(~name), f)) {
-		LLOG("GetFnInfo " << f->Name
-		     << ", type index: " << f->TypeIndex
-		     << ", Flags: " << FormatIntHex(f->Flags)
-		     << ", Address: " << FormatIntHex((dword)f->Address)
-		     << ", Size: " << FormatIntHex((dword)f->Size)
-		     << ", Tag: " << SymTagAsString(f->Tag));
-		fn.name = f->Name;
-		fn.address = (dword)f->Address;
-		fn.size = f->Size;
-		fn.pdbtype = f->TypeIndex;
-	}
-	return fn;
+	int q = fninfo_cache.Find(address);
+	if(q >= 0)
+		return fninfo_cache[q];
+	if(fninfo_cache.GetCount() > 100)
+		fninfo_cache.Clear();
+	FnInfo f = GetFnInfo0(address);
+	fninfo_cache.Add(address, f);
+	return f;
 }
-*/
+
 void Pdb::TypeVal(Pdb::Val& v, int typeId, adr_t modbase)
 {
 	adr_t tag;
@@ -146,7 +131,6 @@ void Pdb::TypeVal(Pdb::Val& v, int typeId, adr_t modbase)
 		tag = GetSymInfo(modbase, typeId, TI_GET_SYMTAG);
 		if(tag == SymTagPointerType) {
 			v.ref++;
-			const Type& tptr = GetTypeId(modbase, typeId);
 		}
 		else
 		if(tag == SymTagArrayType)
@@ -188,10 +172,11 @@ void Pdb::TypeVal(Pdb::Val& v, int typeId, adr_t modbase)
 }
 
 struct Pdb::LocalsCtx {
-	adr_t                       ebp;
+	adr_t                       frame;
 	VectorMap<String, Pdb::Val> param;
 	VectorMap<String, Pdb::Val> local;
 	Pdb                        *pdb;
+	Context                    *context;
 };
 
 BOOL CALLBACK Pdb::EnumLocals(PSYMBOL_INFO pSym, ULONG SymbolSize, PVOID UserContext)
@@ -201,77 +186,92 @@ BOOL CALLBACK Pdb::EnumLocals(PSYMBOL_INFO pSym, ULONG SymbolSize, PVOID UserCon
 	if(pSym->Tag == SymTagFunction)
 		return TRUE;
 
-	if(pSym->Flags & IMAGEHLP_SYMBOL_INFO_REGISTER)
-		return TRUE;
-
 	Val& v = (pSym->Flags & IMAGEHLP_SYMBOL_INFO_PARAMETER ? c.param : c.local).GetAdd(pSym->Name);
 	v.address = (adr_t)pSym->Address;
-	if(pSym->Flags & IMAGEHLP_SYMBOL_INFO_REGRELATIVE)
-		v.address += c.ebp;
+	if(pSym->Flags & IMAGEHLP_SYMBOL_INFO_REGISTER)
+		v.address = pSym->Register;
+	else
+	if(pSym->Flags & IMAGEHLP_SYMBOL_INFO_REGRELATIVE) {
+		if(pSym->Register == CV_ALLREG_VFRAME) {
+		#ifdef CPU_64
+			if(c.pdb->win64)
+				v.address += c.pdb->GetCpuRegister(*c.context, CV_AMD64_RBP);
+			else
+		#endif
+				v.address += (adr_t)c.pdb->GetCpuRegister(*c.context, CV_REG_EBP);
+		}
+		else
+			v.address += (adr_t)c.pdb->GetCpuRegister(*c.context, pSym->Register);
+	}
+	else
+	if(pSym->Flags & IMAGEHLP_SYMBOL_INFO_FRAMERELATIVE)
+		v.address += c.frame;
+	c.pdb->TypeVal(v, pSym->TypeIndex, (adr_t)pSym->ModBase);
+	LLOG("LOCAL " << pSym->Name << ": " << Format64Hex(v.address));
+	return TRUE;
+}
+
+void Pdb::GetLocals(Frame& frame, Context& context, VectorMap<String, Pdb::Val>& param,
+                    VectorMap<String, Pdb::Val>& local)
+{
+	static IMAGEHLP_STACK_FRAME f;
+	f.InstructionOffset = frame.pc;
+	SymSetContext(hProcess, &f, 0);
+	LocalsCtx c;
+	c.frame = frame.frame;
+	c.pdb = this;
+	c.context = &context;
+	SymEnumSymbols(hProcess, 0, 0, &EnumLocals, &c);
+	param = pick(c.param);
+	local = pick(c.local);
+}
+
+BOOL CALLBACK Pdb::EnumGlobals(PSYMBOL_INFO pSym, ULONG SymbolSize, PVOID UserContext)
+{
+	LocalsCtx& c = *(LocalsCtx *)UserContext;
+
+	if(pSym->Tag != SymTagData)
+		return TRUE;
+	LLOG("GLOBAL: " << pSym->Name << " " << Format64Hex(pSym->Address));
+
+#if 0
+	DDUMP(pSym->Scope);
+	DDUMP(pSym->Flags);
+	DDUMP(pSym->Tag);
+	DDUMP(pSym->TypeIndex);
+
+	DWORD dummy;
+	IMAGEHLP_LINE ln;
+	ln.SizeOfStruct = sizeof(ln);
+	ln.Address = pSym->Address;
+	if(SymGetLineFromAddr(c.pdb->hProcess, (uintptr_t)pSym->Address, &dummy, &ln)) {
+		DDUMP(ln.FileName);
+		DDUMP(ln.Address);
+		DDUMP(ln.LineNumber);
+	}
+	else
+		DLOG("GetSymLineFromAddr failed!");
+	DLOG("=========================");
+#endif
+
+	Val& v = c.pdb->global.GetAdd(pSym->Name);
+	v.address = (adr_t)pSym->Address;
 	c.pdb->TypeVal(v, pSym->TypeIndex, (adr_t)pSym->ModBase);
 	return TRUE;
 }
 
-void Pdb::GetLocals(adr_t eip, adr_t ebp, VectorMap<String, Pdb::Val>& param,
-                    VectorMap<String, Pdb::Val>& local)
+void Pdb::LoadGlobals(DWORD64 base)
 {
 	static IMAGEHLP_STACK_FRAME f;
-	f.InstructionOffset = eip;
-	SymSetContext(hProcess, &f, 0);
 	LocalsCtx c;
-	c.ebp = ebp;
 	c.pdb = this;
-	SymEnumSymbols(hProcess, 0, 0, &EnumLocals, &c);
-	param = c.param;
-	local = c.local;
+	c.context = &context;
+	SymEnumSymbols(hProcess, base, NULL, &EnumGlobals, &c);
 }
 
-Pdb::Val Pdb::GetGlobal(const char *fn, const String& name)
+Pdb::Val Pdb::GetGlobal(const String& name)
 {
-	return Val();
-
-	ULONG64 b[(sizeof(SYMBOL_INFO) + MAX_SYM_NAME + sizeof(ULONG64) - 1) / sizeof(ULONG64)];
-	PSYMBOL_INFO pSymbol = (PSYMBOL_INFO)b;
-	pSymbol->SizeOfStruct = sizeof(SYMBOL_INFO);
-	pSymbol->MaxNameLen = MAX_SYM_NAME;
-	SymSetOptions(SYMOPT_LOAD_LINES|SYMOPT_UNDNAME
-	              |SYMOPT_NO_UNQUALIFIED_LOADS|SYMOPT_NO_PUBLICS);
-	Vector<String> n = Split(fn, ':');
-	if(noglobal.GetCount() > 5000)
-		noglobal.Clear();
-	String nm;
-	for(;;) {
-		if(n.GetCount())
-			n.Drop();
-		nm = n.GetCount() ? Join(n, "::") + "::" + name : name;
-		int q = global.Find(nm);
-		if(q >= 0) {
-			SymSetOptions(SYMOPT_LOAD_LINES|SYMOPT_UNDNAME|SYMOPT_NO_UNQUALIFIED_LOADS);
-			return global[q];
-		}
-		if(noglobal.Find(nm) < 0) {
-			Buffer<char> h(nm.GetLength() + 1);
-			strcpy(h, nm);
-			if(SymFromName(hProcess, h, pSymbol))
-				break;
-		}
-		noglobal.FindAdd(nm);
-		if(n.GetCount() == 0) {
-			SymSetOptions(SYMOPT_LOAD_LINES|SYMOPT_UNDNAME|SYMOPT_NO_UNQUALIFIED_LOADS);
-			return Val();
-		}
-	}
-	SymSetOptions(SYMOPT_LOAD_LINES|SYMOPT_UNDNAME|SYMOPT_NO_UNQUALIFIED_LOADS);
-	if(pSymbol->Flags & (IMAGEHLP_SYMBOL_INFO_PARAMETER|IMAGEHLP_SYMBOL_INFO_LOCAL) ||
-	   pSymbol->Tag != SymTagData) {
-		noglobal.FindAdd(nm);
-		return Val();
-	}
-	Val v;
-	v.address = (adr_t)pSymbol->Address;
-	TypeVal(v, pSymbol->TypeIndex, (adr_t)pSymbol->ModBase);
-	global.Add(nm, v);
-	return v;
+	return global.Get(name, Val());
 }
 
 String Pdb::GetSymName(adr_t modbase, dword typeindex)

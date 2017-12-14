@@ -1,14 +1,40 @@
 #include "XMLCommand.h"
+#include "XMLToolBar.h"
 
 NAMESPACE_UPP
 
 ////////////////////////////////////////////////////////////////////////////////////
 
+// copy constructors
+XMLCommand::XMLCommand(XMLCommand const &c, int)
+{
+	control					= c.control;
+	ctrlSize				= c.ctrlSize;
+	callback				= c.callback;
+	menuCallback			= c.menuCallback;
+	menuTb					<<= c.menuTb;
+	enabled					= c.enabled;
+	custom					= c.custom;
+	commandString			= c.commandString;
+}
+
+XMLCommand::XMLCommand(XMLCommand rval_ c)
+{
+	control					= c.control;
+	ctrlSize				= c.ctrlSize;
+	callback				= c.callback;
+	menuCallback			= c.menuCallback;
+	menuTb					= pick(c.menuTb);
+	enabled					= c.enabled;
+	custom					= c.custom;
+	commandString			= c.commandString;
+}
+
 // xml support
 void XMLCommand::Xmlize(XmlIO xml)
 {
-	// just custom commands get streamed, so we don't need to
-	// stream anything, just set values on load
+	// just custom commands get streamed
+	// only command string gets streamed, other values are just set
 	if(xml.IsLoading())
 	{
 		enabled = true;
@@ -16,22 +42,35 @@ void XMLCommand::Xmlize(XmlIO xml)
 		control = NULL;
 		ctrlSize = Size(-1, -1);
 		callback.Clear();
+		menuCallback.Clear();
 	}
 	else
 	{
 		ASSERT(custom == true);
 	}
+	xml("CommandString", commandString);
+}
+
+XMLToolBar const &XMLCommand::GetMenuTb(void)
+{
+	menuTb = new XMLToolBar;
+	menuCallback(*menuTb);
+	return *menuTb;
 }
 
 ////////////////////////////////////////////////////////////////////////////////////
 // adds a custom command
-XMLCommands &XMLCommands::Add(String const &id)
+XMLCommands &XMLCommands::Add(String const &id, String const &cmdStr)
 {
+	if(Has(id))
+		return *this;
 	XMLCommand *cmd = new XMLCommand;
 	cmd->control = NULL;
 	cmd->enabled = true;
 	cmd->custom = true;
 	cmd->callback.Clear();
+	cmd->menuCallback.Clear();
+	cmd->commandString = cmdStr;
 	commands.Add(id, cmd);
 	return *this;
 }
@@ -39,25 +78,58 @@ XMLCommands &XMLCommands::Add(String const &id)
 // adds a built-in command with given callback
 XMLCommands &XMLCommands::Add(String const &id, Callback cb)
 {
-	XMLCommand *cmd = new XMLCommand;
+	bool has = Has(id);
+	XMLCommand *cmd;
+	if(has)
+		cmd = &commands.Get(id);
+	else
+		cmd = new XMLCommand;
 	cmd->control = NULL;
 	cmd->enabled = true;
 	cmd->custom = false;
 	cmd->callback = cb;
-	commands.Add(id, cmd);
+	cmd->menuCallback.Clear();
+	if(!has)
+		commands.Add(id, cmd);
+	return *this;
+}
+
+// adds a generated submenu "command"
+XMLCommands &XMLCommands::Add(String const &id, Callback1<XMLToolBar &> mc)
+{
+	bool has = Has(id);
+	XMLCommand *cmd;
+	if(has)
+		cmd = &commands.Get(id);
+	else
+		cmd = new XMLCommand;
+	cmd->control = NULL;
+	cmd->enabled = true;
+	cmd->custom = false;
+	cmd->callback.Clear();
+	cmd->menuCallback = mc;
+	if(!has)
+		commands.Add(id, cmd);
 	return *this;
 }
 
 // adds a control
 XMLCommands &XMLCommands::Add(String const &id, Ctrl &ctrl, Size const &size)
 {
-	XMLCommand *cmd = new XMLCommand;
+	bool has = Has(id);
+	XMLCommand *cmd;
+	if(has)
+		cmd = &commands.Get(id);
+	else
+		cmd = new XMLCommand;
 	cmd->control = &ctrl;
 	cmd->ctrlSize = size;
 	cmd->enabled = true;
 	cmd->custom = false;
 	cmd->callback.Clear();
-	commands.Add(id, cmd);
+	cmd->menuCallback.Clear();
+	if(!has)
+		commands.Add(id, cmd);
 	return *this;
 }
 XMLCommands &XMLCommands::Add(String const &id, Ctrl &ctrl)
@@ -66,39 +138,80 @@ XMLCommands &XMLCommands::Add(String const &id, Ctrl &ctrl)
 }
 
 // adds a custom command, allows enable/disable item
-XMLCommands &XMLCommands::Add(bool enabled, String const &id)
+XMLCommands &XMLCommands::Add(bool enabled, String const &id, String const &cmdStr)
 {
-	XMLCommand *cmd = new XMLCommand;
+	bool has = Has(id);
+	XMLCommand *cmd;
+	if(has)
+		cmd = &commands.Get(id);
+	else
+		cmd = new XMLCommand;
 	cmd->control = NULL;
 	cmd->enabled = enabled;
 	cmd->custom = true;
 	cmd->callback.Clear();
-	commands.Add(id, cmd);
+	cmd->menuCallback.Clear();
+	cmd->commandString = cmdStr;
+	if(!has)
+		commands.Add(id, cmd);
 	return *this;
 }
 
 // adds a built-in command with given callback, allows enable/disable item
 XMLCommands &XMLCommands::Add(bool enabled, String const &id, Callback cb)
 {
-	XMLCommand *cmd = new XMLCommand;
+	bool has = Has(id);
+	XMLCommand *cmd;
+	if(has)
+		cmd = &commands.Get(id);
+	else
+		cmd = new XMLCommand;
 	cmd->control = NULL;
 	cmd->enabled = enabled;
 	cmd->custom = false;
 	cmd->callback = cb;
-	commands.Add(id, cmd);
+	cmd->menuCallback.Clear();
+	if(!has)
+		commands.Add(id, cmd);
 	return *this;
 }
 
+// adds a generated submenu "command", allows enable/disable item
+XMLCommands &XMLCommands::Add(bool enabled, String const &id, Callback1<XMLToolBar &> mc)
+{
+	bool has = Has(id);
+	XMLCommand *cmd;
+	if(has)
+		cmd = &commands.Get(id);
+	else
+		cmd = new XMLCommand;
+	cmd->control = NULL;
+	cmd->enabled = enabled;
+	cmd->custom = false;
+	cmd->callback.Clear();
+	cmd->menuCallback = mc;
+	if(!has)
+		commands.Add(id, cmd);
+	return *this;
+}
+		
 // adds a control, allows enable/disable item
 XMLCommands &XMLCommands::Add(bool enabled, String const &id, Ctrl &ctrl, Size const &size)
 {
-	XMLCommand *cmd = new XMLCommand;
+	bool has = Has(id);
+	XMLCommand *cmd;
+	if(has)
+		cmd = &commands.Get(id);
+	else
+		cmd = new XMLCommand;
 	cmd->control = &ctrl;
 	cmd->ctrlSize = size;
 	cmd->enabled = true;
 	cmd->custom = false;
 	cmd->callback.Clear();
-	commands.Add(id, cmd);
+	cmd->menuCallback.Clear();
+	if(!has)
+		commands.Add(id, cmd);
 	return *this;
 }
 XMLCommands &XMLCommands::Add(bool enabled, String const &id, Ctrl &ctrl)
@@ -127,12 +240,12 @@ XMLCommands &XMLCommands::Sort(void)
 	{
 		if(commands[i].GetIsCustom())
 		{
-			custom.Add(commands[i]);
+			custom.AddPick(pick(commands[i]));
 			customIdx.Add(commands.GetKey(i));
 		}
 		else
 		{
-			builtIn.Add(commands[i]);
+			builtIn.AddPick(pick(commands[i]));
 			builtInIdx.Add(commands.GetKey(i));
 		}
 	}
@@ -140,9 +253,9 @@ XMLCommands &XMLCommands::Sort(void)
 	IndexSort(builtInIdx, builtIn, XMLCmdLess());
 	commands.Clear();
 	for(int i = 0; i < builtIn.GetCount(); i++)
-		commands.Add(builtInIdx[i], builtIn[i]);
+		commands.AddPick(builtInIdx[i], pick(builtIn[i]));
 	for(int i = 0; i < custom.GetCount(); i++)
-		commands.Add(customIdx[i], custom[i]);
+		commands.AddPick(customIdx[i], pick(custom[i]));
 	
 	return *this;
 }
@@ -165,7 +278,7 @@ void XMLCommands::Xmlize(XmlIO xml)
 		
 		// appends new commands to current list
 		for(int i = 0; i < newCmds.GetCount(); i++)
-			commands.Add(newCmds.GetKey(i), newCmds[i]);
+			commands.AddPick(newCmds.GetKey(i), pick(newCmds[i]));
 	}
 	else
 	{
@@ -173,7 +286,7 @@ void XMLCommands::Xmlize(XmlIO xml)
 		ArrayMap<String, XMLCommand> custCmds;
 		for(int i = 0; i < commands.GetCount(); i++)
 			if(commands[i].GetIsCustom())
-				custCmds.Add(commands.GetKey(i), commands[i]);
+				custCmds.Add(commands.GetKey(i), new XMLCommand(commands[i], 1));
 		
 		// stream out custom commands
 		xml("commands", custCmds);

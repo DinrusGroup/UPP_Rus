@@ -40,6 +40,7 @@ public:
 		Rect  margin;
 		int   overpaint;
 		int   loff, roff;
+		Color error;
 	};
 
 	class SubButton {
@@ -53,14 +54,15 @@ public:
 		bool         left;
 		bool         monoimg;
 		bool         enabled;
+		bool         visible;
 
 		String       label;
 
 		void Refresh();
 
 	public:
-		Callback WhenPush;
-		Callback WhenClick;
+		Event<>  WhenPush;
+		Event<>  WhenClick;
 
 		SubButton& SetImage(const Image& m);
 		SubButton& SetMonoImage(const Image& m);
@@ -69,10 +71,11 @@ public:
 		SubButton& Left(bool b = true);
 		SubButton& Width(int w);
 		SubButton& Enable(bool b);
+		SubButton& Show(bool b);
 		SubButton& Tip(const char *s)                     { tip = s; return *this; }
 		SubButton& Main(bool b = true);
 
-		Callback operator<<=(Callback cb)                 { WhenPush = cb; return cb; }
+		Event<>  operator<<=(Event<>  cb)                 { WhenPush = cb; return cb; }
 
 		SubButton();
 	};
@@ -89,15 +92,19 @@ private:
 	const Display   *display;
 	const Convert   *convert;
 	Value            value;
+	Value            error;
 	int              valuecy;
 	bool             push;
+	bool             nobg;
 	String           tip;
 	Rect             pushrect;
 
 	Array<SubButton> button;
 	int              hl;
 
-	const Style *style;
+	const Style     *style;
+
+	DisplayPopup     info;
 
 	int  FindButton(int px);
 	void Margins(int& l, int& r);
@@ -110,13 +117,15 @@ private:
 	bool ComplexFrame();
 	bool Metrics(int& border, int& lx, int &rx, const Rect& r);
 	bool Metrics(int& border, int& lx, int &rx);
+	void SyncInfo();
+	Rect Paint0(Draw& w, bool getcr);
 
 	friend class SubButton;
 	friend class MultiButtonFrame;
 
 public:
-	Callback WhenPush;
-	Callback WhenClick;
+	Event<>  WhenPush;
+	Event<>  WhenClick;
 
 	static const Style& StyleDefault();
 	static const Style& StyleFrame();
@@ -140,13 +149,16 @@ public:
 	const Display& GetDisplay() const                { return *display; }
 	const Convert& GetConvert() const                { return *convert; }
 	const Value&   Get() const                       { return value; }
+	
+	void  Error(const Value& v)                      { error = v; Refresh(); }
 
 	MultiButton& SetDisplay(const Display& d);
 	MultiButton& NoDisplay();
 	MultiButton& SetConvert(const Convert& c);
 	MultiButton& SetValueCy(int cy);
-	MultiButton& Set(const Value& v);
+	MultiButton& Set(const Value& v, bool update = true);
 	MultiButton& Tip(const char *s)                  { tip = s; return *this; }
+	MultiButton& NoBackground(bool b = true);
 
 	MultiButton& SetStyle(const Style& s)            { style = &s; Refresh(); return *this; }
 

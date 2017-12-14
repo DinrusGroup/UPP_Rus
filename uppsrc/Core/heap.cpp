@@ -1,6 +1,6 @@
 #include "Core.h"
 
-NAMESPACE_UPP
+namespace Upp {
 
 #ifdef UPP_HEAP
 
@@ -17,6 +17,7 @@ void Heap::Init()
 	if(initialized)
 		return;
 	LLOG("Init heap " << (void *)this);
+
 	for(int i = 0; i < NKLASS; i++) {
 		empty[i] = NULL;
 		full[i]->LinkSelf();
@@ -25,61 +26,42 @@ void Heap::Init()
 		work[i]->klass = i;
 		cachen[i] = 3500 / Ksz(i);
 	}
-	ASSERT(sizeof(Header) == 16);
-	ASSERT(sizeof(DLink) <= 16);
-	ASSERT(sizeof(BigHdr) + sizeof(Header) < BIGHDRSZ);
 	GlobalLInit();
 	for(int i = 0; i < LBINS; i++)
 		freebin[i]->LinkSelf();
 	large->LinkSelf();
 	lcount = 0;
-	if(this != &aux && !aux.work[0]->next) {
+	if(this != &aux && !aux.initialized) {
 		Mutex::Lock __(mutex);
 		aux.Init();
 	}
 	initialized = true;
+	out_ptr = out;
+	out_size = 0;
 	PROFILEMT(mutex);
-}
-
-void Heap::RemoteFree(void *ptr)
-{
-	LLOG("RemoteFree " << ptr);
-	Mutex::Lock __(mutex);
-	FreeLink *f = (FreeLink *)ptr;
-	f->next = remote_free;
-	remote_free = f;
 }
 
 void Heap::FreeRemoteRaw()
 {
-	while(remote_free) {
-		FreeLink *f = remote_free;
-		remote_free = remote_free->next;
-		LLOG("FreeRemote " << (void *)f);
-		FreeDirect(f);
-	}
-}
-
-void Heap::FreeRemote()
-{
-	LLOG("FreeRemote");
-	Mutex::Lock __(mutex);
-	FreeRemoteRaw();
+	LLOG("FreeRemoteRaw");
+	SmallFreeRemoteRaw();
+	LargeFreeRemoteRaw();
 }
 
 void Heap::Shutdown()
-{
+{ // Move all active blocks, "orphans", to global aux heap
 	LLOG("Shutdown");
 	Mutex::Lock __(mutex);
 	Init();
-	FreeRemoteRaw();
+	RemoteFlushRaw(); // Move remote blocks to originating heaps
+	FreeRemoteRaw(); // Free all remotely freed blocks
 	for(int i = 0; i < NKLASS; i++) {
 		LLOG("Free cache " << i);
 		FreeLink *l = cache[i];
 		while(l) {
 			FreeLink *h = l;
 			l = l->next;
-			FreeDirect(h);
+			SmallFreeDirect(h);
 		}
 		while(full[i]->next != full[i]) {
 			Page *p = full[i]->next;
@@ -131,7 +113,7 @@ void Heap::DblCheck(Page *p)
 	while(p != l);
 }
 
-int Heap::CheckPageFree(FreeLink *l, int k)
+int Heap::CheckFree(FreeLink *l, int k)
 {
 	int n = 0;
 	while(l) {
@@ -153,7 +135,7 @@ void Heap::Check() {
 		Page *p = work[i]->next;
 		while(p != work[i]) {
 			Assert(p->heap == this);
-			Assert(CheckPageFree(p->freelist, p->klass) == p->Count() - p->active);
+			Assert(CheckFree(p->freelist, p->klass) + p->active == p->Count());
 			p = p->next;
 		}
 		p = full[i]->next;
@@ -164,24 +146,16 @@ void Heap::Check() {
 			p = p->next;
 		}
 		p = empty[i];
-		if(p) {
-			for(;;) {
-				Assert(p->heap == this);
-				Assert(p->active == 0);
-				Assert(p->klass == i);
-				Assert(CheckPageFree(p->freelist, i) == p->Count());
-				if(this != &aux)
-					break;
-				p = p->next;
-				if(!p)
-					break;
-			}
+		while(p) {
+			Assert(p->heap == this);
+			Assert(p->active == 0);
+			Assert(p->klass == i);
+			Assert(CheckFree(p->freelist, i) == p->Count());
+			if(this != &aux)
+				break;
+			p = p->next;
 		}
-		FreeLink *l = cache[i];
-		while(l) {
-			DbgFreeCheckK(l, i);
-			l = l->next;
-		}
+		CheckFree(cache[i], i);
 	}
 	DLink *l = large->next;
 	while(l != large) {
@@ -219,31 +193,69 @@ void Heap::AuxFinalCheck()
 		AssertLeaks(aux.work[i] == aux.work[i]->next);
 		AssertLeaks(aux.full[i] == aux.full[i]->next);
 		Page *p = aux.empty[i];
-		if(p) {
-			for(;;) {
-				Assert(p->heap == &aux);
-				Assert(p->active == 0);
-				Assert(CheckPageFree(p->freelist, p->klass) == p->Count());
-				p = p->next;
-				if(!p)
-					break;
-			}
+		while(p) {
+			Assert(p->heap == &aux);
+			Assert(p->active == 0);
+			Assert(CheckFree(p->freelist, p->klass) == p->Count());
+			p = p->next;
 		}
 	}
 	AssertLeaks(aux.large == aux.large->next);
 	AssertLeaks(big == big->next);
 }
 
-void MemoryFreeThread()
+#ifdef MEMORY_SHRINK
+void Heap::Shrink()
 {
-	heap.Shutdown();
+	LLOG("MemoryShrink");
+	Mutex::Lock __(mutex);
+#if 0
+	for(int i = 0; i < NKLASS; i++) {
+		Page *p = aux.empty[i];
+		while(p) {
+			Page *q = p;
+			p = p->next;
+			FreeRaw4KB(q);
+		}
+		aux.empty[i] = NULL;
+	}
+#endif
+	DLink *m = lempty->next;
+	while(m != lempty) {
+		DLink *q = m;
+		m = m->next;
+		q->Unlink();
+		FreeRaw64KB(q);
+	}
 }
 
-void MemoryCheck()
+void MemoryShrink()
 {
-	heap.Check();
+	Heap::Shrink();
 }
+#endif
 
 #endif
 
-END_UPP_NAMESPACE
+}
+
+#ifdef UPP_HEAP
+#include <new>
+
+#ifdef COMPILER_GCC
+#pragma GCC diagnostic ignored "-Wdeprecated" // silence modern GCC warning about throw(std::bad_alloc)
+#endif
+
+void *operator new(size_t size) throw(std::bad_alloc)             { void *ptr = UPP::MemoryAlloc(size); return ptr; }
+void operator  delete(void *ptr) throw()                          { UPP::MemoryFree(ptr); }
+
+void *operator new[](size_t size) throw(std::bad_alloc)           { void *ptr = UPP::MemoryAlloc(size); return ptr; }
+void operator  delete[](void *ptr) throw()                        { UPP::MemoryFree(ptr); }
+
+void *operator new(size_t size, const std::nothrow_t&) throw()    { void *ptr = UPP::MemoryAlloc(size); return ptr; }
+void operator  delete(void *ptr, const std::nothrow_t&) throw()   { UPP::MemoryFree(ptr); }
+
+void *operator new[](size_t size, const std::nothrow_t&) throw()  { void *ptr = UPP::MemoryAlloc(size); return ptr; }
+void operator  delete[](void *ptr, const std::nothrow_t&) throw() { UPP::MemoryFree(ptr); }
+
+#endif

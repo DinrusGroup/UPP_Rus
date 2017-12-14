@@ -2,7 +2,7 @@
 
 SvnSel::SvnSel()
 {
-	CtrlLayoutOKCancel(*this, "Выбрать SVN url");
+	CtrlLayoutOKCancel(*this, "Select SVN url");
 	list.WhenLeftDouble = THISBACK(Go);
 	list.WhenSel = THISBACK(SyncResult);
 	list.Columns(3);
@@ -94,7 +94,7 @@ void SvnSel::Url()
 bool SvnSel::TryLoad(const char *url)
 {
 	if(!Load(url)) {
-		Exclamation("Неверный URL!");
+		Exclamation("Invalid URL!");
 		return false;
 	}
 	return true;

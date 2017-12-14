@@ -1,5 +1,3 @@
-String MIMECharsetName(byte charset);
-
 inline String HttpContentType(const String& type)           { return String().Cat() << "Content-Type: " << type << "\r\n"; }
 inline String HttpContentDisposition(const char *disp, const String& filename)
 { return String().Cat() << "Content-Disposition: " << disp << "; filename=\"" << filename << "\"\r\n"; }
@@ -21,17 +19,17 @@ inline String HttpBinary()                                  { return "applicatio
 
 class HttpServer;
 
-class HttpRequest
+class HttpServerRequest
 {
 	friend class HttpServer;
 
 public:
-	HttpRequest(HttpServer& server, pick_ Socket& socket, HttpQuery query);
+	HttpServerRequest(HttpServer& server, pick_ Socket& socket, HttpQuery query);
 
 	HttpServer&   GetServer()                              { return server; }
 	Socket&       GetSocket()                              { return socket; }
 #ifdef PLATFORM_WIN32
-	Event&        GetEvent()                               { return event; }
+	Win32Event&   GetEvent()                               { return event; }
 #endif
 	HttpQuery     GetQuery() const                         { return query; }
 
@@ -70,8 +68,8 @@ public:
 	Socket&            GetSocket()                    { return socket; }
 	Socket&            GetConnSocket()                { return connection; }
 #ifdef PLATFORM_WIN32
-	Event&             GetEvent()                     { return sock_event; }
-	Event&             GetConnEvent()                 { return conn_event; }
+	Win32Event&        GetEvent()                     { return sock_event; }
+	Win32Event&        GetConnEvent()                 { return conn_event; }
 #endif
 
 	void               Logging(const char *log = NULL, int max_log_size = 500000);
@@ -86,9 +84,9 @@ public:
 	void               GetReadSockets(Vector<Socket *>& sockets);
 	void               GetWriteSockets(Vector<Socket *>& sockets);
 #ifdef PLATFORM_WIN32
-	void               GetWaitEvents(Vector<Event *>& events);
+	void               GetWaitEvents(Vector<Win32Event *>& events);
 #endif
-	One<HttpRequest>   GetRequest();
+	One<HttpServerRequest>   GetRequest();
 
 	Time               GetStartTime() const           { return start_time; }
 	double             GetHitCount() const            { return hit_count; }
@@ -179,7 +177,7 @@ private:
 	int                trailing_count;
 };
 
-inline bool   HttpRequest::IsLogging() const { return server.IsLogging(); }
+inline bool   HttpServerRequest::IsLogging() const { return server.IsLogging(); }
 
 inline String GetHttpPath(HttpQuery query)  { return query.GetString("$$PATH"); }
 inline String GetHttpQuery(HttpQuery query) { return query.GetString("$$QUERY"); }

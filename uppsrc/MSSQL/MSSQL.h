@@ -3,6 +3,8 @@
 
 #include "ODBC/ODBC.h"
 
+// debian: sudo apt-get install unixodbc-dev
+
 namespace Upp {
 
 String MsSqlTextType(int width);
@@ -18,6 +20,28 @@ bool   MSSQLPerformScript(const String& text, StatementExecutor& executor,
 
 void IdentityInsert(Sql& sql, const SqlInsert& ins);
 void IdentityInsert(const SqlInsert& ins);
+
+class MsSqlSequence : public ValueGen {
+	const SqlId  *seq;
+	SqlSession   *session;
+
+public:
+	virtual Value  Get();
+
+	Value operator++()                                                  { return Get(); }
+
+	void Set(const SqlId& id, SqlSession& s)                            { seq = &id; session = &s; }
+
+#ifndef NOAPPSQL
+	void Set(const SqlId& id)                                           { seq = &id; session = NULL; }
+
+	MsSqlSequence(const SqlId& seq)                                     { Set(seq); }
+	MsSqlSequence(const char *seq);
+#endif
+	MsSqlSequence(const SqlId& seq, SqlSession& s)                      { Set(seq, s); }
+
+	MsSqlSequence()                                                     { seq = NULL; session = NULL; }
+};
 
 };
 

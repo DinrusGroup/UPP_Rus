@@ -1,6 +1,6 @@
 #include "CtrlLib.h"
 
-NAMESPACE_UPP
+namespace Upp {
 
 struct KeyBinding : Moveable<KeyBinding> {
 	KeyInfo    *key;
@@ -101,13 +101,13 @@ struct KeysDlg : WithKeysLayout<TopWindow> {
 	typedef KeysDlg CLASSNAME;
 
 	KeysDlg() {
-		CtrlLayoutOKCancel(*this, t_("Конфигурация клавишных сокращений"));
-		group.AddColumn(t_("Группа"));
+		CtrlLayoutOKCancel(*this, t_("Configure keyboard shortcuts"));
+		group.AddColumn(t_("Group"));
 		group.WhenEnterRow = THISBACK(EnterGroup);
 		group.NoGrid();
-		keys.AddColumn(t_("Действие"));
-		keys.AddColumn(t_("Первичный")).Ctrls<KeyCtrl>();
-		keys.AddColumn(t_("Вторичный")).Ctrls<KeyCtrl>();
+		keys.AddColumn(t_("Action"));
+		keys.AddColumn(t_("Primary")).Ctrls<KeyCtrl>();
+		keys.AddColumn(t_("Secondary")).Ctrls<KeyCtrl>();
 		keys.SetLineCy(EditField::GetStdHeight() + 2);
 		keys.NoHorzGrid().NoCursor().EvenRowColor();
 		keys.ColumnWidths("182 132 133");
@@ -179,7 +179,7 @@ void KeysDlg::KeyEdit()
 
 void KeysDlg::Defaults()
 {
-	if(PromptYesNo("Восстановить клавиши по умолчанию?")) {
+	if(PromptYesNo("Restore default keys?")) {
 		SetDefaultKeys();
 		EnterGroup();
 	}
@@ -254,7 +254,7 @@ dword ParseKeyDesc(CParser& p)
 	}
 	if(p.IsNumber()) {
 		uint32 q = p.ReadNumber(16);
-		if(q >= 0 && q <= 9)
+		if(q <= 9)
 			return f | (K_0 + q);
 		return f | q;
 	}
@@ -363,4 +363,14 @@ void RestoreKeys(const String& data)
 	catch(CParser::Error) {}
 }
 
-END_UPP_NAMESPACE
+String GetDesc(const KeyInfo& f, bool parenthesis)
+{
+	return f.key[0] ? parenthesis ? "(" + GetKeyDesc(f.key[0]) + ")" : GetKeyDesc(f.key[0]) : String();
+}
+
+bool Match(const KeyInfo& k, dword key)
+{
+	return findarg(key, k.key[0], k.key[1], k.key[2], k.key[3]) >= 0;
+}
+
+}

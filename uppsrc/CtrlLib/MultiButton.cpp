@@ -1,6 +1,6 @@
 #include "CtrlLib.h"
 
-NAMESPACE_UPP
+namespace Upp {
 
 CH_STYLE(MultiButton, Style, StyleDefault)
 {
@@ -8,22 +8,23 @@ CH_STYLE(MultiButton, Style, StyleDefault)
 		simple[i] = left[i] = right[i] = lmiddle[i] = rmiddle[i]
 			= Button::StyleEdge().look[i];
 		monocolor[i] = Button::StyleEdge().monocolor[i];
-		fmonocolor[i] = i == 3 ? SColorDisabled() : SColorText();
+		fmonocolor[i] = i == CTRL_DISABLED ? SColorDisabled() : SColorText();
 		look[i] = trivial[i] = ChLookWith(simple[i], CtrlsImg::DA(), monocolor[i]);
 		edge[i] = EditFieldEdge();
 	}
 	activeedge = false;
-	trivialborder = 1;
-	border = 1;
+	trivialborder = DPI(1);
+	border = DPI(1);
 	pressoffset = Button::StyleEdge().pressoffset;
 	sep1 = SColorHighlight();
 	sep2 = SColorLight();
-	sepm = 2;
+	sepm = DPI(2);
 	stdwidth = FrameButtonWidth();
 	trivialsep = false;
-	margin = Rect(2, 2, 2, 2);
+	margin = Rect(DPI(2), 2, DPI(2), 2);
 	usetrivial = false;
 	overpaint = loff = roff = 0;
+	error = Blend(LtRed(), Red());
 }
 
 CH_STYLE(MultiButton, Style, StyleFrame)
@@ -38,6 +39,7 @@ MultiButton::SubButton::SubButton()
 	monoimg = false;
 	enabled = true;
 	main = false;
+	visible = true;
 }
 
 void MultiButton::SubButton::Refresh()
@@ -95,6 +97,13 @@ MultiButton::SubButton& MultiButton::SubButton::Width(int w)
 MultiButton::SubButton& MultiButton::SubButton::Enable(bool b)
 {
 	enabled = b;
+	Refresh();
+	return *this;
+}
+
+MultiButton::SubButton& MultiButton::SubButton::Show(bool b)
+{
+	visible = b;
 	Refresh();
 	return *this;
 }
@@ -158,6 +167,15 @@ bool MultiButton::Frame()
 	return false;
 }
 
+MultiButton& MultiButton::NoBackground(bool b)
+{
+	SetFrame(EditFieldFrame());
+	nobg = b;
+	Transparent();
+	Refresh();
+	return *this;
+}
+
 bool MultiButton::ComplexFrame()
 {
 	return Frame() ? GetParent() && &GetParent()->GetFrame() != &sNullFrame()
@@ -213,9 +231,13 @@ int MultiButton::FindButton(int px)
 bool MultiButton::GetPos(SubButton& b, int& lx, int& rx, int& x, int& cx, int px)
 {
 	Size tsz = GetTextSize(b.label, StdFont());
-	cx = Nvl(b.cx, style->stdwidth + tsz.cx);
-	if(IsNull(b.cx) && tsz.cx > 0 && !IsNull(b.img))
-		cx += LB_IMAGE + LB_MARGIN;
+	if(b.visible) {
+		cx = Nvl(b.cx, style->stdwidth + tsz.cx);
+		if(IsNull(b.cx) && tsz.cx > 0 && !IsNull(b.img))
+			cx += LB_IMAGE + LB_MARGIN;
+	}
+	else
+		cx = 0;
 	if(b.left) {
 		x = lx;
 		lx += cx;
@@ -243,19 +265,20 @@ void MultiButton::GetPos(int ii, int& x, int& cx)
 
 int MultiButton::ChState(int i)
 {
-	if(i == MAIN && Frame() && style->activeedge) {
+	bool frm = Frame();
+	Ctrl *p = GetParent();
+	if(i == MAIN && frm && style->activeedge) {
 		int q = 0;
-		Ctrl *p = GetParent();
 		if(p)
-			q = !p->IsEnabled() || !IsEnabled() || i >= 0 && !button[i].enabled ? CTRL_DISABLED
+			q = !p->IsEnabled() || !IsEnabled() || IsReadOnly() || i >= 0 && !button[i].enabled ? CTRL_DISABLED
 			    : p->HasFocus() || push ? CTRL_PRESSED
 			    : p->HasMouse() || hl >= 0 ? CTRL_HOT
 			    : CTRL_NORMAL;
 		return q;
 	}
-	if(IsTrivial() && !Frame())
+	if(IsTrivial() && !frm)
 		i = 0;
-	if(!IsShowEnabled() || i >= 0 && !button[i].enabled)
+	if(!IsShowEnabled() || IsReadOnly() || frm && p && p->IsReadOnly() || i >= 0 && !button[i].enabled)
 		return CTRL_DISABLED;
 	return hl == i ? push ? CTRL_PRESSED
 	                      : CTRL_HOT
@@ -311,11 +334,16 @@ void MultiButton::Lay(Rect& r)
 
 void MultiButton::Paint(Draw& w)
 {
+	Paint0(w, false);
+}
+
+Rect MultiButton::Paint0(Draw& w, bool getcr)
+{
 	Size sz = GetSize();
 	int border, lx, rx;
 	bool frm = Metrics(border, lx, rx);
 	int mst = ChState(MAIN);
-	if(frm)
+	if(frm && !nobg && !getcr)
 		ChPaint(w, sz, style->edge[style->activeedge ? mst : 0]);
 	bool left = false;
 	bool right = false;
@@ -324,38 +352,42 @@ void MultiButton::Paint(Draw& w)
 		int st = ChState(i);
 		int x = 0, cx = 0;
 		GetPos(b, lx, rx, x, cx);
+		if(getcr)
+			continue;
 		bool dopaint = true;
 		Value v = b.left ? left ? style->lmiddle[st] : style->left[st]
 		                 : right ? style->rmiddle[st] : style->right[st];
-		if(ComplexFrame())
-			ChPaint(w, x, border, cx, sz.cy - 2 * border, style->simple[st]);
-		else
-		if(frm) {
-			if(IsTrivial() && style->usetrivial)
-				dopaint = false;
-			ChPaint(w, x, border, cx, sz.cy - 2 * border,
-			        dopaint ? v : style->trivial[st]);
-		}
-		else {
-			w.Clip(x, 0, cx, sz.cy);
-			ChPaint(w, sz, style->look[Frame() ? mst : st]);
-			if(IsNull(v) || !Frame()) {
-				if((!IsTrivial() || style->trivialsep) && IsEnabled()) {
-					if(b.left) {
-						if(left)
-							ChPaint(w, x, style->sepm, 1, sz.cy - 2 * style->sepm, style->sep1);
-						ChPaint(w, x + cx - 1, style->sepm, 1, sz.cy - 2 * style->sepm, style->sep2);
-					}
-					else {
-						ChPaint(w, x, style->sepm, 1, sz.cy - 2 * style->sepm, style->sep1);
-						if(right)
+		if(!nobg) {
+			if(ComplexFrame())
+				ChPaint(w, x, border, cx, sz.cy - 2 * border, style->simple[st]);
+			else
+			if(frm) {
+				if(IsTrivial() && style->usetrivial)
+					dopaint = false;
+				ChPaint(w, x, border, cx, sz.cy - 2 * border,
+				        dopaint ? v : style->trivial[st]);
+			}
+			else {
+				w.Clip(x, 0, cx, sz.cy);
+				ChPaint(w, sz, style->look[Frame() ? mst : st]);
+				if(IsNull(v) || !Frame()) {
+					if((!IsTrivial() || style->trivialsep) && IsEnabled() && IsEditable()) {
+						if(b.left) {
+							if(left)
+								ChPaint(w, x, style->sepm, 1, sz.cy - 2 * style->sepm, style->sep1);
 							ChPaint(w, x + cx - 1, style->sepm, 1, sz.cy - 2 * style->sepm, style->sep2);
+						}
+						else {
+							ChPaint(w, x, style->sepm, 1, sz.cy - 2 * style->sepm, style->sep1);
+							if(right)
+								ChPaint(w, x + cx - 1, style->sepm, 1, sz.cy - 2 * style->sepm, style->sep2);
+						}
 					}
 				}
+				else
+					ChPaint(w, x, 0, cx, sz.cy, v);
+				w.End();
 			}
-			else
-				ChPaint(w, x, 0, cx, sz.cy, v);
-			w.End();
 		}
 		if(dopaint) {
 			Size tsz = GetTextSize(b.label, StdFont());
@@ -383,68 +415,76 @@ void MultiButton::Paint(Draw& w)
 		(b.left ? left : right) = true;
 	}
 	Rect r, cr;
+	cr = GetSize();
+	cr.left = lx;
+	cr.right = rx;
 	Color text = SColorLabel();
 	Color paper = Null;
-	if(ComplexFrame()) {
-		cr = GetSize();
-		cr.left = lx;
-		cr.right = rx;
-		r = cr;
-		paper = HasFocus() ? SColorHighlight() : SColorPaper();
-		if(HasFocus())
-			text = SColorHighlightText();
-		w.DrawRect(r, paper);
-	}
-	else
-	if(frm) {
-		Rect m = GetMargin();
-		r = Rect(max(lx, m.left), m.top, min(rx, sz.cx - m.right), sz.cy - m.bottom);
-		Color paper;
-		if(mst == CTRL_HOT && !IsTrivial())
-			paper = Blend(SColorHighlight, SColorPaper, 235);
-		else
-		if(mst == CTRL_PRESSED && !IsTrivial())
-			paper = Blend(SColorHighlight, SColorFace, 235);
-		else
-		if(HasFocus()) {
-			paper = SColorHighlight();
-			text = SColorHighlightText();
+	if(!nobg) {
+		if(ComplexFrame()) {
+			r = cr;
+			paper = HasFocus() ? SColorHighlight() : SColorPaper();
+			if(HasFocus())
+				text = SColorHighlightText();
+			w.DrawRect(r, paper);
 		}
 		else
-			paper = SColorPaper();
-		w.DrawRect(r, paper);
-		cr = r;
-	}
-	else {
-		w.Clip(lx, 0, rx - lx, sz.cy);
-		ChPaint(w, sz, style->look[mst]);
-		Rect m = style->margin;
-		r = Rect(max(lx, m.left), m.top, min(rx, sz.cx - m.right), sz.cy - m.bottom);
-		if(!IsTrivial() || style->trivialsep) {
-			if(left) {
-				r.left++;
-				if(IsEnabled())
-					ChPaint(w, lx, style->sepm, 1, sz.cy - 2 * style->sepm, style->sep1);
+		if(frm) {
+			Rect m = GetMargin();
+			r = Rect(max(lx, m.left), m.top, min(rx, sz.cx - m.right), sz.cy - m.bottom);
+			Color paper;
+			if(mst == CTRL_HOT && !IsTrivial())
+				paper = Blend(SColorHighlight, SColorPaper, 235);
+			else
+			if(mst == CTRL_PRESSED && !IsTrivial())
+				paper = Blend(SColorHighlight, SColorFace, 235);
+			else
+			if(HasFocus()) {
+				paper = SColorHighlight();
+				text = SColorHighlightText();
 			}
-			if(right) {
-				if(IsEnabled())
-					ChPaint(w, rx - 1, style->sepm, 1, sz.cy - 2 * style->sepm, style->sep2);
-				r.right--;
-			}
+			else
+				paper = IsEnabled() && IsEditable() ? SColorPaper() : SColorFace();
+			w.DrawRect(r, paper);
+			cr = r;
 		}
-		w.End();
-		cr = r;
+		else {
+			w.Clip(lx, 0, rx - lx, sz.cy);
+			ChPaint(w, sz, style->look[mst]);
+			Rect m = style->margin;
+			r = Rect(max(lx, m.left), m.top, min(rx, sz.cx - m.right), sz.cy - m.bottom);
+			if(!IsTrivial() || style->trivialsep) {
+				if(left) {
+					r.left++;
+					if(IsEnabled() && IsEditable())
+						ChPaint(w, lx, style->sepm, 1, sz.cy - 2 * style->sepm, style->sep1);
+				}
+				if(right) {
+					if(IsEnabled() && IsEditable())
+						ChPaint(w, rx - 1, style->sepm, 1, sz.cy - 2 * style->sepm, style->sep2);
+					r.right--;
+				}
+			}
+			w.End();
+			cr = r;
+		}
 	}
-	cr.left++;
+	cr.left += DPI(1);
 	Rect clr = cr;
-	if(!IsNull(valuecy)) {
-		cr.top += (cr.GetHeight() - valuecy + 1) / 2;
+	if(!IsNull(valuecy) && cr.GetHeight() > valuecy) {
+		cr.top += (cr.GetHeight() - valuecy) / 2;
 		cr.bottom = cr.top + valuecy;
 	}
+	if(getcr)
+		return cr;
 	Value v = convert->Format(value);
 	bool f = HasFocus() && !push && frm;
 	if(cr.left < cr.right && display) {
 		w.Clip(clr);
+		if(!IsNull(error)) {
+			v = error;
+			text = style->error;
+		}
 		display->Paint(w, cr, v,
 		               IsShowEnabled() ? text : SColorDisabled,
 		               paper, f ? Display::CURSOR : Display::FOCUS|Display::CURSOR);
@@ -452,6 +492,26 @@ void MultiButton::Paint(Draw& w)
 	}
 	if(!frm && HasFocus())
 		DrawFocus(w, r);
+	return cr;
+}
+
+void MultiButton::SyncInfo()
+{
+	if((HasMouse() || info.HasMouse()) && display &&
+	   (GetMouseFlags() & (K_MOUSELEFT|K_MOUSERIGHT|K_MOUSEMIDDLE)) == 0) {
+		Point p = GetMouseViewPos();
+		NilDraw nw;
+		Rect r = Paint0(nw, true);
+		if(r.Contains(p)) {
+			Value v = convert->Format(value);
+			int cm = DPI(2);
+			r.left -= cm;
+			r.right += cm;
+			info.Set(this, r, value, display, SColorText, SColorPaper, 0, DPI(2));
+			return;
+		}
+	}
+	info.Cancel();
 }
 
 void MultiButton::MouseMove(Point p, dword flags)
@@ -467,6 +527,7 @@ void MultiButton::MouseMove(Point p, dword flags)
 		push = b;
 		Refresh();
 	}
+	SyncInfo();
 }
 
 void MultiButton::LeftDown(Point p, dword flags)
@@ -491,6 +552,7 @@ void MultiButton::LeftDown(Point p, dword flags)
 		else
 			WhenPush();
 	}
+	SyncInfo();
 }
 
 void MultiButton::LeftUp(Point p, dword flags)
@@ -498,17 +560,22 @@ void MultiButton::LeftUp(Point p, dword flags)
 	push = false;
 	Refresh();
 	Sync();
-	if(!IsNull(hl))
+	if(!IsNull(hl)) {
 		if(hl >= 0)
 			button[hl].WhenClick();
 		else
 			WhenClick();
+	}
+	SyncInfo();
 }
 
 void MultiButton::MouseLeave()
 {
-	hl = Null;
-	Refresh();
+	if(!info.IsOpen()) {
+		hl = Null;
+		Refresh();
+		SyncInfo();
+	}
 }
 
 void MultiButton::CancelMode()
@@ -516,6 +583,7 @@ void MultiButton::CancelMode()
 	hl = Null;
 	push = false;
 	Refresh();
+	info.Cancel();
 }
 
 bool MultiButton::IsTrivial() const
@@ -564,11 +632,14 @@ MultiButton& MultiButton::SetConvert(const Convert& c)
 	return *this;
 }
 
-MultiButton& MultiButton::Set(const Value& v)
+MultiButton& MultiButton::Set(const Value& v, bool update)
 {
 	if(value != v) {
 		value = v;
-		Refresh();
+		if(update)
+			UpdateRefresh();
+		else
+			Refresh();
 	}
 	return *this;
 }
@@ -590,6 +661,7 @@ void MultiButton::SetData(const Value& v)
 		value = v;
 		UpdateRefresh();
 	}
+	SyncInfo();
 }
 
 Value MultiButton::GetData() const
@@ -631,6 +703,7 @@ MultiButton::MultiButton()
 	valuecy = Null;
 	push = false;
 	SetFrame(sNullFrame());
+	nobg = false;
 }
 
 void MultiButtonFrame::FrameAdd(Ctrl& parent)
@@ -642,7 +715,7 @@ void MultiButtonFrame::FrameAdd(Ctrl& parent)
 void MultiButtonFrame::FrameRemove()
 {
 	Remove();
-	SetWantFocus();
+	WantFocus();
 }
 
 void MultiButtonFrame::FrameLayout(Rect& r)
@@ -670,4 +743,4 @@ void MultiButtonFrame::AddTo(Ctrl& w)
 	w.AddFrame(*this);
 }
 
-END_UPP_NAMESPACE
+}

@@ -1,6 +1,6 @@
 #include "CtrlLib.h"
 
-NAMESPACE_UPP
+namespace Upp {
 
 #define LTIMING(x)  // TIMING(x)
 
@@ -52,21 +52,25 @@ void ToolBar::Paint(Draw& w)
 	PaintBar(w, style->breaksep, look);
 }
 
-Bar::Item& ToolBar::AddItem(Callback cb)
+Bar::Item& ToolBar::AddItem(Event<> cb)
 {
 	ToolButton& m = item.DoIndex(ii++);
-	m.Reset();
+	m.ResetKeepStyle();
 	m.WhenAction = cb;
 	m.MinSize(IsNull(buttonminsize) ? style->buttonminsize : buttonminsize);
 	m.MaxIconSize(IsNull(maxiconsize) ? style->maxiconsize : maxiconsize);
 	m.Kind(kind);
 	m.SetStyle(style->buttonstyle);
 	m.NoDarkAdjust(nodarkadjust);
+	m.Enable(true).Check(false).Bar::Item::Key((dword)0);
+	m.Text("");
+	m.Tip("");
+	m.ClearInfo();
 	pane.Add(&m, Null);
 	return m;
 }
 
-Bar::Item& ToolBar::AddSubMenu(Callback1<Bar&> proc)
+Bar::Item& ToolBar::AddSubMenu(Event<Bar&> proc)
 {
 	if(item.GetCount())
 		Separator();
@@ -82,10 +86,10 @@ void ToolBar::Clear()
 
 bool ToolBar::HotKey(dword key)
 {
-	return Bar::Scan(proc, key);
+	return Bar::Scan(proc, key) || Ctrl::HotKey(key);
 }
 
-void ToolBar::Set(Callback1<Bar&> bar)
+void ToolBar::Set(Event<Bar&> bar)
 {
 	LTIMING("SetToolBar");
 	if(lock) return;
@@ -102,7 +106,7 @@ void ToolBar::Set(Callback1<Bar&> bar)
 	lock--;
 }
 
-void ToolBar::Post(Callback1<Bar&> bar)
+void ToolBar::Post(Event<Bar&> bar)
 {
 	KillTimeCallback(TIMEID_POST);
 	SetTimeCallback(0, PTEBACK1(Set, bar), TIMEID_POST);
@@ -128,4 +132,4 @@ void StaticBarArea::Paint(Draw& w)
 		             upperframe ? Null : GetScreenRect().bottom);
 }
 
-END_UPP_NAMESPACE
+}

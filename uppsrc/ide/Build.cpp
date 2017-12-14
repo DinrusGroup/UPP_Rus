@@ -23,7 +23,7 @@ void Ide::DoProcessEvents()
 
 void Ide::ReQualifyCodeBase()
 {
-	::ReQualifyCodeBase();
+	FinishCodeBase();
 }
 
 String Ide::GetMain()
@@ -36,13 +36,14 @@ void Ide::BeginBuilding(bool sync_files, bool clear_console)
 	SetupDefaultMethod();
 	HdependTimeDirty();
 	Renumber();
-	ShowConsole();
 	StopDebug();
+	ShowConsole();
 	SaveFile();
 	SaveWorkspace();
 	SetIdeState(BUILDING);
 	console.Kill();
 	console.ClearError();
+	ClearErrorsPane();
 	if(clear_console)
 		console.Clear();
 	build_time = GetTickCount();
@@ -59,13 +60,14 @@ void Ide::EndBuilding(bool ok)
 	if(!errors.IsEmpty())
 		ok = false;
 	PutConsole("");
-	PutConsole((ok ? "OK. " : "Имеются ошибки. ") + GetPrintTime(build_time));
+	PutConsole((ok ? "OK. " : "There were errors. ") + GetPrintTime(build_time));
 	SetIdeState(EDITING);
-	if(GetTopWindow()->IsOpen())
+	if(GetTopWindow()->IsOpen()) {
 		if(ok)
 			BeepMuteInformation();
 		else
 			BeepMuteExclamation();
+	}
 	ShowConsole();
 }
 
@@ -76,13 +78,14 @@ void Ide::DoBuild()
 
 void Ide::PackageBuild()
 {
+	InitBlitz();
 	BeginBuilding(true, true);
 	const Workspace& wspc = IdeWorkspace();
 	int pi = GetPackageIndex();
 	if(pi >= 0 && pi <= wspc.GetCount()) {
-		Vector<String> linkfile;
+		Vector<String> linkfile, immfile;
 		String linkopt;
-		bool ok = BuildPackage(wspc, pi, 0, 1, mainconfigparam, Null, linkfile, linkopt);
+		bool ok = BuildPackage(wspc, pi, 0, 1, mainconfigparam, Null, linkfile, immfile, linkopt);
 		EndBuilding(ok);
 	}
 }
@@ -91,7 +94,7 @@ void Ide::StopBuild()
 {
 	if(idestate == BUILDING) {
 		console.Kill();
-		PutConsole("Прервано пользователем.");
+		PutConsole("User break.");
 		SetIdeState(EDITING);
 	}
 }
@@ -99,6 +102,11 @@ void Ide::StopBuild()
 String Ide::GetOutputDir()
 {
 	return GetFileFolder(target);
+}
+
+String Ide::GetConfigDir()
+{
+	return GetHomeDirFile(".upp/" + GetFileTitle(target));
 }
 
 void Ide::PackageClean()
@@ -114,12 +122,12 @@ void Ide::PackageClean()
 void Ide::CleanUppOut()
 {
 	String out = GetVar("OUTPUT");
-	if(!PromptYesNo(NFormat("Стереть всю папку вывода [* \1%s\1]?", out)))
+	if(!PromptYesNo(NFormat("Erase the whole output directory [* \1%s\1]?", out)))
 		return;
 	console.Clear();
-	PutConsole("UPPOUT очистка...");
+	PutConsole("UPPOUT cleanup...");
 	DeleteFolderDeep(out);
-	PutConsole("(готово)");
+	PutConsole("(done)");
 	HideBottom();
 }
 
@@ -134,14 +142,34 @@ void Ide::FileCompile()
 	bool ok = true;
 	onefile = editfile;
 	if(wspc.GetCount()) {
-		Vector<String> linkfile;
+		Vector<String> linkfile, immfile;
 		String linkopt;
 		for(int i = 0; i < wspc.GetCount(); i++)
-			BuildPackage(wspc, i, 1, wspc.GetCount(), mainconfigparam, Null, linkfile, linkopt, false);
+			BuildPackage(wspc, i, 1, wspc.GetCount(), mainconfigparam, Null, linkfile, immfile, linkopt, false);
 	}
 	onefile.Clear();
 	EndBuilding(ok);
 	SetErrorEditor();
+}
+
+void Ide::PreprocessInternal()
+{
+	if(editor.GetLength() >= 1000000) // Sanity...
+		return;
+	int l = editor.GetCurrentLine();
+	PPSync(GetIncludePath());
+	String pfn = ConfigFile(GetFileTitle(editfile) + ".i.tmp");
+	Cpp cpp;
+	StringStream in(editor.Get());
+	String p = NormalizeSourcePath(editfile);
+	cpp.Preprocess(p, in, GetMasterFile(p));
+	Upp::SaveFile(pfn, cpp.output);
+	HideBottom();
+	EditFile(pfn);
+	EditAsText();
+	if(!editor.IsReadOnly())
+		ToggleReadOnly();
+	editor.SetCursor(editor.GetPos(l));
 }
 
 void Ide::Preprocess(bool asmout) {
@@ -161,7 +189,7 @@ void Ide::Preprocess(bool asmout) {
 	String linkopt;
 	b->config = PackageConfig(wspc, pi, GetMethodVars(method), mainconfigparam, *host, *b);
 	console.Clear();
-	PutConsole((asmout ? "Компилируется " : "Препроцессируется ") + editfile);
+	PutConsole((asmout ? "Compiling " : "Preprocessing ") + editfile);
 	b->Preprocess(wspc[pi], editfile, pfn, asmout);
 	HideBottom();
 	if(FileExists(pfn)) {
@@ -175,13 +203,13 @@ void Ide::CreateMakefile()
 {
 	const Workspace& wspc = IdeWorkspace();
 	if(wspc.GetCount() == 0) {
-		PutConsole("Проект пуст!");
+		PutConsole("Project is empty!");
 		return;
 	}
 	FileSel mfout;
 	mfout.AllFilesType();
 	mfout <<= AppendFileName(GetFileDirectory(PackagePath(wspc[0])), "Makefile");
-	if(!mfout.ExecuteSaveAs("Сохранить makefile как"))
+	if(!mfout.ExecuteSaveAs("Save makefile as"))
 		return;
 	SaveMakeFile(~mfout, true);
 }

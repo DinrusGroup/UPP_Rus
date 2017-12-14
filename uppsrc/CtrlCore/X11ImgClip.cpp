@@ -4,7 +4,7 @@
 
 #include <plugin/bmp/bmp.h>
 
-NAMESPACE_UPP
+namespace Upp {
 
 const char *ClipFmtsImage()
 {
@@ -69,6 +69,12 @@ void AppendClipboardImage(const Image& img)
 	AppendClipboard("image/bmp", img, sBmp);
 }
 
-END_UPP_NAMESPACE
+void Append(VectorMap<String, ClipData>& data, const Image& img)
+{
+	data.Add(ClipFmt<Image>(), ClipData(img, sImg));
+	data.Add("image/bmp", ClipData(img, sBmp));
+}
+
+}
 
 #endif

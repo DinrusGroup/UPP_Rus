@@ -7,7 +7,7 @@
 #define IMAGEFILE <TabBar/TabBar.iml>
 #include <Draw/iml_header.h>
 
-NAMESPACE_UPP
+namespace Upp {
 
 //#define TABBAR_DEBUG
 
@@ -40,7 +40,7 @@ public:
 	AlignedFrame& SetLeft()		{ return SetAlign(LEFT); }
 	AlignedFrame& SetTop()		{ return SetAlign(TOP); }
 	AlignedFrame& SetRight()	{ return SetAlign(RIGHT); }
-	AlignedFrame& SetBottom()	{ return SetAlign(BOTTOM); }	
+	AlignedFrame& SetBottom()	{ return SetAlign(BOTTOM); }
 	AlignedFrame& SetFrameSize(int sz, bool refresh = true);
 		
 	int 		  GetAlign() const		{ return layout; }
@@ -93,18 +93,18 @@ class TabScrollBar : public AlignedFrame
 		void Clear();
 		void Set(const TabScrollBar& t);
 		bool IsScrollable() const;
-		Callback WhenScroll;
+		Event<>  WhenScroll;
 };
 
 class TabBar : public AlignedFrame
 {
 public:
-	struct Style : public TabCtrl::Style 
+	struct Style : public TabCtrl::Style
 	{
 		Image crosses[3];
 		Value group_separators[2];
 		
-		Style &	Write() const 				{ return *static_cast<Style *>(&TabCtrl::Style::Write()); }
+		Style &	Write() const               { return *static_cast<Style *>(&TabCtrl::Style::Write()); }
 		
 		Style&  DefaultCrosses();
 		Style&  Variant1Crosses();
@@ -123,7 +123,7 @@ protected:
 		TB_SBSEPARATOR = 1,
 		TB_ICON = 16,
 		TB_SPACEICON = 3
-	};	
+	};
 public:
 	struct TabItem : Moveable<TabItem> {
 		int x;
@@ -157,7 +157,7 @@ public:
 		String group;
 		
 		String  stackid;
-		int 	stack;
+		int     stack;
 
 		bool visible;
 
@@ -177,10 +177,10 @@ public:
 		
 		virtual void Serialize(Stream& s);
 		
-		Vector<TabItem> items;
+		Array<TabItem> items;
 		int itn;
 		
-		Tab() : id(-1), stack(-1), visible(true), itn(0) { items.SetCount(5); }
+		Tab();
 		Tab(const Tab& t) { Set(t); }
 		
 		void Set(const Tab& t);
@@ -188,7 +188,7 @@ public:
 		bool HasMouse(const Point& p) const;
 		bool HasMouseCross(const Point& p) const;
 		bool HasIcon() const						{ return !img.IsEmpty(); }
-		int  Right() const 							{ return pos.x + size.cx; }
+		int  Right() const                          { return pos.x + size.cx; }
 		
 		TabItem& AddItem();
 		void Clear();
@@ -197,15 +197,16 @@ public:
 		TabItem& AddImage(const Image& img, int side = LEFT);
 		TabItem& AddSpace(int space = 5, int side = LEFT);
 		
+		virtual ~Tab() {}
 	};
 	
 	// Tab sorting structures
 	struct TabSort {
 		virtual bool operator()(const Tab& a, const Tab& b) const = 0;
-	};	
+	};
 	struct TabGroupSort : public TabSort {
 		virtual bool operator()(const Tab& a, const Tab& b) const { return a.group < b.group; }
-	};	
+	};
 protected:
 	struct Group : Moveable<Group> {
 		Group()	{}
@@ -216,6 +217,8 @@ protected:
 		int last;
 		virtual void Serialize(Stream& s);
 		String ToString() const { return Format("%s - %d", name, count); }
+		
+		virtual ~Group() {}
 	};
 
 	struct TabValueSort : public TabSort {
@@ -225,15 +228,15 @@ protected:
 	struct TabKeySort : public TabSort {
 		virtual bool operator()(const Tab& a, const Tab& b) const { return (*vo)(a.key, b.key); }
 		const ValueOrder *vo;
-	};	
+	};
 	
 protected:
-	TabScrollBar 	sc;
+	TabScrollBar    sc;
 	
-	Vector<Group> 	groups;
-	Vector<Tab> 	tabs;
-	Vector<int>		separators;
-	int 			active;
+	Array<Group>    groups;
+	Array<Tab>      tabs;
+	Array<int>      separators;
+	int             active;
 	int             id;
 
 	int highlight;
@@ -245,7 +248,7 @@ protected:
 	bool isctrl;
 	bool isdrag;
 	bool grouping;
-	bool autoscrollhide;		
+	bool autoscrollhide;
 	bool nosel;
 	bool nohl;
 	bool inactivedisabled;
@@ -294,6 +297,7 @@ protected:
 	void 	DoStacking();
 	void 	DoUnstacking();
 	void 	InsertIntoStack(Tab& t, int ix);
+	int  	GetStackCount(int stackix) const;
 	int  	FindStackHead(int stackix) const;
 	int  	FindStackTail(int stackix) const;
 	bool 	IsStackHead(int n) const;
@@ -308,8 +312,31 @@ protected:
 	static int GetStyleHeight();
 	static Image AlignImage(int align, const Image& img);
 	static Value AlignValue(int align, const Value& v, const Size& isz);
+
+	using Ctrl::GetStdSize;
+	using Ctrl::Close;
+public:
+	enum { JumpDirLeft, JumpDirRight };
+
+	struct JumpStack : Moveable< JumpStack > {
+		int        All;
+		int        Rest;
+		int        jump_direct;
+
+		void Reset()                          { All = 0; Rest = 0; jump_direct = JumpDirLeft; }
+		bool IsReset() const                  { return ( All == 0 ); }
+		bool IsFull() const                   { return ( All == Rest ); }
+		void Activate( int N, int jd )        { All = N; Rest = N; jump_direct = jd; }
+
+		JumpStack() { Reset(); }
+	};
+
+	JumpStack jump_stack;
+	int  GetTabLR( int jd );
+	int  GetTabStackLR( int jd );
+	int  GetLR( int c, int jd );
 	
-protected:	
+protected:
 	virtual void Paint(Draw& w);
 	virtual void LeftDown(Point p, dword keysflags);
 	virtual void LeftUp(Point p, dword keysflags);
@@ -330,6 +357,7 @@ protected:
 	virtual void Layout();
 
 	// Mouse handling/tab positioning
+	Point AdjustMouse(Point const &p) const;
 	bool ProcessMouse(int i, const Point& p);
 	bool ProcessStackMouse(int i, const Point& p);
 	void SetHighlight(int n);
@@ -341,7 +369,8 @@ protected:
 	// Grouping
 	void MakeGroups();
 	int  FindGroup(const String& g) const;
-	void CloseAll(int exception);	
+	void CloseAll(int exception, int last_closed = 0);
+	void GoGrouping(int n);
 	void DoGrouping(int n);
 	void DoCloseGroup(int n);
 	void NewGroup(const String& name);
@@ -349,6 +378,8 @@ protected:
 	void SortTabs0();
 	void SortStack(int stackix);
 	void SortStack(int stackix, int head, int tail);
+
+	void CloseGroup();
 	
 	// Insertion without repos/refresh - for batch actions
 	int InsertKey0(int ix, const Value& key, const Value& value, Image icon = Null, String group = Null);
@@ -367,23 +398,23 @@ protected:
 	Point   GetImagePosition(int align, const Rect& r, int cx, int cy, int space, int side, int offset = 2) const;
 	bool	PaintIcons() 									{ return icons; }
 		
-	// Sub-class menu overrides
-	virtual void GroupMenu(Bar& bar, int n);
 	// Sorting/Stacking overriddes
 	virtual String 		GetStackId(const Tab& a)			{ return a.group; }
 	// For sub-classes to recieve cursor changes without using WhenAction
 	virtual void CursorChanged() { }
+	// for sub-classes to receive tab closes without using WhenClose
+	virtual void TabClosed(Value key) { }
 public:
 	typedef TabBar CLASSNAME;
 
-	Callback 					WhenHighlight;		// Executed on tab mouse-over
-	Callback 					WhenLeftDouble;		// Executed on left-button double-click (clicked tab will be the active tab)
-	Gate1<Value> 				CancelClose; 		// Return true to cancel action. Parameter: Key of closed tab
-	Callback1<Value>			WhenClose; 			// Executed before tab closing. Parameter: Key of closed tab
-	Gate	 					CancelCloseAll;		// Return true to cancel action;
-	Callback 		 			WhenCloseAll;		// Executed before 'Close All' action
-	Gate1<Vector<Value> >		CancelCloseSome;	// Return true to cancel action (executed with list of closing tabs)
-	Callback1<Vector<Value> >	WhenCloseSome;		// Executed before any 'Close' action (with list of closing tabs)
+	Event<>  					WhenHighlight;		// Executed on tab mouse-over
+	Event<>  					WhenLeftDouble;		// Executed on left-button double-click (clicked tab will be the active tab)
+	Gate<Value> 				CancelClose; 		// Return true to cancel action. Parameter: Key of closed tab
+	Event<Value>				WhenClose; 			// Executed before tab closing. Parameter: Key of closed tab
+	Gate<>	 					CancelCloseAll;		// Return true to cancel action;
+	Event<>  		 			WhenCloseAll;		// Executed before 'Close All' action
+	Gate<ValueArray>	     	CancelCloseSome;	// Return true to cancel action (executed with list of closing tabs)
+	Event<ValueArray>	    	WhenCloseSome;		// Executed before any 'Close' action (with list of closing tabs)
 
 	TabBar();
 	TabBar& CopyBaseSettings(const TabBar& src);
@@ -438,7 +469,7 @@ public:
 	TabBar&	AllowReorder(bool v = true)				{ allowreorder = v; return *this; }
 	
 	bool	IsGrouping() const				{ return grouping; }
-	bool	HasGroupSeparators() const		{ return separators; }
+	bool	HasGroupSeparators() const		{ return separators.GetCount(); }
 	bool	IsStacking() const				{ return stacking; }
 	bool	IsShowInactive() const			{ return inactivedisabled; }
 	
@@ -495,6 +526,8 @@ public:
 	int			  	GetScrollPos() const			{ return sc.GetPos(); }
 	TabBar&		  	SetScrollThickness(int sz);
 
+	void AddFrameToScrollBar(CtrlFrame& fr)  { sc.AddFrame(fr); }
+
 	Vector<Value> 	GetKeys() const;
 	Vector<Image> 	GetIcons() const;
 	TabBar&		  	CopySettings(const TabBar& src);
@@ -510,6 +543,6 @@ public:
 #include "FileTabs.h"
 #include "TabBarCtrl.h"
 
-END_UPP_NAMESPACE
+}
 
 #endif

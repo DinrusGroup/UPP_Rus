@@ -1,6 +1,6 @@
 #include "Draw.h"
 
-NAMESPACE_UPP
+namespace Upp {
 
 #define LLOG(x)    // RLOG(x)
 #define LTIMING(x) // RTIMING(x)
@@ -9,8 +9,8 @@ NAMESPACE_UPP
 static StaticMutex sDrawLock;
 
 INITBLOCK {
-	RichValue<Painting>::Register();
-	RichValue<Drawing>::Register();
+	Value::Register<Painting>("Painting");
+	Value::Register<Drawing>("Drawing");
 }
 
 void Draw::SinCos(int angle, double& sina, double& cosa)
@@ -113,6 +113,61 @@ void Draw::EndNative() {}
 
 int Draw::GetCloffLevel() const { return 0; }
 
+void Draw::Escape(const String& data) {}
+
+// -------------------------------
+
+void Draw::SysDrawImageOp(int x, int y, const Image& img, Color color)
+{
+	NEVER();
+}
+
+void Draw::SysDrawImageOp(int x, int y, const Image& img, const Rect& src, Color color)
+{
+	if(src == Rect(img.GetSize()))
+		SysDrawImageOp(x, y, img, color);
+	else {
+		Clipoff(x, y, src.GetWidth(), src.GetHeight());
+		SysDrawImageOp(-src.left, -src.top, img, color);
+		End();
+	}
+}
+
+void Draw::DrawImageOp(int x, int y, int cx, int cy, const Image& img, const Rect& src, Color color)
+{
+	LTIMING("DrawImageOp");
+	bool tonative = !IsNative();
+	if(tonative) {
+		BeginNative();
+		Native(x, y);
+		Native(cx, cy);
+	}
+	Size sz = Size(cx, cy);
+	if((cx > 2000 || cy > 1500) && IsNull(color) && IsPrinter()) {
+		int yy = 0;
+		ImageRaster ir(img);
+		RescaleImage rm;
+		rm.Create(Size(cx, cy), ir, src);
+		while(yy < cy) {
+			int ccy = min(cy - yy, 16);
+			ImageBuffer ib(cx, ccy);
+			for(int q = 0; q < ccy; q++)
+				rm.Get(ib[q]);
+			DrawImageBandRLE(*this, x, y + yy, ib, 16);
+			yy += ccy;
+		}
+	}
+	else
+	if(src.GetSize() == sz)
+		SysDrawImageOp(x, y, img, src, color);
+	else {
+		Image h = Rescale(img, Size(cx, cy), src);
+		SysDrawImageOp(x, y, h, h.GetSize(), color);
+	}
+	if(tonative)
+		EndNative();
+}
+
 // -------------------------------
 
 void Draw::DrawRect(const Rect& rect, Color color)
@@ -184,15 +239,14 @@ void Draw::DrawImage(int x, int y, const Image& img)
 void Draw::DrawImage(int x, int y, const Image& img, const Rect& src, Color color)
 {
 	if(IsNull(color)) return;
-	Size sz = img.GetSize();
-	DrawImageOp(x, y, sz.cx, sz.cy, img, src, color);
+	DrawImageOp(x, y, src.Width(), src.Height(), img, src, color);
 }
 
 void Draw::DrawImage(int x, int y, const Image& img, Color color)
 {
 	if(IsNull(color)) return;
 	Size sz = img.GetSize();
-	DrawImageOp(x, y, sz.cx, sz.cy, img, img.GetSize(), color);
+	DrawImageOp(x, y, sz.cx, sz.cy, img, sz, color);
 }
 
 void Draw::DrawData(int x, int y, int cx, int cy, const String& data, const char *type)
@@ -359,19 +413,27 @@ bool Draw::IsPainting(int x, int y, int cx, int cy) const
 	return IsPainting(RectC(x, y, cx, cy));
 }
 
-static void (*sIgfn)(ImageBuffer& ib, const Painting& pw, Size sz, Point pos, int mode);
-static void (*sIwfn)(ImageBuffer& ib, const Drawing& p, int mode);
+static void  (*sIgfn)(ImageBuffer& ib, const Painting& pw, Size sz, Point pos, int mode);
+static void  (*sIwfn)(ImageBuffer& ib, const Drawing& p, int mode);
+static Image (*sRG)(Point at, int angle, int chr, Font fnt, Color color, Size sz);
 
 void RegisterPaintingFns__(void (*ig)(ImageBuffer& ib, const Painting& pw, Size sz, Point pos, int mode),
-                           void (*iw)(ImageBuffer& ib, const Drawing& p, int mode))
+                           void (*iw)(ImageBuffer& ib, const Drawing& p, int mode),
+                           Image (*rg)(Point at, int angle, int chr, Font fnt, Color color, Size sz))
 {
 	sIgfn = ig;
 	sIwfn = iw;
+	sRG = rg;
 }
 
 bool HasPainter()
 {
-	return sIgfn && sIwfn;
+	return sIgfn && sIwfn && sRG;
+}
+
+Image RenderGlyphByPainter(Point at, int angle, int chr, Font fnt, Color color, Size sz)
+{
+	return sRG ? (*sRG)(at, angle, chr, fnt, color, sz) : Image();
 }
 
 void PaintImageBuffer(ImageBuffer& ib, const Painting& p, Size sz, Point pos, int mode)
@@ -391,6 +453,14 @@ void PaintImageBuffer(ImageBuffer& ib, const Drawing& iw, int mode)
 		(*sIwfn)(ib, iw, mode);
 }
 
+Drawing AsDrawing(const Painting& pw)
+{
+	Size sz = pw.GetSize();
+	DrawingDraw dw(sz);
+	dw.DrawPainting(sz, pw);
+	return dw.GetResult();
+}
+
 void Draw::DrawPaintingOp(const Rect& target, const Painting& pw)
 {
 	if(!HasPainter())
@@ -401,7 +471,7 @@ void Draw::DrawPaintingOp(const Rect& target, const Painting& pw)
 		while(yy < sz.cy) {
 			int ccy = min(sz.cy - yy, 100);
 			ImageBuffer ib(sz.cx, ccy);
-			Fill(~ib, White(), ib.GetLength());
+			Fill(~ib, IsPrinter() ? White() : Null, ib.GetLength());
 			PaintImageBuffer(ib, pw, sz, Point(0, yy), true);
 			DrawImageBandRLE(*this, target.left, target.top + yy, ib, 16);
 			yy += ccy;
@@ -409,7 +479,7 @@ void Draw::DrawPaintingOp(const Rect& target, const Painting& pw)
 	}
 	else {
 		ImageBuffer ib(sz);
-		Fill(~ib, IsPrinter() ? White() : SColorPaper(), ib.GetLength());
+		Fill(~ib, IsPrinter() ? White() : Null, ib.GetLength());
 		PaintImageBuffer(ib, pw, sz, Point(0, 0), IsPrinter());
 		DrawImage(target.left, target.top, ib);
 	}
@@ -418,6 +488,12 @@ void Draw::DrawPaintingOp(const Rect& target, const Painting& pw)
 void Draw::DrawPainting(int x, int y, int cx, int cy, const Painting& ig)
 {
 	DrawPainting(RectC(x, y, cx, cy), ig);
+}
+
+void Draw::DrawPainting(int x, int y, const Painting& iw)
+{
+	Size sz = iw.GetSize();
+	DrawPainting(RectC(x, y, sz.cx, sz.cy), iw);
 }
 
 // ---------------------------
@@ -445,4 +521,4 @@ void NilDraw::DrawTextOp(int x, int y, int angle, const wchar *text, Font font, 
 void NilDraw::DrawDrawingOp(const Rect& target, const Drawing& w) {}
 void NilDraw::DrawPaintingOp(const Rect& target, const Painting& w) {}
 
-END_UPP_NAMESPACE
+}

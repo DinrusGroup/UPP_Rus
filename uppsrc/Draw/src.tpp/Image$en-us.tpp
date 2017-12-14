@@ -12,8 +12,8 @@ topic "Image and ImageBuffer";
 [{_} 
 [ {{10000@(113.42.0) [s0;%% [*@7;4 Image]]}}&]
 [s3; &]
-[s1;:Image`:`:class: [@(0.0.255) class]_Image_:_[@(0.0.255) public]_[@3 AssignValueTypeNo]<_
-Image, [@3 150], [_^Moveable^ Moveable]<Image>_>_&]
+[s1;:Image`:`:class: [*@(0.0.255) class][* _Image_:_][*@(0.0.255) public][* _][*@3 AssignValueTy
+peNo][* <_Image, ][*@3 150][* , ][*_^Moveable^ Moveable][* <Image>_>_]&]
 [s9;%% Image represents an immutable image value. Image can be directly 
 painted to Draw. To create or change Image, use [^`:`:ImageBuffer^ ImageBuffer].&]
 [s9;%% Image has low`-cost constant time deep copy. It is moveable 
@@ -35,7 +35,8 @@ erator`[`]([@(0.0.255) int]_[@3 i])_[@(0.0.255) const]&]
 [s2;%% Returns a pointer to the first pixel in the line [%-*@3 i].&]
 [s3; &]
 [s4; &]
-[s5;:Image`:`:GetSize`(`)const: [_^Size^ Size]_GetSize()_[@(0.0.255) const]&]
+[s5;:Image`:`:GetSize`(`)const: [_^topic`:`/`/Core`/src`/Size`$en`-us^ Size]_GetSize()_
+[@(0.0.255) const]&]
 [s2;%% Returns the dimension of Image.&]
 [s3; &]
 [s4; &]
@@ -51,20 +52,23 @@ erator`[`]([@(0.0.255) int]_[@3 i])_[@(0.0.255) const]&]
 [s2;%% Number of pixels in Image `- GetWidth() `* GetHeight().&]
 [s3; &]
 [s4; &]
-[s5;:Image`:`:GetHotSpot`(`)const: [_^Point^ Point]_GetHotSpot()[@(64) _][@(0.0.255) const]&]
+[s5;:Image`:`:GetHotSpot`(`)const: [_^topic`:`/`/Core`/src`/Point`$en`-us^ Point]_GetHo
+tSpot()[@(64) _][@(0.0.255) const]&]
 [s2;%% Returns the reference point.&]
 [s3; &]
 [s4; &]
-[s5;:Image`:`:Get2ndSpot`(`)const: [_^Point^ Point]_Get2ndSpot()_[@(0.0.255) const]&]
+[s5;:Image`:`:Get2ndSpot`(`)const: [_^topic`:`/`/Core`/src`/Point`$en`-us^ Point]_Get2n
+dSpot()_[@(0.0.255) const]&]
 [s2;%% Returns secondary reference point.&]
 [s3; &]
 [s4; &]
-[s5;:Image`:`:GetDots`(`)const: [_^Size^ Size]_GetDots()[@(64) _][@(0.0.255) const]&]
+[s5;:Image`:`:GetDots`(`)const: [_^topic`:`/`/Core`/src`/Size`$en`-us^ Size]_GetDots()[@(64) _
+][@(0.0.255) const]&]
 [s2;%% Gets the physical size of Image. If physical size is not set, 
 returns Size(0, 0).&]
 [s3; &]
 [s4; &]
-[s5;:Image`:`:GetDPI`(`): [_^Size^ Size]_GetDPI()&]
+[s5;:Image`:`:GetDPI`(`): [_^Upp`:`:Size^ Size]_[* GetDPI]()_[@(0.0.255) const]&]
 [s2;%% Returns the image resolution in dpi (dots per inch).&]
 [s3; &]
 [s4; &]
@@ -80,6 +84,19 @@ or (if it is IMAGE`_UNKNOWN) resolved by scanning pixels. If
 the kind is IMAGE`_UNKNOWN, the pixels are scanned and the type 
 is determined, it is then stored (in private Image instance variable) 
 for future use and returned.&]
+[s3; &]
+[s4; &]
+[s5;:Image`:`:Begin`(`)const: [@(0.0.255) const]_[_^RGBA^ RGBA]_`*[* Begin]()_[@(0.0.255) con
+st]&]
+[s5;:Upp`:`:Image`:`:begin`(`)const: [@(0.0.255) const]_[_^Upp`:`:RGBA^ RGBA]_`*[* begin]()
+_[@(0.0.255) const]&]
+[s2;%% Returns a pointer to the first pixel.&]
+[s3; &]
+[s4; &]
+[s5;:Image`:`:End`(`)const: [@(0.0.255) const]_[_^RGBA^ RGBA]_`*[* End]()_[@(0.0.255) const]&]
+[s5;:Upp`:`:Image`:`:end`(`)const: [@(0.0.255) const]_[_^Upp`:`:RGBA^ RGBA]_`*[* end]()_[@(0.0.255) c
+onst]&]
+[s2;%% Returns begin() `+ GetLength().&]
 [s3; &]
 [s4; &]
 [s5;:Image`:`:GetSerialId`(`)const: [_^int64^ int64]_GetSerialId()[@(64) _][@(0.0.255) cons
@@ -111,7 +128,8 @@ nst]&]
 hash value (potentially slow).&]
 [s3; &]
 [s4; &]
-[s5;:Image`:`:ToString`(`)const: [_^String^ String]_ToString()[@(64) _][@(0.0.255) const]&]
+[s5;:Image`:`:ToString`(`)const: [_^topic`:`/`/Core`/src`/String`$en`-us^ String]_ToStr
+ing()[@(64) _][@(0.0.255) const]&]
 [s2;%% Returns the basic Image informations as String.&]
 [s3; &]
 [s4; &]
@@ -254,6 +272,12 @@ t][@(0.0.255) `&]_[*@3 srect])&]
 of ImageBuffer [%-*@3 dest].&]
 [s3;%% &]
 [s4; &]
+[s5;:Fill`(ImageBuffer`&`,const Rect`&`,RGBA`): [@(0.0.255) void]_[* Fill]([_^ImageBuffer^ I
+mageBuffer][@(0.0.255) `&]_[*@3 dest], [@(0.0.255) const]_[_^Rect^ Rect][@(0.0.255) `&]_[*@3 r
+ect], [_^RGBA^ RGBA]_[*@3 color])&]
+[s2;%% Fills rectangular are [%-*@3 rect] with [%-*@3 color] .&]
+[s3;%% &]
+[s4; &]
 [s5;:Copy`(Image`&`,Point`,const Image`&`,const Rect`&`): [@(0.0.255) void]_[* Copy]([_^Image^ I
 mage][@(0.0.255) `&]_[*@3 dest], [_^Point^ Point]_[*@3 p], [@(0.0.255) const]_[_^Image^ Image
 ][@(0.0.255) `&]_[*@3 src], [@(0.0.255) const]_[_^Rect^ Rect][@(0.0.255) `&]_[*@3 srect])&]
@@ -274,6 +298,18 @@ mage][@(0.0.255) `&]_[*@3 dest], [_^Point^ Point]_[*@3 p], [@(0.0.255) const]_[_
 ][@(0.0.255) `&]_[*@3 src], [@(0.0.255) const]_[_^Rect^ Rect][@(0.0.255) `&]_[*@3 srect])&]
 [s2;%% Mixes using alpha information Rect [%-*@3 srect] of Image [%-*@3 src] 
 into Point [%-*@3 p] of Image [%-*@3 dest].&]
+[s3;%% &]
+[s4; &]
+[s5;:Upp`:`:Over`(Upp`:`:Image`&`,const Upp`:`:Image`&`): [@(0.0.255) void]_[* Over]([_^Upp`:`:Image^ I
+mage][@(0.0.255) `&]_[*@3 dest], [@(0.0.255) const]_[_^Upp`:`:Image^ Image][@(0.0.255) `&]_
+[*@3 src])&]
+[s2;%% Same as Over([%-*@3 dest], Point(0, 0), [%-*@3 src], [%-*@3 src].GetSize()).&]
+[s3;%% &]
+[s4; &]
+[s5;:Fill`(Image`&`,const Rect`&`,RGBA`): [@(0.0.255) void]_[* Fill]([_^Image^ Image][@(0.0.255) `&
+]_[*@3 dest], [@(0.0.255) const]_[_^Rect^ Rect][@(0.0.255) `&]_[*@3 rect], 
+[_^RGBA^ RGBA]_[*@3 color])&]
+[s2;%% Fills rectangular are [%-*@3 rect] with [%-*@3 color].&]
 [s3;%% &]
 [s4; &]
 [s5;:OverStraightOpaque`(ImageBuffer`&`,Point`,const Image`&`,const Rect`&`): [@(0.0.255) v
@@ -304,6 +340,12 @@ mage][@(0.0.255) `&]_[*@3 img], [@(0.0.255) const]_[_^Rect^ Rect][@(0.0.255) `&]
 [@(0.0.255) int]_[*@3 y], [@(0.0.255) int]_[*@3 cx], [@(0.0.255) int]_[*@3 cy])&]
 [s2;%% Returns a subimage from [%-*@3 img] defined by origin [%-*@3 x,] 
 [%-*@3 y], width [%-*@3 cx] and height [%-*@3 cy].&]
+[s3;%% &]
+[s4; &]
+[s5;:AutoCrop`(const Image`&`,RGBA`): [_^Image^ Image]_[* AutoCrop]([@(0.0.255) const]_[_^Image^ I
+mage][@(0.0.255) `&]_[*@3 m], [_^RGBA^ RGBA]_[*@3 c])&]
+[s2;%% Detects rectangular margin with uniform color [%-*@3 c] and 
+then crops this margin out.&]
 [s3;%% &]
 [s4; &]
 [s5;:ColorMask`(const Image`&`,Color`): [_^Image^ Image]_[* ColorMask]([@(0.0.255) const]_[_^Image^ I
@@ -363,12 +405,21 @@ based on [%-*@3 img].&]
 [s4; &]
 [s5;:Sharpen`(const Image`&`,int`): [_^Image^ Image]_[* Sharpen]([@(0.0.255) const]_[_^Image^ I
 mage][@(0.0.255) `&]_[*@3 img], [@(0.0.255) int]_[*@3 amount]_`=_[@3 100])&]
-[s2;%%  [%-*@3 img] [%-*@3 amount].&]
+[s2;%% Sharpens image using primitive convolution filter.&]
+[s3;%% &]
+[s4; &]
+[s5;:Dither`(const Image`&`,int`): [_^Image^ Image]_[* Dither]([@(0.0.255) const]_[_^Image^ I
+mage][@(0.0.255) `&]_[*@3 m], [@(0.0.255) int]_[*@3 dival]_`=_[@3 394])&]
+[s2;%% Provides primitive dithering with 8x8 matrix into black/white 
+picture. Dival is sort of gamma control of output, lowering it 
+from default value (to e.g. 350) can produce better results when 
+dithering is using for printing on purely monochromatic (without 
+half`-toning support) printers.&]
 [s3;%% &]
 [s4; &]
 [s5;:Etched`(const Image`&`): [_^Image^ Image]_[* Etched]([@(0.0.255) const]_[_^Image^ Image][@(0.0.255) `&
 ]_[*@3 img])&]
-[s2;%%  [%-*@3 img].&]
+[s2;%% `"Etching`" effect.&]
 [s3;%% &]
 [s4; &]
 [s5;:SetColorKeepAlpha`(const Image`&`,Color`): [_^Image^ Image]_[* SetColorKeepAlpha]([@(0.0.255) c
@@ -410,4 +461,4 @@ mage][@(0.0.255) `&]_[*@3 m], [@(0.0.255) int]_[*@3 angle])&]
 [s2;%% Returns a new Image based on Image [%-*@3 m] rotated [%-*@3 angle] 
 by its center where the full rotation (2[%- π) ]is 3600.&]
 [s3;%% &]
-[s3; ]
+[s3; ]]

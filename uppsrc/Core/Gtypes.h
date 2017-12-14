@@ -56,7 +56,7 @@ struct Size_ : Moveable< Size_<T> > {
 	friend T      Squared(Size_ a)             { return a.cx * a.cx + a.cy * a.cy; }
 	friend double Length(Size_ a)              { return hypot(a.cx, a.cy); }
 
-	unsigned      GetHashValue() const         { return UPP::GetHashValue(cx) ^ UPP::GetHashValue(cy); }
+	unsigned      GetHashValue() const         { return CombineHash(cx, cy); }
 
 	String        ToString() const;
 
@@ -72,10 +72,17 @@ struct Size_ : Moveable< Size_<T> > {
 
 	Size_(const Nuller&)                       { cx = cy = Null; }
 
-	operator Value() const                     { return RichValue<Size_>(*this); }
-	Size_(const Value& src)                    { *this = RichValue<Size_>::Extract(src); }
+	operator Value() const                     { return FitsSvoValue<Size_>() ? SvoToValue(*this) : RichToValue(*this); }
+	Size_(const Value& src)                    { *this = src.Get<Size_>(); }
+
+	operator Ref()                             { return AsRef(*this); }
 
 	void Serialize(Stream& s)                  { s % cx % cy; }
+	void Jsonize(JsonIO& jio)                  { jio("cx", cx)("cy", cy); }
+	void Xmlize(XmlIO& xio)                    { xio.Attr("cx", cx).Attr("cy", cy); }
+	
+	int  Compare(const Size_&) const           { NEVER(); return 0; }
+	int  PolyCompare(const Value&) const       { NEVER(); return 0; }
 
 #ifdef PLATFORM_WIN32
 	operator SIZE*()                           { ASSERT(sizeof(*this) == sizeof(SIZE)); return (SIZE*)this; }
@@ -158,7 +165,7 @@ struct Point_ : Moveable< Point_<T> > {
 
 	friend Point_ Nvl(Point_ a, Point_ b)           { return IsNull(a) ? b : a; }
 
-	unsigned      GetHashValue() const              { return UPP::GetHashValue(x) ^ UPP::GetHashValue(y); }
+	unsigned      GetHashValue() const              { return CombineHash(x, y); }
 
 	String        ToString() const;
 
@@ -174,10 +181,17 @@ struct Point_ : Moveable< Point_<T> > {
 
 	Point_(const Nuller&)                           { x = y = Null; }
 
-	operator Value() const                          { return RichValue<Point_>(*this); }
-	/*explicit */Point_(const Value& src)               { *this = RichValue<Point_>::Extract(src); }
+	operator Value() const                          { return FitsSvoValue<Point_>() ? SvoToValue(*this) : RichToValue(*this); }
+	Point_(const Value& src)                        { *this = src.Get<Point_>(); }
+
+	operator Ref()                                  { return AsRef(*this); }
 
 	void Serialize(Stream& s)                       { s % x % y; }
+	void Jsonize(JsonIO& jio)                       { jio("x", x)("y", y); }
+	void Xmlize(XmlIO& xio)                         { xio.Attr("x", x).Attr("y", y); }
+
+	int  Compare(const Point_&) const               { NEVER(); return 0; }
+	int  PolyCompare(const Value&) const            { NEVER(); return 0; }
 
 #ifdef PLATFORM_WIN32
 	operator POINT*()                               { ASSERT(sizeof(*this) == sizeof(POINT)); return (POINT*)this; }
@@ -310,6 +324,8 @@ struct Rect_ : Moveable< Rect_<T> > {
 	Rect_& operator-=(Sz sz)                                { Offset(-sz); return *this; }
 	Rect_& operator-=(Pt p)                                 { Offset(-p); return *this; }
 	Rect_& operator-=(const Rect_& b);
+	Rect_& operator*=(T t)                                  { left *= t; right *= t; top *= t; bottom *= t; return *this; }
+	Rect_& operator/=(T t)                                  { left /= t; right /= t; top /= t; bottom /= t; return *this; }
 
 	Rect_& operator|=(Pt p)                                 { Union(p); return *this; }
 	Rect_& operator|=(const Rect_& rc)                      { Union(rc); return *this; }
@@ -326,6 +342,8 @@ struct Rect_ : Moveable< Rect_<T> > {
 	friend Rect_ operator-(Rect_ a, Sz b)                   { return a -= b; }
 	friend Rect_ operator-(Rect_ a, Pt b)                   { return a -= b; }
 	friend Rect_ operator-(Rect_ a, const Rect_& b)         { return a -= b; }
+	friend Rect_ operator*(Rect_ a, T t)                    { return a *= t; }
+	friend Rect_ operator/(Rect_ a, T t)                    { return a /= t; }
 	friend Rect_ operator|(Rect_ a, Rect_ b)                { a.Union(b); return a; }
 	friend Rect_ operator&(Rect_ a, Rect_ b)                { a.Intersect(b); return a; }
 	friend bool  operator&&(const Rect_& a, const Rect_& b) { return a.Intersects(b); }
@@ -336,7 +354,7 @@ struct Rect_ : Moveable< Rect_<T> > {
 
 	friend const Rect_& Nvl(const Rect_& a, const Rect_& b) { return IsNull(a) ? b : a; }
 
-	unsigned     GetHashValue() const           { return UPP::GetHashValue(left) ^ UPP::GetHashValue(top) ^ UPP::GetHashValue(right) ^ UPP::GetHashValue(bottom); }
+	unsigned     GetHashValue() const                       { return CombineHash(left, top, right, bottom); }
 
 	String ToString() const;
 
@@ -353,10 +371,17 @@ struct Rect_ : Moveable< Rect_<T> > {
 
 	Rect_(const Nuller&)             { SetNull(); }
 
-	operator Value() const           { return RichValue<Rect_>(*this); }
-	/*explicit */Rect_(const Value& src) { *this = RichValue<Rect_>::Extract(src); }
+	operator Value() const           { return RichToValue(*this); }
+	Rect_(const Value& src)          { *this = src.Get<Rect_>(); }
 
-	void     Serialize(Stream& s)    { s % left % top % right % bottom; }
+	operator Ref()                   { return AsRef(*this); }
+
+	void     Serialize(Stream& s) { s % left % top % right % bottom; }
+	void     Jsonize(JsonIO& jio) { jio("left", left)("top", top)("right", right)("bottom", bottom); }
+	void     Xmlize(XmlIO& xio)   { xio.Attr("left", left).Attr("top", top).Attr("right", right).Attr("bottom", bottom); }
+
+	int      Compare(const Rect_&) const           { NEVER(); return 0; }
+	int      PolyCompare(const Value&) const       { NEVER(); return 0; }
 
 #ifdef PLATFORM_WIN32
 	operator const RECT*() const { ASSERT(sizeof(*this) == sizeof(RECT)); return (RECT*)this; }
@@ -700,6 +725,9 @@ enum Alignment {
 Size        GetRatioSize(Size stdsize, int cx, int cy);
 Size        GetFitSize(Size objsize, int cx, int cy);
 inline Size GetFitSize(Size objsize, Size intosize) { return GetFitSize(objsize, intosize.cx, intosize.cy); }
+
+Sizef GetFitSize(Sizef sz, double cx, double cy);
+inline Sizef GetFitSize(Sizef objsize, Sizef intosize) { return GetFitSize(objsize, intosize.cx, intosize.cy); }
 
 Pointf Mid(const Pointf& a, const Pointf& b);
 Pointf Orthogonal(const Pointf& p);

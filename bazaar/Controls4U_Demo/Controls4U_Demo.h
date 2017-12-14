@@ -57,13 +57,31 @@ public:
 	Functions4U_Demo();
 	void OnDiff();
 	void OnPatch();
+	void OnSet();
 };
 
-class DrawingCanvas_Demo : public WithDrawingCanvas<StaticRect> {
+class PainterCanvas_Demo : public WithPainterCanvas<StaticRect> {
 public:
-	typedef DrawingCanvas_Demo CLASSNAME;
-	DrawingCanvas_Demo();
+	typedef PainterCanvas_Demo CLASSNAME;
+	PainterCanvas_Demo();
 };
+
+class StaticImageSet_Demo : public WithStaticImageSet<StaticRect> {
+public:
+	typedef StaticImageSet_Demo CLASSNAME;
+	StaticImageSet_Demo();
+};
+
+class SplitterButton_Demo : public StaticRect {
+public:
+	typedef SplitterButton_Demo CLASSNAME;
+	SplitterButton_Demo();
+
+private:
+	SplitterButton splitterH, splitterV;
+	ArrayCtrl left, top, bottom;
+};
+
 
 class Controls4U_Demo : public WithMain<TopWindow> {
 public:
@@ -78,7 +96,10 @@ public:
 	JBControlsDemo jbcontrols_Demo;
 	FileBrowser_Demo fileBrowser_Demo;
 	Functions4U_Demo functions4U_Demo;
-	DrawingCanvas_Demo drawingCanvas_Demo;
+	PainterCanvas_Demo painterCanvas_Demo;
+	StaticImageSet_Demo staticImageSet_Demo;
+	SplitterButton_Demo splitterButton_Demo;
+	AboutUpp aboutDlg;
 #if defined(PLATFORM_WIN32) 
 	Firefox_Demo firefox_Demo;
 	IExplorer_Demo iexplorer_Demo;
@@ -86,6 +107,10 @@ public:
 #endif
 	int timerOn;
 	void Timer();
+	
+private:
+	Vector<StaticRect *> controls;
+	void OnGridSel();
 };
 
 #endif

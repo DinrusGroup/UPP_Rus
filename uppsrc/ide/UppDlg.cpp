@@ -34,7 +34,7 @@ struct DependsDisplay : Display {
 		WString txt = q;
 		w.DrawRect(r, paper);
 		w.Clipoff(r.left + 10, r.top, r.Width() - 20, r.Height());
-		Image img = IdeFileImage(q);
+		Image img = IdeFileImage(q, false, false);
 		Size isz = img.GetSize();
 		w.DrawImage(0, (r.Height() - isz.cy) / 2, img);
 		int tcy = GetTLTextHeight(txt, StdFont());
@@ -72,12 +72,12 @@ int CondFilter(int c) {
 
 void UsesDlg::New()
 {
-	text <<= SelectPackage("Выберите пакет");
+	text <<= SelectPackage("Select package");
 }
 
 UsesDlg::UsesDlg()
 {
-	CtrlLayoutOKCancel(*this, "Использования");
+	CtrlLayoutOKCancel(*this, "Uses");
 	when.SetFilter(CondFilter);
 	text.SetDisplay(Single<UsesDisplay>());
 	text.WhenPush = THISBACK(New);
@@ -90,11 +90,17 @@ void PackageEditor::SaveOptions() {
 		actual.bold = ~bold;
 		actual.italic = ~italic;
 		actual.charset = (byte)(int)~charset;
+		actual.tabsize = ~tabsize;
+		actual.spellcheck_comments = ~spellcheck_comments;
 		actual.accepts = Split(accepts.GetText().ToString(), ' ');
-		actual.optimize_speed = optimize_speed;
 		actual.noblitz = noblitz;
-		if(IsActiveFile())
-			ActiveFile().optimize_speed = optimize_speed_file;
+		actual.nowarnings = nowarnings;
+		if(IsActiveFile()) {
+			Package::File& f = ActiveFile();
+			f.pch = pch_file;
+			f.nopch = nopch_file;
+			f.noblitz = noblitz_file;
+		}
 		SavePackage();
 	}
 }
@@ -112,12 +118,14 @@ void PackageEditor::Empty()
 {
 	FileEmpty();
 	charset.Disable();
+	tabsize.Disable();
+	spellcheck_comments.Disable();
 	noblitz.Disable();
+	nowarnings.Disable();
 	description.Disable();
 	ink.Disable();
 	italic.Disable();
 	bold.Disable();
-	optimize_speed.Disable();
 	filelist.Clear();
 	filelist.Disable();
 	option.Clear();
@@ -128,10 +136,12 @@ void PackageEditor::FileEmpty()
 {
 	fileoption.Clear();
 	fileoption.Disable();
-	optimize_speed_file = false;
-	optimize_speed_file.Disable();
-	include_path_file = false;
-	include_path_file.Disable();
+	pch_file = false;
+	pch_file.Disable();
+	nopch_file = false;
+	nopch_file.Disable();
+	noblitz_file = false;
+	noblitz_file.Disable();
 	includeable_file = false;
 	includeable_file.Disable();
 }
@@ -168,21 +178,25 @@ void PackageEditor::PackageCursor()
 		bold <<= actual.bold;
 		italic <<= actual.italic;
 		charset <<= (int)actual.charset;
-		optimize_speed = actual.optimize_speed;
+		tabsize <<= actual.tabsize;
+		spellcheck_comments <<= actual.spellcheck_comments;
 		noblitz = actual.noblitz;
+		nowarnings = actual.nowarnings;
 		String s;
 		for(int i = 0; i < actual.accepts.GetCount(); i++) {
 			if(i) s << ' ';
 			s << actual.accepts[i];
 		}
-		accepts = s.ToWString();
+		accepts <<= s.ToWString();
 		description.Enable();
 		ink.Enable();
 		bold.Enable();
 		italic.Enable();
 		charset.Enable();
+		tabsize.Enable();
+		spellcheck_comments.Enable();
 		noblitz.Enable();
-		optimize_speed.Enable();
+		nowarnings.Enable();
 		accepts.Enable();
 		option.Enable();
 		option.Clear();
@@ -234,6 +248,11 @@ void PackageEditor::SetOpt(ArrayCtrl& opt, int type, OptItem& m, const String& w
 	FindOpt(opt, type, when, text);
 }
 
+int FlagFilterR(int c)
+{
+	return c == '-' ? c : FlagFilter(c);
+}
+
 void PackageEditor::AddOption(int type)
 {
 	if(IsNull(actualpackage))
@@ -249,6 +268,10 @@ void PackageEditor::AddOption(int type)
 	CtrlLayoutOKCancel(dlg, opt_name[type]);
 	dlg.when.SetFilter(CondFilter);
 	dlg.when.Enable(type != INCLUDE);
+	if(type == FLAG) {
+		dlg.text.SetFilter(FlagFilterR);
+		dlg.info.SetLabel("Use '-' prefix to remove the flag");
+	}
 	if(dlg.Run() != IDOK)
 		return;
 	SetOpt(option, type, opt[type]->Add(), ~dlg.when, ~dlg.text);
@@ -320,15 +343,15 @@ void PackageEditor::MoveOption(int d)
 void PackageEditor::OptionMenu(Bar& bar)
 {
 	bool b = !IsNull(actualpackage);
-	bar.Add(b, "Добавить пакет..", IdeImg::package_add(), THISBACK1(AddOption, USES));
+	bar.Add(b, "Add package..", IdeImg::package_add(), THISBACK1(AddOption, USES));
 	for(int j = FLAG; j <= INCLUDE; j++)
 		if(j != USES)
-			bar.Add(b, "Новый " + opt_name[j] + "..", THISBACK1(AddOption, j));
+			bar.Add(b, "New " + opt_name[j] + "..", THISBACK1(AddOption, j));
 	bar.Separator();
 	b = option.IsCursor() && (int)option.Get(0) >= 0;
-	bar.Add(b, "Редактировать..", THISBACK(EditOption))
+	bar.Add(b, "Edit..", THISBACK(EditOption))
 		.Key(K_CTRL_ENTER);
-	bar.Add(b, "Удалить", THISBACK(RemoveOption))
+	bar.Add(b, "Remove", THISBACK(RemoveOption))
 	   .Key(K_DELETE);
 	bar.Separator();
 	int type = option.IsCursor() ? (int)option.Get(0) : -1;
@@ -339,10 +362,10 @@ void PackageEditor::OptionMenu(Bar& bar)
 		i = option.Get(1);
 	}
 	bar.Add(i >= 0 && min(i, i - 1) >= 0,
-	        "Поднять", THISBACK1(MoveOption, -1))
+	        "Move up", THISBACK1(MoveOption, -1))
 	   .Key(K_CTRL_UP);
 	bar.Add(m && i >= 0 && max(i, i + 1) < m->GetCount(),
-	        "Опустить", THISBACK1(MoveOption, 1))
+	        "Move down", THISBACK1(MoveOption, 1))
 	   .Key(K_CTRL_DOWN);
 }
 
@@ -353,16 +376,22 @@ void PackageEditor::FileCursor()
 		Package::File& f = ActiveFile();
 		if(!f.separator) {
 			String p = GetActiveFilePath();
-			bool tpp = GetFileExt(p) == ".tpp" && IsFolder(p);
-			optimize_speed_file.Enable(!tpp);
-			optimize_speed_file <<= actual.file[actualfileindex].optimize_speed;
+			String ext = ToLower(GetFileExt(p));
+			bool tpp = ext == ".tpp" && IsFolder(p);
+			bool hdr = IsHeaderExt(ext) && !tpp;
+			pch_file.Enable(hdr);
+			pch_file <<= f.pch;
+			nopch_file.Enable(!hdr);
+			nopch_file <<= f.nopch;
+			noblitz_file.Enable(!tpp);
+			noblitz_file <<= f.noblitz;
 			includeable_file.Enable(tpp);
 			includeable_file <<= FileExists(AppendFileName(p, "all.i"));
 			fileoption.Enable();
 			fileoption.Clear();
-			OptionAdd(fileoption, FILEOPTION, "Дополнительные параметры компилятора для данного файла",
+			OptionAdd(fileoption, FILEOPTION, "Additional compiler options for the file",
 			          f.option);
-			OptionAdd(fileoption, FILEDEPENDS, "Дополнительные зависимости для данного файла",
+			OptionAdd(fileoption, FILEDEPENDS, "Additional dependencies for the file",
 			          f.depends);
 			return;
 		}
@@ -378,14 +407,14 @@ void PackageEditor::AdjustFileOptionCursor()
 void PackageEditor::FileOptionMenu(Bar& bar)
 {
 	bool b = IsActiveFile();
-	bar.Add(b, "Добавить флаги компилятора..", THISBACK(AddFileOption)).Key(K_INSERT);
-	bar.Add(b, "Добавить зависимость..", THISBACK1(AddDepends, false)).Key(K_CTRL_INSERT);
-	bar.Add(b, "Добавить внешнюю зависимость..", THISBACK1(AddDepends, true)).Key(K_SHIFT_INSERT);
+	bar.Add(b, "Add compiler flags..", THISBACK(AddFileOption)).Key(K_INSERT);
+	bar.Add(b, "Add dependence..", THISBACK1(AddDepends, false)).Key(K_CTRL_INSERT);
+	bar.Add(b, "Add external dependence..", THISBACK1(AddDepends, true)).Key(K_SHIFT_INSERT);
 	bar.Separator();
 	b = fileoption.IsCursor() && (int)fileoption.Get(0) >= 0;
 	int type = b ? (int)fileoption.Get(0) : -1;
-	bar.Add(b, "Редактировать..", THISBACK(EditFileOption)).Key(K_CTRL_ENTER);
-	bar.Add(b, "Удалить", THISBACK(RemoveFileOption)).Key(K_DELETE);
+	bar.Add(b, "Edit..", THISBACK(EditFileOption)).Key(K_CTRL_ENTER);
+	bar.Add(b, "Remove", THISBACK(RemoveFileOption)).Key(K_DELETE);
 	bar.Separator();
 	int i = -1;
 	Array<OptItem> *m = NULL;
@@ -394,10 +423,10 @@ void PackageEditor::FileOptionMenu(Bar& bar)
 		i = fileoption.Get(1);
 	}
 	bar.Add(i >= 0 && min(i, i - 1) >= 0,
-	        "Поднять", THISBACK1(MoveFileOption, -1))
+	        "Move up", THISBACK1(MoveFileOption, -1))
 	   .Key(K_CTRL_UP);
 	bar.Add(m && i >= 0 && max(i, i + 1) < m->GetCount(),
-	        "Опустить", THISBACK1(MoveFileOption, 1))
+	        "Move down", THISBACK1(MoveFileOption, 1))
 	   .Key(K_CTRL_DOWN);
 }
 
@@ -429,14 +458,14 @@ void DependsDlg::New()
 		fs = &OutputFs();
 		fs->Multi(false);
 	}
-	if(fs->ExecuteOpen("Дополнительная файловая зависимость"))
+	if(fs->ExecuteOpen("Additional file dependency"))
 		text <<= ~*fs;
 	fs->Multi();
 }
 
 DependsDlg::DependsDlg()
 {
-	CtrlLayoutOKCancel(*this, "Дополнительная файловая зависимость");
+	CtrlLayoutOKCancel(*this, "Additional file dependency");
 	when.SetFilter(CondFilter);
 	text.SetDisplay(Single<DependsDisplay>());
 	text.WhenPush = THISBACK(New);
@@ -459,7 +488,7 @@ void PackageEditor::AddFileOption()
 	if(!IsActiveFile())
 		return;
 	WithUppOptDlg<TopWindow> dlg;
-	CtrlLayoutOKCancel(dlg, "Параметры компилятора для данного файла");
+	CtrlLayoutOKCancel(dlg, "Compiler options for the file");
 	dlg.when.SetFilter(CondFilter);
 	if(dlg.Run() == IDOK)
 		SetOpt(fileoption, FILEDEPENDS, ActiveFile().option.Add(), ~dlg.when, ~dlg.text);
@@ -475,14 +504,14 @@ void PackageEditor::EditFileOption()
 		return;
 	OptItem& m = f.option[(int)fileoption.Get(1)];
 	WithUppOptDlg<TopWindow> dlg;
-	CtrlLayoutOKCancel(dlg, "Параметры компилятора для данного файла");
+	CtrlLayoutOKCancel(dlg, "Compiler options for the file");
 	dlg.when.SetFilter(CondFilter);
 	dlg.when <<= m.when;
 	dlg.text <<= m.text;
 	if(dlg.Run() != IDOK)
 		return;
-	m.when = dlg.when;
-	m.text = dlg.text;
+	m.when = ~dlg.when;
+	m.text = ~dlg.text;
 	SaveLoadPackage();
 	FindOpt(fileoption, FILEOPTION, ~dlg.when, ~dlg.text);
 }
@@ -544,7 +573,7 @@ void PackageEditor::SaveOptionsLoad()
 void PackageEditor::Description()
 {
 	WithDescriptionLayout<TopWindow> dlg;
-	CtrlLayoutOKCancel(dlg, "Описание пакета");
+	CtrlLayoutOKCancel(dlg, "Package description");
 	dlg.text <<= ~description;
 	if(dlg.Run() != IDOK)
 		return;
@@ -555,30 +584,34 @@ void PackageEditor::Description()
 PackageEditor::PackageEditor()
 {
 	organizer = true;
-	CtrlLayoutOKCancel(*this, "Органайзер пакета");
+	CtrlLayoutOKCancel(*this, "Package organizer");
 	description.Disable();
 	description <<= THISBACK(Description);
+	
+	spellcheck_comments.Add(Null, "Default");
+	DlSpellerLangs(spellcheck_comments);
 	DlCharsetD(charset);
 	charset.Disable();
-	optimize_speed.Disable();
 	filelist.Disable();
+	spellcheck_comments.Disable();
 	accepts.SetFilter(FlagFilter);
-	accepts <<=
-	charset <<= THISBACK(SaveOptions);
+	accepts ^= spellcheck_comments ^= charset ^= tabsize ^= THISFN(SaveOptions);
 	noblitz <<=
-	optimize_speed <<=
-	optimize_speed_file <<=
-	include_path_file <<= THISBACK(SaveOptionsLoad);
+	nowarnings <<=
+	pch_file <<=
+	nopch_file <<=
+	noblitz_file <<= THISBACK(SaveOptionsLoad);
 	
 	includeable_file <<= THISBACK(ToggleIncludeable);
 
-	Add("Добавить/удалить флаги", actual.flag);
-	Add("Использования", actual.uses);
-	Add("Цели", actual.target);
-	Add("Библиотеки", actual.library);
-	Add("Параметры компоновки", actual.link);
-	Add("Параметры компилятора", actual.option);
-	Add("Внутренние включения", actual.include);
+	Add("Add/remove flags", actual.flag);
+	Add("Uses", actual.uses);
+	Add("Targets", actual.target);
+	Add("Libraries", actual.library);
+	Add("Static libraries", actual.static_library);
+	Add("Link options", actual.link);
+	Add("Compiler options", actual.option);
+	Add("Internal includes", actual.include);
 
 	Init(option);
 	option.WhenCursor = THISBACK(AdjustPackageOptionCursor);
@@ -594,6 +627,8 @@ PackageEditor::PackageEditor()
 	ink <<=
 	bold <<=
 	italic <<= THISBACK(SaveOptionsLoad);
+
+	FileCursor();
 }
 
 void EditPackages(const char *main, const char *startwith, String& cfg) {

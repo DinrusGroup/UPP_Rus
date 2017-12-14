@@ -5,7 +5,9 @@
 #include <plugin/z/z.h>
 
 
-NAMESPACE_UPP
+namespace Upp {
+
+INITIALIZE(PdfDraw);
 
 class TTFReader {
 	struct TTFStream {
@@ -225,6 +227,20 @@ public:
 	~TTFReader();
 };
 
+struct PdfSignatureInfo {
+	String pkey;
+	String cert;
+
+	String name;
+	String location;
+	String reason;
+	String contact_info;
+
+	Time   time;
+	
+	PdfSignatureInfo() { time = Null; }
+};
+
 class PdfDraw : public Draw {
 public:
 	virtual dword GetInfo() const;
@@ -258,20 +274,28 @@ public:
 	virtual void DrawTextOp(int x, int y, int angle, const wchar *text, Font font,
 		                    Color ink, int n, const int *dx);
 
+	virtual void Escape(const String& data);
+
 private:
 	struct CharPos : Moveable<CharPos>   { word fi, ci; };
 
 	struct OutlineInfo : Moveable<OutlineInfo> {
 		bool ttf;
 		bool sitalic;
+		bool sbold;
+	};
+	
+	struct UrlInfo {
+		Rectf  rect;
+		String url;
 	};
 
 	VectorMap<Font, OutlineInfo>                outline_info;
 	VectorMap<Font, Vector<wchar> >             pdffont;
 	VectorMap<Font, VectorMap<wchar, CharPos> > fontchars;
-	Vector<Image>                               image;
-	Vector<Rect>                                imagerect;
 	Index<uint64>                               patterns;
+	VectorMap< Tuple2<int64, Rect>, Image>      images;
+	Array< Array<UrlInfo> >                     page_url;
 	
 	Vector<int>  offset;
 	StringBuffer out;
@@ -285,6 +309,10 @@ private:
 	int         margin;
 	uint64      patternid;
 	bool        pdfa;
+	bool        empty;
+	String      url;
+	Vector<Point> offset_stack;
+	Point       current_offset;
 
 	inline double Pt(double dot)        { return 0.12 * dot; }
 
@@ -302,6 +330,10 @@ private:
 	CharPos GetCharPos(Font fnt, wchar chr);
 	void    FlushText(int dx, int fi, int height, const String& txt);
 	static String PdfColor(Color c);
+	static String PdfString(const char *s);
+
+	void PushOffset();
+	void PopOffset();
 
 	OutlineInfo GetOutlineInfo(Font fnt);
 
@@ -332,15 +364,17 @@ private:
 	RGlyph RasterGlyph(Font fnt, int chr);
 
 public:
-	String Finish();
+	String Finish(const PdfSignatureInfo *sign = NULL);
 	void   Clear();
-
+	bool   IsEmpty() const                                   { return empty; }
+	
 	PdfDraw(int pagecx, int pagecy, bool pdfa = false)       { Init(pagecx, pagecy, 0, pdfa); }
 	PdfDraw(Size pgsz = Size(5100, 6600), bool pdfa = false) { Init(pgsz.cx, pgsz.cy, 0, pdfa); }
 };
 
-String Pdf(const Array<Drawing>& report, Size pagesize, int margin, bool pdfa = false);
+String Pdf(const Array<Drawing>& report, Size pagesize, int margin, bool pdfa = false,
+           const PdfSignatureInfo *sign = NULL);
 
-END_UPP_NAMESPACE
+}
 
 #endif

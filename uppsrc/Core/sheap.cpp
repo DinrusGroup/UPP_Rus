@@ -1,7 +1,6 @@
 #include <Core/Core.h>
-//#BLITZ_APPROVE
 
-NAMESPACE_UPP
+namespace Upp {
 
 #ifdef UPP_HEAP
 
@@ -26,46 +25,45 @@ inline void Heap::Page::Format(int k)
 	freelist = l;
 }
 
-Heap::Page *Heap::WorkPage(int k)
+Heap::Page *Heap::WorkPage(int k) // get a new workpage with empty blocks
 {
 	LLOG("AllocK - next work not available " << k << " empty: " << (void *)empty[k]);
-	Page *page = empty[k];
+	Page *page = empty[k]; // hot empty page of the same klass
 	empty[k] = NULL;
-	if(!page) {
+	if(!page) { // try to reacquire pages freed remotely
 		LLOG("AllocK - trying FreeRemote");
-		FreeRemote();
-		if(work[k]->freelist) {
+		SmallFreeRemote();
+		if(work[k]->freelist) { // partially free page found
 			LLOG("AllocK - work available after FreeRemote " << k);
 			return work[k];
 		}
-		page = empty[k];
+		page = empty[k]; // hot empty page
 		empty[k] = NULL;
 	}
 	if(!page)
-		for(int i = 0; i < NKLASS; i++)
+		for(int i = 0; i < NKLASS; i++) // Try hot empty page of different klass
 			if(empty[i]) {
 				LLOG("AllocK - free page available for reformatting " << k);
 				page = empty[i];
 				empty[i] = NULL;
-				page->Format(k);
+				page->Format(k); // reformat the page for the required klass
 				break;
 			}
-	if(!page) {
+	if(!page) { // Attempt to find page in global storage of free pages
 		Mutex::Lock __(mutex);
-		aux.FreeRemoteRaw();
-		if(aux.work[k]->next != aux.work[k]) {
+		aux.SmallFreeRemoteRaw();
+		if(aux.work[k]->next != aux.work[k]) { // Try page of the same klass first
 			page = aux.work[k]->next;
 			page->Unlink();
-			page->heap = this;
 			LLOG("AllocK - adopting aux page " << k << " page: " << (void *)page << ", free " << (void *)page->freelist);
 		}
-		if(!page && aux.empty[k]) {
+		if(!page && aux.empty[k]) { // Try hot empty page of the same klass
 			page = aux.empty[k];
 			aux.empty[k] = page->next;
 			LLOG("AllocK - empty aux page available of the same format " << k << " page: " << (void *)page << ", free " << (void *)page->freelist);
 		}
 		if(!page)
-			for(int i = 0; i < NKLASS; i++)
+			for(int i = 0; i < NKLASS; i++) // Finally try to to find hot page of different klass
 				if(aux.empty[i]) {
 					page = aux.empty[i];
 					aux.empty[i] = page->next;
@@ -73,8 +71,8 @@ Heap::Page *Heap::WorkPage(int k)
 					LLOG("AllocK - empty aux page available for reformatting " << k << " page: " << (void *)page << ", free " << (void *)page->freelist);
 					break;
 				}
-		if(!page) {
-			page = (Page *)AllocRaw4KB();
+		if(!page) { // No free memory was found, ask system for the new page
+			page = (Page *)AllocRaw4KB(Ksz(k));
 			LLOG("AllocK - allocated new system page " << (void *)page << " " << k);
 			page->Format(k);
 		}
@@ -112,10 +110,9 @@ void *Heap::AllocK(int k)
 	}
 }
 
-
 inline
 void *Heap::Allok(int k)
-{
+{ // Try to alloc from the front-cache first
 	FreeLink *ptr = cache[k];
 	if(ptr) {
 		cachen[k]++;
@@ -125,47 +122,41 @@ void *Heap::Allok(int k)
 	return DbgFreeCheckK(AllocK(k), k);
 }
 
-inline
-void *Heap::Alloc(size_t sz)
-{
-	Stat(sz);
-	if(sz <= 224) {
-		if(sz == 0) sz = 1;
-		return Allok(((int)sz - 1) >> 4);
-	}
-	if(sz <= 576)
-		return Allok(sz <= 368 ? sz <= 288 ? 14 : 15 : sz <= 448 ? 16 : 17);
-	return LAlloc(sz);
-}
-
-inline
+force_inline
 void *Heap::AllocSz(size_t& sz)
 {
 	Stat(sz);
-	if(sz <= 224) {
-		if(sz == 0) sz = 1;
-		int k = ((int)sz - 1) >> 4;
-		sz = (k + 1) << 4;
+	if(sz <= 384) {
+		if(sz == 0)
+			sz = 1;
+		int k = ((int)sz - 1) >> 5;
+		sz = (k + 1) << 5;
 		return Allok(k);
 	}
-	if(sz <= 576) {
-		int k;
-		if(sz <= 368)
-			if(sz <= 288)
-				sz = 288, k = 14;
-			else
-				sz = 368, k = 15;
-		else
-			if(sz <= 448)
-				sz = 448, k = 16;
-			else
-				sz = 576, k = 17;
-		return Allok(k);
+	if(sz <= 992) {
+		if(sz <= 448) {
+			sz = 448;
+			return Allok(12);
+		}
+		if(sz <= 576) {
+			sz = 576;
+			return Allok(13);
+		}
+		if(sz <= 672) {
+			sz = 672;
+			return Allok(14);
+		}
+		if(sz <= 800) {
+			sz = 800;
+			return Allok(15);
+		}
+		sz = 992;
+		return Allok(16);
 	}
 	return LAlloc(sz);
 }
 
-inline
+force_inline
 void Heap::FreeK(void *ptr, Page *page, int k)
 {
 	if(page->freelist) {
@@ -179,8 +170,8 @@ void Heap::FreeK(void *ptr, Page *page, int k)
 		((FreeLink *)ptr)->next = NULL;
 	}
 	page->freelist = (FreeLink *)ptr;
-	if(--page->active == 0) {
-		LLOG("Free page is empty" << " " << (void *)page);
+	if(--page->active == 0) { // there are no more allocated blocks in this page
+		LLOG("Free page is empty " << (void *)page);
 		page->Unlink();
 		if(this == &aux) {
 			LLOG("...is aux");
@@ -188,7 +179,7 @@ void Heap::FreeK(void *ptr, Page *page, int k)
 			empty[k] = page;
 		}
 		else {
-			if(empty[k]) {
+			if(empty[k]) { // Keep one hot empty page per klass in thread, put rest to 'aux' global storage
 				LLOG("Global free " << k << " " << (void *)empty[k]);
 				Mutex::Lock __(mutex);
 				empty[k]->heap = &aux;
@@ -200,165 +191,241 @@ void Heap::FreeK(void *ptr, Page *page, int k)
 	}
 }
 
+force_inline
+void Heap::Free(void *ptr, Page *page, int k)
+{
+	LLOG("Small free page: " << (void *)page << ", k: " << k << ", ksz: " << Ksz(k));
+	ASSERT((4096 - ((uintptr_t)ptr & (uintptr_t)4095)) % Ksz(k) == 0);
+#ifdef _MULTITHREADED
+	if(page->heap != this) { // freeing page allocated in different thread
+		RemoteFree(ptr, Ksz(k)); // add to originating heap's list of free pages to be properly freed later
+		return;
+	}
+#endif
+	DbgFreeFillK(ptr, k);
+	if(cachen[k]) {
+		cachen[k]--;
+		FreeLink *l = (FreeLink *)ptr;
+		l->next = cache[k];
+		cache[k] = l;
+		return;
+	}
+	FreeK(ptr, page, k);
+}
+
+force_inline
 void Heap::Free(void *ptr)
 {
 	if(!ptr) return;
 	LLOG("Free " << ptr);
-	if((((dword)(uintptr_t)ptr) & 8) == 0) {
-		Page *page = (Page *)((uintptr_t)ptr & ~(uintptr_t)4095);
-		int k = page->klass;
-		LLOG("Small free page: " << (void *)page << ", k: " << k << ", ksz: " << Ksz(k));
-		ASSERT((4096 - ((uintptr_t)ptr & (uintptr_t)4095)) % Ksz(k) == 0);
-#ifdef _MULTITHREADED
-		if(page->heap != this) {
-			page->heap->RemoteFree(ptr);
-			return;
-		}
-#endif
-		DbgFreeFillK(ptr, k);
-		if(cachen[k]) {
-			cachen[k]--;
-			FreeLink *l = (FreeLink *)ptr;
-			l->next = cache[k];
-			cache[k] = l;
-			return;
-		}
-		FreeK(ptr, page, k);
+	if(IsSmall(ptr)) {
+		Page *page = GetPage(ptr);
+		Free(ptr, page, page->klass);
 	}
 	else
 		LFree(ptr);
 }
 
-void Heap::FreeDirect(void *ptr)
+size_t Heap::GetBlockSize(void *ptr)
 {
-	LLOG("Free Direct " << ptr);
-	if((((dword)(uintptr_t)ptr) & 8) == 0) {
-		Page *page = (Page *)((uintptr_t)ptr & ~(uintptr_t)4095);
+	if(!ptr) return 0;
+	LLOG("GetBlockSize " << ptr);
+	if(IsSmall(ptr)) {
+		Page *page = GetPage(ptr);
 		int k = page->klass;
-		LLOG("Small free page: " << (void *)page << ", k: " << k << ", ksz: " << Ksz(k));
-		ASSERT((4096 - ((uintptr_t)ptr & (uintptr_t)4095)) % Ksz(k) == 0);
-		DbgFreeFillK(ptr, k);
-		FreeK(ptr, page, k);
+		return Ksz(k);
 	}
-	else
-		LFree(ptr);
+	return LGetBlockSize(ptr);
 }
 
-inline
+bool Heap::TryRealloc(void *ptr, size_t newsize)
+{
+	if(!ptr) return 0;
+	LLOG("GetBlockSize " << ptr);
+	if(IsSmall(ptr)) {
+		Page *page = GetPage(ptr);
+		int k = page->klass;
+		return newsize <= (size_t)Ksz(k);
+	}
+	return LTryRealloc(ptr, newsize);
+}
+
+void Heap::SmallFreeDirect(void *ptr)
+{ // does not need to check for target heap or small vs large
+	LLOG("Free Direct " << ptr);
+	Page *page = GetPage(ptr);
+	ASSERT(page->heap == this);
+	int k = page->klass;
+	LLOG("Small free page: " << (void *)page << ", k: " << k << ", ksz: " << Ksz(k));
+	ASSERT((4096 - ((uintptr_t)ptr & (uintptr_t)4095)) % Ksz(k) == 0);
+	DbgFreeFillK(ptr, k);
+	FreeK(ptr, page, k);
+}
+
+force_inline
 void *Heap::Alloc32()
 {
 	Stat(32);
-	return Allok(1);
+	return Allok(KLASS_32);
 }
 
-inline
+force_inline
+void Heap::Free(void *ptr, int k)
+{
+	Free(ptr, GetPage(ptr), k);
+}
+
+force_inline
 void Heap::Free32(void *ptr)
 {
-	Page *page = (Page *)((uintptr_t)ptr & ~(uintptr_t)4095);
-	LLOG("Small free page: " << (void *)page << ", k: " << k << ", ksz: " << Ksz(k));
-	ASSERT((4096 - ((uintptr_t)ptr & (uintptr_t)4095)) % Ksz(1) == 0);
-#ifdef _MULTITHREADED
-	if(page->heap != this) {
-		page->heap->RemoteFree(ptr);
-		return;
-	}
-#endif
-	DbgFreeFillK(ptr, 1);
-	if(cachen[1]) {
-		cachen[1]--;
-		FreeLink *l = (FreeLink *)ptr;
-		l->next = cache[1];
-		cache[1] = l;
-		return;
-	}
-	FreeK(ptr, page, 1);
+	Free(ptr, KLASS_32);
 }
 
-inline
+force_inline
 void *Heap::Alloc48()
 {
 	Stat(48);
-	return Allok(2);
+	return Allok(KLASS_48);
 }
 
-inline
+force_inline
 void Heap::Free48(void *ptr)
 {
-	Page *page = (Page *)((uintptr_t)ptr & ~(uintptr_t)4095);
-	LLOG("Small free page: " << (void *)page << ", k: " << k << ", ksz: " << Ksz(k));
-	ASSERT((4096 - ((uintptr_t)ptr & (uintptr_t)4095)) % Ksz(2) == 0);
-#ifdef _MULTITHREADED
-	if(page->heap != this) {
-		page->heap->RemoteFree(ptr);
-		return;
-	}
-#endif
-	DbgFreeFillK(ptr, 2);
-	if(cachen[2]) {
-		cachen[2]--;
-		FreeLink *l = (FreeLink *)ptr;
-		l->next = cache[2];
-		cache[2] = l;
-		return;
-	}
-	FreeK(ptr, page, 2);
+	Free(ptr, KLASS_48);
 }
 
-Heap::Page    dummy;
-#define DI    { { 0, 0, 0, 0, &dummy, &dummy } }
+force_inline
+Heap *ThreadHeap()
+{
+#if defined(COMPILER_GCC) && defined(PLATFORM_WIN32)  // Workaround for MINGW bug
+	thread_local byte sHeap[sizeof(Heap)];
+	thread_local Heap *heap;
+	if(!heap)
+		heap = (Heap *)sHeap;
+	return heap;
+#else
+	thread_local Heap heap[1];
+	return heap;
+#endif
+}
 
-thread__ Heap heap = {
-	{ DI, DI, DI, DI, DI, DI, DI, DI, DI, DI, DI, DI, DI, DI, DI, DI, DI, DI }
-};
+void MemoryFreek__(int klass, void *ptr)
+{
+	ThreadHeap()->Free((void *)ptr, klass);
+}
+
+void *MemoryAllok__(int klass)
+{
+	return ThreadHeap()->Allok(klass);
+}
 
 #if defined(HEAPDBG)
+
 void *MemoryAlloc_(size_t sz)
 {
-	return heap.Alloc(sz);
+	return ThreadHeap()->AllocSz(sz);
 }
 
 void  MemoryFree_(void *ptr)
 {
-	heap.Free(ptr);
+	ThreadHeap()->Free(ptr);
 }
+
+size_t GetMemoryBlockSize_(void *ptr)
+{
+	return ThreadHeap()->GetBlockSize(ptr);
+}
+
 #else
+
+#define LTIMING(x) // RTIMING(x)
+
 void *MemoryAlloc(size_t sz)
 {
-	return heap.Alloc(sz);
+	LTIMING("MemoryAlloc");
+	return ThreadHeap()->AllocSz(sz);
 }
 
 void *MemoryAllocSz(size_t& sz)
 {
-	return heap.AllocSz(sz);
+	LTIMING("MemoryAllocSz");
+	return ThreadHeap()->AllocSz(sz);
 }
 
 void  MemoryFree(void *ptr)
 {
-	heap.Free(ptr);
+	LTIMING("MemoryFree");
+	ThreadHeap()->Free(ptr);
+}
+
+size_t GetMemoryBlockSize(void *ptr)
+{
+	return ThreadHeap()->GetBlockSize(ptr);
+}
+
+bool   TryRealloc(void *ptr, size_t size)
+{
+	return ThreadHeap()->TryRealloc(ptr, size);
 }
 
 void *MemoryAlloc32()
 {
-	return heap.Alloc32();
+	LTIMING("MemoryAlloc32");
+	return ThreadHeap()->Alloc32();
 }
 
 void  MemoryFree32(void *ptr)
 {
-	heap.Free32(ptr);
+	LTIMING("MemoryFree32");
+	ThreadHeap()->Free32(ptr);
 }
 
 void *MemoryAlloc48()
 {
-	return heap.Alloc48();
+	LTIMING("MemoryAlloc48");
+	return ThreadHeap()->Alloc48();
 }
 
 void  MemoryFree48(void *ptr)
 {
-	heap.Free48(ptr);
+	LTIMING("MemoryFree48");
+	ThreadHeap()->Free48(ptr);
 }
 
 #endif
 
+void MemoryFreeThread()
+{
+	ThreadHeap()->Shutdown();
+}
+
+void MemoryCheck()
+{
+	ThreadHeap()->Check();
+}
+
+MemoryProfile::MemoryProfile()
+{
+	ThreadHeap()->Make(*this);
+}
+
+static MemoryProfile *sPeak;
+
+void DoPeakProfile()
+{
+	if(sPeak)
+		ThreadHeap()->Make(*sPeak);
+}
+
+MemoryProfile *PeakMemoryProfile()
+{
+	if(sPeak)
+		return sPeak;
+	sPeak = (MemoryProfile *)MemoryAllocPermanent(sizeof(MemoryProfile));
+	memset(sPeak, 0, sizeof(MemoryProfile));
+	return NULL;
+}
+
 #endif
 
-END_UPP_NAMESPACE
+}

@@ -4,7 +4,12 @@
 #	include <winnls.h>
 #endif
 
-NAMESPACE_UPP
+#if defined(PLATFORM_POSIX) && defined(COMPILER_GCC) && !defined(PLATFORM_ANDROID)
+#	include <execinfo.h>
+#	include <cxxabi.h>
+#endif
+
+namespace Upp {
 
 bool PanicMode;
 
@@ -23,10 +28,61 @@ void PanicMessageBox(const char *title, const char *text)
 	if(sPanicMessageBox)
 		(*sPanicMessageBox)(title, text);
 	else {
-		write(2, text, (int)strlen(text));
-		write(2, "\n", 1);
+		IGNORE_RESULT(
+			write(2, text, (int)strlen(text))
+		);
+		IGNORE_RESULT(
+			write(2, "\n", 1)
+		);
 	}
 }
+
+
+#if defined(PLATFORM_POSIX) && defined(COMPILER_GCC) && !defined(PLATFORM_ANDROID)
+void AddStackTrace(char * str, int len)
+{
+	const size_t max_depth = 100;
+    void *stack_addrs[max_depth];
+    char **stack_strings;
+    const char msg[] = "\nStack trace:\n";
+
+    size_t stack_depth = backtrace(stack_addrs, max_depth);
+    stack_strings = backtrace_symbols(stack_addrs, stack_depth);
+
+	int space = len - strlen(str);
+	strncat(str, msg, max(space, 0));
+	space -= sizeof(msg) - 1;
+	
+    for (size_t i = 0; i < stack_depth && space > 0; i++) {
+
+		char * start = strchr(stack_strings[i], '(');
+		if (start == NULL) continue;
+
+		size_t len;
+		int stat;
+
+		char * end = strchr(start, '+');
+		if (end != NULL) *end = '\0';
+
+		char * demangled = abi::__cxa_demangle(start+1, NULL, &len, &stat);
+
+		if (stat == 0 && demangled != NULL){
+			strncat(str, demangled, max(space, 0));
+			space -= len;
+		}else{
+			strncat(str, start, max(space, 0));
+			space -= strlen(start);
+		}
+		if (demangled != NULL) free(demangled);
+		
+		strncat(str, "\n", max(space, 0));
+		space -= 1;
+    }
+    
+    free(stack_strings);
+}
+#endif
+
 
 void    Panic(const char *msg)
 {
@@ -39,10 +95,7 @@ void    Panic(const char *msg)
 	if(PanicMode)
 		return;
 	PanicMode = true;
-	LOG(msg);
-	BugLog() << "PANIC: " << msg << "\n";
-	UsrLogT("===== PANIC ================================================");
-	UsrLogT(msg);
+	RLOG("****************** PANIC: " << msg << "\n");
 	PanicMessageBox("Fatal error", msg);
 
 #ifdef PLATFORM_WIN32
@@ -82,13 +135,14 @@ void    AssertFailed(const char *file, int line, const char *cond)
 	PanicMode = true;
 	char s[2048];
 	sprintf(s, "Assertion failed in %s, line %d\n%s\n", file, line, cond);
-	LOG(s);
-	LOG(GetLastErrorMessage());
+#if defined(PLATFORM_POSIX) && defined(COMPILER_GCC) && defined(flagSTACKTRACE)
+	AddStackTrace(s, sizeof(s));
+#endif
+
 	if(s_assert_hook)
 		(*s_assert_hook)(s);
-	BugLog() << "ASSERT FAILED: " << s << "\n";
-	UsrLogT("===== ASSERT FAILED ================================================");
-	UsrLogT(s);
+	RLOG("****************** ASSERT FAILED: " << s << "\n");
+	RLOG("LastErrorMessage: " << GetLastErrorMessage());
 
 	PanicMessageBox("Fatal error", s);
 
@@ -115,13 +169,24 @@ void    AssertFailed(const char *file, int line, const char *cond)
 
 #ifdef PLATFORM_POSIX
 dword GetTickCount() {
+#if _POSIX_C_SOURCE >= 199309L
+	struct timespec tp;
+	if (clock_gettime(CLOCK_MONOTONIC, &tp) == 0)
+	{
+		return (dword)((tp.tv_sec * 1000) + (tp.tv_nsec / 1000000));
+	}
+	return 0; // ?? (errno is set)
+#else
 	struct timeval tv[1];
 	struct timezone tz[1];
 	memset(tz, 0, sizeof(tz));
 	gettimeofday(tv, tz);
 	return (dword)tv->tv_sec * 1000 + tv->tv_usec / 1000;
+#endif
 }
 #endif
+
+int msecs(int from) { return GetTickCount() - (dword)from; }
 
 void TimeStop::Reset()
 {
@@ -219,258 +284,6 @@ bool InScList(const char *s, const char *list)
 	return InScListIndex(s, list) >= 0;
 }
 
-void StringC::Free() {
-	if(IsString()) delete (String *) bap.GetPtr();
-}
-
-StringC::~StringC() {
-	Free();
-}
-
-StringC::operator const char *() const {
-	if(IsEmpty()) return NULL;
-	if(IsString()) return *(String *) bap.GetPtr();
-	return (const char *)bap.GetPtr();
-}
-
-StringC::operator String() const {
-	if(IsEmpty()) return (const char *)NULL;
-	if(IsString()) return *(String *) bap.GetPtr();
-	return (const char *)bap.GetPtr();
-}
-
-bool StringC::IsEmpty() const {
-	if(IsString()) return (*(String *) bap.GetPtr()).IsEmpty();
-	if(!bap.GetPtr()) return true;
-	return !*(const char *)bap.GetPtr();
-}
-
-void StringC::SetString(const String& s) {
-	Free();
-	String *ptr = new String;
-	*ptr = s;
-	bap.Set1(ptr);
-}
-
-void StringC::SetCharPtr(const char *s) {
-	Free();
-	bap.Set0((void *)s);
-}
-
-CharFilterTextTest::CharFilterTextTest(int (*filter)(int)) : filter(filter) {}
-CharFilterTextTest::~CharFilterTextTest() {}
-
-const char *CharFilterTextTest::Accept(const char *s) const {
-	if(!(*filter)((byte)*s++)) return NULL;
-	return s;
-}
-
-Vector<String> Split(const char *s, const TextTest& delim, bool ignoreempty) {
-	Vector<String> r;
-	const char *t = s;
-	while(*t) {
-		const char *q = delim.Accept(t);
-		if(q) {
-			if(!ignoreempty || t > s)
-				r.Add(String(s, t));
-			t = s = q;
-		}
-		else
-			t++;
-	}
-	if(!ignoreempty || t > s)
-		r.Add(String(s, t));
-	return r;
-}
-
-Vector<String> Split(const char *s, int (*filter)(int), bool ignoreempty) {
-	return Split(s, CharFilterTextTest(filter), ignoreempty);
-}
-
-struct chrTextTest : public TextTest {
-	int chr;
-	virtual const char *Accept(const char *s) const { return chr == *s ? s + 1 : NULL; }
-};
-
-Vector<String> Split(const char *s, int chr, bool ignoreempty) {
-	chrTextTest ct;
-	ct.chr = chr;
-	return Split(s, ct, ignoreempty);
-}
-
-struct StringSplit : TextTest {
-	String test;
-
-	virtual const char *Accept(const char *s) const {
-		int l = test.GetCount();
-		if(l && memcmp(~test, s, l) == 0)
-			return s + l;
-		return NULL;
-	}
-};
-
-Vector<String> Split(const char *s, const String& delim, bool ignoreempty)
-{
-	StringSplit ss;
-	ss.test = delim;
-	return Split(s, ss, ignoreempty);
-}
-
-String Join(const Vector<String>& im, const String& delim) {
-	String r;
-	for(int i = 0; i < im.GetCount(); i++) {
-		if(i) r.Cat(delim);
-		r.Cat(im[i]);
-	}
-	return r;
-}
-
-WString Join(const Vector<WString>& im, const WString& delim) {
-	WString r;
-	for(int i = 0; i < im.GetCount(); i++) {
-		if(i) r.Cat(delim);
-		r.Cat(im[i]);
-	}
-	return r;
-}
-// ---------------------------
-
-VectorMap<String, String> LoadIniStream(Stream &sin) {
-	Stream *in = &sin;
-	FileIn fin;
-	VectorMap<String, String> key;
-	int c;
-	if((c = in->Get()) < 0) return key;
-	for(;;) {
-		String k, v;
-		for(;;) {
-			if(IsAlNum(c) || c == '_')
-				k.Cat(c);
-			else
-				break;
-			if((c = in->Get()) < 0) return key;
-		}
-		for(;;) {
-			if(c != '=' && c != ' ') break;
-			if((c = in->Get()) < 0) return key;
-		}
-		for(;;) {
-			if(c < ' ') break;
-			v.Cat(c);
-			if((c = in->Get()) < 0) break;
-		}
-		if(!k.IsEmpty())
-			key.Add(k, v);
-		if(k == "LINK") {
-			if(in == &fin)
-				fin.Close();
-			if(!fin.Open(v) || (c = in->Get()) < 0) return key;
-			in = &fin;
-		}
-		else
-			for(;;) {
-				if(IsAlNum(c) || c == '_') break;
-				if((c = in->Get()) < 0) return key;
-			}
-	}
-}
-
-VectorMap<String, String> LoadIniFile(const char *filename) {
-	FileIn in(filename);
-	if(!in) return VectorMap<String, String>();
-	return LoadIniStream(in);
-}
-
-static StaticMutex sMtx;
-static char  sIniFile[256];
-static bool s_ini_loaded;
-
-void SetIniFile(const char *name) {
-	Mutex::Lock __(sMtx);
-	strcpy(sIniFile, name);
-}
-
-String GetIniKey(const char *id, const String& def) {
-	Mutex::Lock __(sMtx);
-	static VectorMap<String, String> key;
-	if(!s_ini_loaded) {
-		s_ini_loaded = true;
-		key = LoadIniFile(*sIniFile ? sIniFile : ~ConfigFile("q.ini"));
-	#ifdef PLATFORM_WIN32
-		if(key.GetCount() == 0)
-			key = LoadIniFile(~GetExeDirFile("q.ini"));
-		if(key.GetCount() == 0)
-			key = LoadIniFile("c:\\q.ini");
-	#endif
-	#ifdef PLATFORM_POSIX
-		if(key.GetCount() == 0)
-			key = LoadIniFile(GetHomeDirFile("q.ini"));
-	#endif
-	}
-	return key.Get(id, def);
-}
-
-String GetIniKey(const char *id)
-{
-	return GetIniKey(id, String());
-}
-
-void TextSettings::Load(const char *filename)
-{
-	FileIn in(filename);
-	int themei = 0;
-	settings.Add("");
-	while(!in.IsEof()) {
-		String ln = in.GetLine();
-		const char *s = ln;
-		if(*s == '[') {
-			s++;
-			String theme;
-			while(*s && *s != ']')
-				theme.Cat(*s++);
-			themei = settings.FindAdd(theme);
-		}
-		else {
-			if(themei >= 0) {
-				String key;
-				while(*s && *s != '=') {
-					key.Cat(*s++);
-				}
-				if(*s == '=') s++;
-				String value;
-				while(*s) {
-					value.Cat(*s++);
-				}
-				if(!IsEmpty(key))
-					settings[themei].GetAdd(key) = TrimBoth(value);
-			}
-		}
-	}
-}
-
-String TextSettings::Get(const char *group, const char *key) const
-{
-	int itemi = settings.Find(group);
-	return itemi < 0 ? Null : settings.Get(group).Get(key, Null);
-}
-
-String TextSettings::Get(int groupIndex, const char *key) const
-{
-	return groupIndex >= 0 && groupIndex < settings.GetCount() ?
-	              settings[groupIndex].Get(key, Null) : Null;
-}
-
-String TextSettings::Get(int groupIndex, int keyIndex) const
-{
-	if (groupIndex >= 0 && groupIndex < settings.GetCount())
-		return keyIndex >= 0 && keyIndex < settings[groupIndex].GetCount() ?
-		          settings[groupIndex][keyIndex] : Null;
-	else
-		return Null;
-}
-
-// --------------------------------------------------------------
-
 String timeFormat(double s) {
 	if(s < 0.000001) return Sprintf("%5.2f ns", s * 1.0e9);
 	if(s < 0.001) return Sprintf("%5.2f us", s * 1.0e6);
@@ -533,7 +346,7 @@ String Decode64(const String& s)
 	for(;;)
 	{
 		byte ea = *p++ - ' ' - 1, eb = *p++ - ' ' - 1, ec = *p++ - ' ' - 1, ed = *p++ - ' ' - 1;
-		byte out[3] = { (ea << 2) | (eb >> 4), (eb << 4) | (ec >> 2), (ec << 6) | (ed >> 0) };
+		byte out[3] = { byte((ea << 2) | (eb >> 4)), byte((eb << 4) | (ec >> 2)), byte((ec << 6) | (ed >> 0)) };
 		switch(len)
 		{
 		case 1:  dec.Cat(out[0]); return dec;
@@ -572,6 +385,16 @@ String HexString(const String& s, int sep, int sepchr)
 	return HexString(~s, s.GetCount(), sep, sepchr);
 }
 
+String HexEncode(const byte *s, int count, int sep, int sepchr)
+{
+	return HexString(s, count, sep, sepchr);
+}
+
+String HexEncode(const String& s, int sep, int sepchr)
+{
+	return HexString(s, sep, sepchr);
+}
+
 String ScanHexString(const char *s, const char *lim)
 {
 	String r;
@@ -599,6 +422,12 @@ String ScanHexString(const char *s, const char *lim)
 			return r;
 	}
 }
+
+String HexDecode(const char *s, const char *lim)
+{
+	return ScanHexString(s, lim);
+}
+
 
 String NormalizeSpaces(const char *s)
 {
@@ -652,6 +481,74 @@ String CsvString(const String& text)
 	return r;
 }
 
+Vector<String> GetCsvLine(Stream& s, int separator, byte charset)
+{
+	Vector<String> r;
+	bool instring = false;
+	String val;
+	byte dcs = GetDefaultCharset();
+	for(;;) {
+		int c = s.Get();
+		if(c == '\n' && instring)
+			val.Cat(c);
+		else
+		if(c == '\n' || c < 0) {
+			if(val.GetCount())
+				r.Add(ToCharset(dcs, val, charset));
+			return r;
+		}
+		else
+		if(c == separator && !instring) {
+			r.Add(ToCharset(dcs, val, charset));
+			val.Clear();
+		}
+		else
+		if(c == '\"') {
+			if(instring && s.Term() == '\"') {
+				s.Get();
+				val.Cat('\"');
+			}
+			else
+				instring = !instring;
+		}
+		else
+		if(c != '\r')
+			val.Cat(c);
+	}
+}
+
+String CompressLog(const char *s)
+{
+	static bool breaker[256];
+	ONCELOCK {
+		for(int i = 0; i < 256; i++)
+		breaker[i] = IsSpace(i) || findarg(i, '<', '>', '\"', '\'', ',', '.', '[', ']', '{', '}', '(', ')') >= 0;
+	}
+
+	StringBuffer result;
+	while(*s) {
+		const char *b = s;
+		while(breaker[(byte)*s])
+			s++;
+		result.Cat(b, s);
+		if(!*s)
+			break;
+		b = s;
+		while(*s && !breaker[(byte)*s])
+			s++;
+		if(s - b > 200) {
+			result.Cat(b, 20);
+			result.Cat("....", 4);
+			result << "[" << int(s - b) << " bytes]";
+			result.Cat("....", 4);
+			result.Cat(s - 20, 20);
+		}
+		else
+			result.Cat(b, s);
+	}
+	return result;
+}
+
 int ChNoInvalid(int c)
 {
 	return c == DEFAULTCHAR ? '_' : c;
@@ -670,16 +567,21 @@ String FromSystemCharset(const WString& src)
 #else
 
 #ifdef PLATFORM_WIN32
-String ToSystemCharset(const String& src)
+String ToSystemCharset(const String& src, int cp)
 {
 	WString s = src.ToWString();
 	int l = s.GetLength() * 5;
 	StringBuffer b(l);
-	int q = WideCharToMultiByte(CP_ACP, 0, (const WCHAR *)~s, s.GetLength(), b, l, NULL, NULL);
+	int q = WideCharToMultiByte(cp, 0, (const WCHAR *)~s, s.GetLength(), b, l, NULL, NULL);
 	if(q <= 0)
 		return src;
 	b.SetCount(q);
 	return b;
+}
+
+String ToSystemCharset(const String& src)
+{
+	return ToSystemCharset(src, CP_ACP);
 }
 
 String FromWin32Charset(const String& src, int cp)
@@ -726,98 +628,114 @@ String FromSystemCharset(const String& src)
 #endif
 #endif
 
-static VectorMap<String, String>& sGCfg()
-{
-	static VectorMap<String, String> m;
-	return m;
-}
 
 static StaticCriticalSection sGCfgLock;
 
-static Vector<Callback>& sGFlush()
+static VectorMap<String, String>& sGCfg()
 {
-	static Vector<Callback> m;
-	return m;
+	static VectorMap<String, String> h;
+	return h;
 }
 
-static StaticCriticalSection sGFlushLock;
+static Vector<Event<>>& sGFlush()
+{
+	static Vector<Event<>> h;
+	return h;
+}
+
+static VectorMap<String, Event<Stream&>>& sGSerialize()
+{
+	static VectorMap<String, Event<Stream&>> h;
+	return h;
+}
 
 void    RegisterGlobalConfig(const char *name)
 {
-	INTERLOCKED_(sGCfgLock) {
-		ASSERT(sGCfg().Find(name) < 0);
-		sGCfg().Add(name);
-	}
+	Mutex::Lock __(sGCfgLock);
+	ASSERT(sGCfg().Find(name) < 0);
+	sGCfg().Add(name);
 }
 
-void    RegisterGlobalConfig(const char *name, Callback WhenFlush)
+void    RegisterGlobalSerialize(const char *name, Event<Stream&> WhenSerialize)
 {
+	Mutex::Lock __(sGCfgLock);
 	RegisterGlobalConfig(name);
-	INTERLOCKED_(sGFlushLock) {
-		sGFlush().Add(WhenFlush);
-	}
+	sGSerialize().Add(name, WhenSerialize);
+}
+
+void    RegisterGlobalConfig(const char *name, Event<>  WhenFlush)
+{
+	Mutex::Lock __(sGCfgLock);
+	RegisterGlobalConfig(name);
+	sGFlush().Add(WhenFlush);
 }
 
 String GetGlobalConfigData(const char *name)
 {
-	INTERLOCKED_(sGCfgLock) {
-		return sGCfg().GetAdd(name);
-	}
-	return String();
+	Mutex::Lock __(sGCfgLock);
+	return sGCfg().GetAdd(name);
 }
 
 void SetGlobalConfigData(const char *name, const String& data)
 {
-	INTERLOCKED_(sGCfgLock) {
-		sGCfg().GetAdd(name) = data;
-	}
+	Mutex::Lock __(sGCfgLock);
+	sGCfg().GetAdd(name) = data;
+}
+
+bool LoadFromGlobal(Event<Stream&> x, const char *name)
+{
+	StringStream ss(GetGlobalConfigData(name));
+	return ss.IsEof() || Load(x, ss);
+}
+
+void StoreToGlobal(Event<Stream&> x, const char *name)
+{
+	StringStream ss;
+	Store(x, ss);
+	SetGlobalConfigData(name, ss);
 }
 
 void  SerializeGlobalConfigs(Stream& s)
 {
-	INTERLOCKED_(sGFlushLock) {
-		for(int i = 0; i < sGFlush().GetCount(); i++)
-			sGFlush()[i]();
-	}
-	INTERLOCKED_(sGCfgLock) {
-		VectorMap<String, String>& cfg = sGCfg();
-		int version = 0;
-		s / version;
-		int count = cfg.GetCount();
-		s / count;
-		for(int i = 0; i < count; i++) {
-			String name;
-			if(s.IsStoring())
-				name = cfg.GetKey(i);
-			s % name;
-			int q = cfg.Find(name);
-			if(q >= 0)
-				s % cfg[q];
-			else
-			{
-				String dummy;
-				s % dummy;
+	Mutex::Lock __(sGCfgLock);
+	for(int i = 0; i < sGFlush().GetCount(); i++)
+		sGFlush()[i]();
+	int version = 0;
+	s / version;
+	int count = sGCfg().GetCount();
+	s / count;
+	for(int i = 0; i < count; i++) {
+		String name;
+		if(s.IsStoring())
+			name = sGCfg().GetKey(i);
+		s % name;
+		int q = sGCfg().Find(name);
+		if(q >= 0) {
+			int w = sGSerialize().Find(name);
+			if(w >= 0) {
+				String h;
+				if(s.IsStoring()) {
+					StringStream ss;
+					sGSerialize()[w](ss);
+					h = ss;
+				}
+				s % h;
+				if(s.IsLoading()) {
+					StringStream ss(h);
+					sGSerialize()[w](ss);
+				}
 			}
+			else
+				s % sGCfg()[q];
 		}
-		s.Magic();
+		else {
+			String dummy;
+			s % dummy;
+		}
 	}
+	s.Magic();
 }
 
-Exc::Exc() : String(GetLastErrorMessage()) {}
-/*
-#ifdef PLATFORM_WIN32
-void Exc::Show() const {
-	if(IsEmpty()) return;
-	MessageBox(GetActiveWindow(), *this, "Chyba", MB_OK);
-}
-#endif
-
-#ifdef PLATFORM_POSIX
-void Exc::Show() const {
-	printf(*this);
-}
-#endif
-*/
 AbortExc::AbortExc() :
 	Exc(t_("Aborted by user.")) {}
 
@@ -876,21 +794,32 @@ String GetLastErrorMessage() {
 #endif
 
 #ifdef PLATFORM_POSIX
-static void LinuxBeep(const char *fn)
+
+String CurrentSoundTheme = "freedesktop";
+
+static void LinuxBeep(const char *name)
 {
-	return;
-	// This is not the right way to do that... (causes zombies, ignores Gnome settings)
-	char h[100];
-	strcpy(h, "aplay /usr/share/sounds/");
-	strcat(h, fn);
-#ifdef CPU_BLACKFIN
-	if(vfork()) return;
-#else
-	if(fork()) return;
-#endif
-	system(h);
-	_exit(EXIT_SUCCESS);
+	static String player;
+	ONCELOCK {
+		const char *players[] = { "play", "ogg123", "gst123" };
+		for(int i = 0; i < __countof(players); i++)
+			if(Sys("which " + String(players[i])).GetCount()) {
+				player = players[i];
+				break;
+			}
+	}
+
+	if(player.GetCount()) {
+		String fn = "/usr/share/sounds/" + CurrentSoundTheme + "/stereo/dialog-" + name;
+		IGNORE_RESULT(system(player + " -q " + fn +
+		              (FileExists(fn + ".ogg") ? ".ogg" :
+		               FileExists(fn + ".oga") ? ".oga" :
+	                   FileExists(fn + ".wav") ? ".wav" :
+	                   ".*")
+		              + " >/dev/null 2>/dev/null&"));
+	}
 }
+
 #endif
 
 void BeepInformation()
@@ -898,7 +827,7 @@ void BeepInformation()
 #ifdef PLATFORM_WIN32
 	MessageBeep(MB_ICONINFORMATION);
 #else
-	LinuxBeep("info.wav");
+	LinuxBeep("information");
 #endif
 }
 
@@ -907,7 +836,16 @@ void BeepExclamation()
 #ifdef PLATFORM_WIN32
 	MessageBeep(MB_ICONEXCLAMATION);
 #else
-	LinuxBeep("warning.wav");
+	LinuxBeep("warning");
+#endif
+}
+
+void BeepError()
+{
+#ifdef PLATFORM_WIN32
+	MessageBeep(MB_ICONERROR);
+#else
+	LinuxBeep("error");
 #endif
 }
 
@@ -916,8 +854,7 @@ void BeepQuestion()
 #ifdef PLATFORM_WIN32
 	MessageBeep(MB_ICONQUESTION);
 #else
-	LinuxBeep("question.wav");
-//	write(1, "\a", 1); //??
+	LinuxBeep("question");
 #endif
 }
 
@@ -931,4 +868,71 @@ extern "C" long _ftol2( double dblSource ) { return _ftol( dblSource ); }
 int errno; // missing and zlib needs it
 #endif
 
-END_UPP_NAMESPACE
+
+template <class CHR, class T>
+T Replace__(const T& s, const Vector<T>& find, const Vector<T>& replace)
+{
+	ASSERT(find.GetCount() == replace.GetCount());
+
+	T r;
+	int i = 0;
+	while(i < s.GetCount()) {
+		int best = -1;
+		int bestlen = 0;
+		int len = s.GetCount() - i;
+		const CHR *q = ~s + i;
+		for(int j = 0; j < replace.GetCount(); j++) {
+			const T& m = find[j];
+			int l = m.GetCount();
+			if(l <= len && l > bestlen && memcmp(~m, q, l * sizeof(CHR)) == 0) {
+				bestlen = l;
+				best = j;
+			}
+		}
+		if(best >= 0) {
+			i += bestlen;
+			r.Cat(replace[best]);
+		}
+		else {
+			r.Cat(*q);
+			i++;
+		}
+	}
+	return r;
+}
+
+String Replace(const String& s, const Vector<String>& find, const Vector<String>& replace)
+{
+	return Replace__<char>(s, find, replace);
+}
+
+String Replace(const String& s, const VectorMap<String, String>& fr)
+{
+	return Replace__<char>(s, fr.GetKeys(), fr.GetValues());
+}
+
+WString Replace(const WString& s, const Vector<WString>& find, const Vector<WString>& replace)
+{
+	return Replace__<wchar>(s, find, replace);
+}
+
+WString Replace(const WString& s, const VectorMap<WString, WString>& fr)
+{
+	return Replace__<wchar>(s, fr.GetKeys(), fr.GetValues());
+}
+
+
+String (*GetP7Signature__)(const void *data, int length, const String& cert_pem, const String& pkey_pem);
+
+String GetP7Signature(const void *data, int length, const String& cert_pem, const String& pkey_pem)
+{
+	ASSERT_(GetP7Signature__, "Missing SSL support (Core/SSL)");
+	return (*GetP7Signature__)(data, length, cert_pem, pkey_pem);
+}
+
+String GetP7Signature(const String& data, const String& cert_pem, const String& pkey_pem)
+{
+	return GetP7Signature(data, data.GetLength(), cert_pem, pkey_pem);
+}
+
+}

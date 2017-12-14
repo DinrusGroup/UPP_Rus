@@ -1,11 +1,11 @@
 #include <CtrlLib/CtrlLib.h>
 
-NAMESPACE_UPP
+namespace Upp {
 
 void WindowsList()
 {
 	WithSimpleSelectLayout<TopWindow> d;
-	CtrlLayoutOKCancel(d, t_("Активировать окно"));
+	CtrlLayoutOKCancel(d, t_("Activate window"));
 	d.SetRect(0, 0, 400, 300);
 	d.list.AddColumn();
 	d.list.NoHeader().NoGrid();
@@ -43,11 +43,11 @@ void WindowsMenu(Bar& bar)
 			bar.Add(Format("&%d ", p++) + FromUnicode(q->GetTitle(), CHARSET_DEFAULT),
 			        callback1(PutForeground, Ptr<Ctrl>(q)))
 			   .Check(q->IsForeground())
-			   .Help(t_("Активировать данное окно"));
+			   .Help(t_("Activate this window"));
 		}
 	}
 	if(p >= 10)
-		bar.Add(t_("Ещё окна.."), callback(WindowsList));
+		bar.Add(t_("More windows.."), callback(WindowsList));
 }
 
-END_UPP_NAMESPACE
+}

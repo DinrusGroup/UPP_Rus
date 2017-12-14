@@ -3,7 +3,9 @@
 
 #include <Draw/Draw.h>
 
-NAMESPACE_UPP
+namespace Upp {
+	
+INITIALIZE(JPGRaster);
 
 class JPGRaster : public StreamRaster {
 public:
@@ -44,6 +46,6 @@ private:
 	int          quality;
 };
 
-END_UPP_NAMESPACE
+}
 
 #endif

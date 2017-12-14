@@ -35,22 +35,7 @@ available without using further glue code.&]
 [s2; Constructor assigns [^`:`:Convert^ Convert] class (in fact, `*this) 
 as the EditField converter.&]
 [s3; &]
-[s0;%- &]
-[ {{10000F(128)G(128)@1 [s0; [* Public Method List]]}}&]
-[s3;%- &]
-[s5;:EditValue`:`:operator`=`(const DataType`&`):%- [_^EditValue^ EditValue][@(0.0.255) `&
-]_[* operator`=]([@(0.0.255) const]_[*@4 DataType][@(0.0.255) `&]_[*@3 t])&]
-[s2; This helper operator allows direct assignment of value type 
-to the editor.&]
 [s3; &]
-[s4;%- &]
-[s5;:EditValue`:`:operator DataType`(`)const:%- [* operator_DataType]()_[@(0.0.255) const
-]&]
-[s2; This helper operator allows direct retrieval of value type from 
-the editor.&]
-[s3; &]
-[s0; &]
-[s0; &]
 [s0;%- &]
 [ {{10000@3 [s0;%- [*@(229)4 EditMinMax]]}}&]
 [s3; &]
@@ -75,12 +60,6 @@ in], [*@4 DataType]_[*@3 max])&]
 [s0;%- &]
 [ {{10000F(128)G(128)@1 [s0; [* Public Method List]]}}&]
 [s3;%- &]
-[s5;:EditMinMax`:`:operator`=`(const DataType`&`):%- [_^EditMinMax^ EditMinMax][@(0.0.255) `&
-]_[* operator`=]([@(0.0.255) const]_[*@4 DataType][@(0.0.255) `&]_[*@3 t])&]
-[s2; This helper operator allows direct assignment of value type 
-to the editor.&]
-[s3; &]
-[s4;%- &]
 [s5;:EditMinMax`:`:Min`(DataType`):%- [_^EditMinMax^ EditMinMax][@(0.0.255) `&]_[* Min]([*@4 D
 ataType]_[*@3 min])&]
 [s5;:EditMinMax`:`:Max`(DataType`):%- [_^EditMinMax^ EditMinMax][@(0.0.255) `&]_[* Max]([*@4 D
@@ -117,13 +96,6 @@ ll]([*@4 DataType]_[*@3 min], [*@4 DataType]_[*@3 max])&]
 [s0;%- &]
 [ {{10000F(128)G(128)@1 [s0; [* Public Method List]]}}&]
 [s3;%- &]
-[s5;:EditMinMaxNotNull`:`:operator`=`(const DataType`&`):%- [_^EditMinMaxNotNull^ EditM
-inMaxNotNull][@(0.0.255) `&]_[* operator`=]([@(0.0.255) const]_[*@4 DataType][@(0.0.255) `&
-]_[*@3 t])&]
-[s2; This helper operator allows direct assignment of value type 
-to the editor.&]
-[s3; &]
-[s4;%- &]
 [s5;:EditMinMaxNotNull`:`:Min`(DataType`):%- [_^EditMinMaxNotNull^ EditMinMaxNotNull][@(0.0.255) `&
 ]_[* Min]([*@4 DataType]_[*@3 min])&]
 [s5;:EditMinMaxNotNull`:`:Max`(DataType`):%- [_^EditMinMaxNotNull^ EditMinMaxNotNull][@(0.0.255) `&
@@ -216,20 +188,6 @@ text.&]
 [s0;%- &]
 [ {{10000F(128)G(128)@1 [s0; [* Public Method List]]}}&]
 [s3;%- &]
-[s5;:EditString`:`:operator const WString`&`(`)const:%- [* operator_const_WString`&]()_
-[@(0.0.255) const]&]
-[s2; This helper operator allows direct retrieval of value type from 
-the editor.&]
-[s3; &]
-[s4;%- &]
-[s5;:EditString`:`:operator`=`(const WString`&`):%- [_^EditString^ EditString][@(0.0.255) `&
-]_[* operator`=]([@(0.0.255) const]_[_^WString^ WString][@(0.0.255) `&]_[*@3 data])&]
-[s5;:EditString`:`:operator`=`(const String`&`):%- [_^EditString^ EditString][@(0.0.255) `&
-]_[* operator`=]([@(0.0.255) const]_[_^String^ String][@(0.0.255) `&]_[*@3 data])&]
-[s2; These helper operators allow a direct assignment of value type 
-to the editor.&]
-[s3; &]
-[s4;%- &]
 [s5;:EditString`:`:MaxLen`(int`):%- [_^EditString^ EditString][@(0.0.255) `&]_[* MaxLen]([@(0.0.255) i
 nt]_[*@3 maxlen])&]
 [s2; Sets [%-*@3 maxlen] as maximum length of contained text.[%-*@3 maxlen] 
@@ -240,6 +198,14 @@ Returns `*this.&]
 [@(0.0.255) bool]_[*@3 nn]_`=_[@(0.0.255) true])&]
 [s2;%- [%% Sets ][* NotNull] property.&]
 [s3; &]
+[s4;%- &]
+[s5;:Upp`:`:EditString`:`:TrimLeft`(bool`):%- [_^Upp`:`:EditString^ EditString][@(0.0.255) `&
+]_[* TrimLeft]([@(0.0.255) bool]_[*@3 b]_`=_[@(0.0.255) true])&]
+[s5;:Upp`:`:EditString`:`:TrimRight`(bool`):%- [_^Upp`:`:EditString^ EditString][@(0.0.255) `&
+]_[* TrimRight]([@(0.0.255) bool]_[*@3 b]_`=_[@(0.0.255) true])&]
+[s5;:Upp`:`:EditString`:`:TrimBoth`(bool`):%- [_^Upp`:`:EditString^ EditString][@(0.0.255) `&
+]_[* TrimBoth]([@(0.0.255) bool]_[*@3 b]_`=_[@(0.0.255) true])&]
+[s2; Whitechars on the left/right/both side(s) are removed.&]
 [s0; &]
 [s0; &]
 [s0;%- &]
@@ -260,18 +226,6 @@ ublic][3 _][*@3;3 EditString]&]
 nt]_[*@3 maxlen])&]
 [s2; This constructor sets [%-*@3 maxlen] as maximum length of contained 
 text.&]
-[s3; &]
-[s0;%- &]
-[ {{10000F(128)G(128)@1 [s0; [* Public Method List]]}}&]
-[s3;%- &]
-[s5;:EditStringNotNull`:`:operator`=`(const WString`&`):%- [@(0.0.255) virtual] 
-[_^EditStringNotNull^ EditStringNotNull][@(0.0.255) `&]_[* operator`=]([@(0.0.255) const]_
-[_^WString^ WString][@(0.0.255) `&]_[*@3 data])&]
-[s5;:EditStringNotNull`:`:operator`=`(const String`&`):%- [@(0.0.255) virtual] 
-[_^EditStringNotNull^ EditStringNotNull][@(0.0.255) `&]_[* operator`=]([@(0.0.255) const]_
-[_^String^ String][@(0.0.255) `&]_[*@3 data])&]
-[s2; These helper operators allow a direct assignment of value type 
-to the editor.&]
 [s3; &]
 [s0; &]
 [s0; &]
@@ -381,4 +335,4 @@ tDoubleNotNullSpin]([@(0.0.255) double]_[*@3 min], [@(0.0.255) double]_[*@3 max]
 [s2; This constructor sets [%-*@3 min], [%-*@3 max] and [%-*@3 inc] values. 
 Spin buttons are on.&]
 [s3; &]
-[s0; ]
+[s0; ]]

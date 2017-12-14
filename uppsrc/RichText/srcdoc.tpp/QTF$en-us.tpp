@@ -227,6 +227,8 @@ matching&]
 ::= [s0; Courier font.]
 ::^ [s0;%- [C@(128.0.255) G]]
 ::= [s0; Standard GUI font.]
+::^ [s0;%- [C@(128.0.255) g]]
+::= [s0; Standard GUI font with standard height.]
 ::^ [s0;%- [C@(128.0.255) S]]
 ::= [s0; Symbol font.]
 ::^ [s0;%- [C@(128.0.255) .][/C@(0.0.255) number]]
@@ -312,6 +314,9 @@ optimization, [*@(128.0.255) %`-] is equivalent to [@(128.0.255) %][@(0.0.255) 0
 ::= [s0; Horizontal ruler height (if zero, there is no ruler).]
 ::^ [s0;%- [C@(128.0.255) h][/C@(0.0.255) color]]
 ::= [s0; Color of horizontal ruler (default is black).]
+::^ [s0;%- [C@(128.0.255) L][/C@(0.0.255) number]]
+::= [s0; Style of horizontal ruler line, 0 `- solid color, 1 `- dots, 
+2 `- dashes]
 ::^ [s0;%- [C@(128.0.255) b][/C@(0.0.255) number]]
 ::= [s0; Space before paragraph in dots.]
 ::^ [s0;%- [C@(128.0.255) a][/C@(0.0.255) number]]
@@ -321,7 +326,9 @@ optimization, [*@(128.0.255) %`-] is equivalent to [@(128.0.255) %][@(0.0.255) 0
 ::^ [s0;%- [C@(128.0.255) k]]
 ::= [s0; Keep paragraph on single page.]
 ::^ [s0;%- [C@(128.0.255) K]]
-::= [s0; Keep paragraph on same page as next one.]
+::= [s0; Keep paragraph on same page as next one. Only works well for 
+binding two paragraphs (does not propagate further). If you need 
+to bind more, use organizing table [@(128.0.255) `{`{`*K ][/ text][@(128.0.255) `}`}]]
 ::^ [s0;%- [C@(128.0.255) Q]]
 ::= [s0; Orphan control.]
 ::^ [s0;%- [C@(128.0.255) n][/C@(0.0.255) text][C@(128.0.255) ;]]
@@ -346,7 +353,11 @@ style of each level&]
 :: [s0; Lowercase roman numbers, starting with i.]
 :: [s0; [C@(128.0.255) I]]
 :: [s0; Uppercase roman numbers, starting with I]}}&]
-[s0; ]
+[s0; &]
+[s0; If after 8 numbering style characters there is a `'[@(128.0.255) !]`' 
+suffix, the reset is performed for those numbering levels that 
+are used. If all levels are not used, reset is performed for 
+the top`-level.]
 ::^ [s0;%- [C@(128.0.255) o]]
 ::= [s0; Bullet style.]
 ::^ [s0;%- [C@(128.0.255) O`_]]
@@ -392,7 +403,12 @@ style).]
 code. Example: [*C@3 `"`[l200;4 `"]]
 ::^ [s1; [%-C s][/C@(0.0.255) number]&]
 [s0; [%-C@(128.0.255) s][/C@(0.0.255) `"text`"]]
-:: [s0; Paragraph style, either defined by style number, or style name.]}}&]
+:: [s0; Paragraph style, either defined by style number, or style name.]
+:: [s0;%- [C tP][/C@(0.0.255) qtf][C@(128.0.255) `^`^][/C@(0.0.255) qtf][C@(128.0.255) `^`^]]
+:: [s0; New text header  / footer, [%-/C@(0.0.255) qtf] is complete embeded 
+QTF representing header/footer. This QTF can contain field[@5  
+`{:VALUE:PAGENUMBER:`} ]to represent page number and[@5  `{:VALUE:PAGECOUNT:`}] 
+to represent total number of pages.]}}&]
 [s0;3 &]
 [s0;3 &]
 [s2; Styles&]
@@ -400,8 +416,8 @@ code. Example: [*C@3 `"`[l200;4 `"]]
 [s0; Paragraph styles are defined using normal character/paragraph 
 formatting sequence with&]
 [s0; &]
-[s0; [@(128.0.255) `$`$][@(0.0.255) number][@(128.0.255) ,][@(0.0.255) nnumber][@(128.0.255) #][@(0.0.255) u
-uid][@(128.0.255) :][@(0.0.255) name]&]
+[s0; [@(128.0.255) `$`$][/@(0.0.255) number][@(128.0.255) ,][/@(0.0.255) nnumber][@(128.0.255) #
+][/@(0.0.255) uuid][@(128.0.255) :][/@(0.0.255) name]&]
 [s0; &]
 [s0; instead of text, where&]
 [s0; &]
@@ -430,12 +446,12 @@ paragraph format command code.]}}&]
 [s0; Object plays the role of the single character and is displayed 
 according to its type. It is started with a header in the form&]
 [s0; &]
-[s0; [@(128.0.255) `@`@][@(0.0.255) format][@(128.0.255) :][@(0.0.255) cx][@(128.0.255) `&][@(0.0.255) c
+[s0; [@(128.0.255) `@`@][/@(0.0.255) format][@(128.0.255) :][/@(0.0.255) cx][@(128.0.255) `&][/@(0.0.255) c
 y]&]
 [s0;@(0.0.255) &]
 [s0;%- or&]
 [s0;%- &]
-[s0; [@(128.0.255) `@`@][@(0.0.255) format][@(128.0.255) :][@(0.0.255) cx][@(128.0.255) `*][@(0.0.255) c
+[s0; [@(128.0.255) `@`@][/@(0.0.255) format][@(128.0.255) :][/@(0.0.255) cx][@(128.0.255) `*][/@(0.0.255) c
 y]&]
 [s0;%- &]
 [s0;%- where&]
@@ -463,13 +479,17 @@ text format. In that case, object data are terminated with another
 `'```' character. If there needs to be `'```' in the text, `'`````' 
 can be used as escape sequence.&]
 [s0; &]
-[s0; If there is not `'```', header is in binary 7 bit format. Bit 
-7 of data bytes is always 1, so that actual data bytes are in 
-range 128`-255. First byte in range 32`-127 ends data sequence. 
+[s0; If header is followed by `'(`', it countains BASE64 encoded 
+binary data, ending with `')`'. [* This is default format for binary 
+data].&]
+[s0; &]
+[s0; If there is no `'```' nor `'(`', header is in binary 7 bit format. 
+Bit 7 of data bytes is always 1, so that actual data bytes are 
+in range 128`-255. First byte in range 32`-127 ends data sequence. 
 Data are encoded in 7 byte groups, which corresponds to 8 bytes 
 of encoded format. First byte of this 8 bytes block always contains 
 eight bits of following bytes, LSB (that is bit 0) being the 
-eight bit for first byte in block.&]
+eight bit for first byte in block. [/ This format is deprecated.]&]
 [s0; &]
 [s0; [*/3 iml][*3  format]&]
 [s0;* &]
@@ -480,7 +500,23 @@ mage`_name]. Example of full object definition in [*/ iml] format:&]
 [s0; [*C@3 `"`@`@iml:400`*400``CtrlImg:exclamation```"]&]
 [s0;@(0.0.255) &]
 [s0;@(0.0.255) &]
+[s2; Fields&]
 [s0;@(0.0.255) &]
+[s0; Fields are special elements of text that are evaluated by client 
+code into rich text. QTF format for fields is&]
+[s0;@(0.0.255) &]
+[s0; [@(128.0.255) `{:][/@(0.0.255) field`_type`_id][@(128.0.255) :][/@(0.0.255) parameter][@(128.0.255) :
+`}]&]
+[s0;@(128.0.255) &]
+[ {{1879:8121^ [s0; [@(0.0.255) field`_type`_id]]
+:: [s0; Type of field. Field types are represented by RichPara`::FieldType 
+derived instances and registred using RichPara`::Register function.]
+:: [s0; [@(0.0.255) parameter]]
+:: [s0; Additional string parameter that gets passed to FieldType`::Evaluate 
+method]}}&]
+[s0;@(128.0.255) &]
+[s0;@(0.0.255) &]
+[s0;3 &]
 [s2; Tables&]
 [s0; &]
 [s0; Table definition starts with&]
@@ -571,6 +607,11 @@ Default is border: 0, margin: 15.]
 [s0; [C@(128.0.255) a][/C@(0.0.255) /number]]
 :: [s0; Sets all cell borders (first [/@(0.0.255) number]) and margins 
 in dots. If any of numbers is missing, sets only the one present.]
+:: [s0; [C@(128.0.255) `*]]
+:: [s0; Same as f0g0a0/0 `- sets everything to zero to use table as 
+organizing element.]
+:: [s0; [C@(128.0.255) o]]
+:: [s0; Sets round border.]
 :: [s0; [C@(128.0.255) `@][/C@(0.0.255) color]]
 :: [s0; Cell background color. Default is White.]
 :: [s0; [C@(128.0.255) R][/C@(0.0.255) color]]
@@ -585,12 +626,32 @@ in dots.]
 :: [s0; [C@(128.0.255) `|][/C@(0.0.255) number]]
 :: [s0; Vertical cell span.]
 :: [s0; [C@(128.0.255) ;]]
-::= [s0; NOP  separator. In some cases it helps to separate command code.]}}&]
+::= [s0; NOP  separator. In some cases it helps to separate command code.]
+::^ [s0; [C@(128.0.255) P]]
+::= [s0; Page break before table.]
+::^ [s0;%- [%%C@(128.0.255) T][/C@(0.0.255) qtf][C@(128.0.255) `^`^][/C@(0.0.255) qtf][C@(128.0.255) `^
+`^]]
+:: [s0; New text header  / footer, [%-/C@(0.0.255) qtf] is complete embeded 
+QTF representing header/footer. This QTF can contain field[@5  
+`{:VALUE:PAGENUMBER:`} ]to represent page number and[@5  `{:VALUE:PAGECOUNT:`}] 
+to represent total number of pages.]}}&]
 [s0;3 &]
 [s0; Note: There is also legacy support for old table format (from 
 previous QTF version) that is based on [@(128.0.255) `+`+ ]pair 
 as table start/stop and [@(128.0.255) `|`| `-`-] to divide cells/lines. 
 &]
+[s0;3 &]
+[s0;3 &]
+[s2; Global Header and Footer&]
+[s0; &]
+[s0; Global text header is defined using [%-C@(128.0.255) `^H][%-/C@(0.0.255) qtf`_text][%-C@(128.0.255) `^
+`^], footer [%-C@(128.0.255) `^F][%-/C@(0.0.255) qtf`_text][%-C@(128.0.255) `^`^], 
+where [%-/C@(0.0.255) qtf`_text] is complete embeded QTF representing 
+header/footer. This QTF can contain field[@5  `{:VALUE:PAGENUMBER:`} 
+]to represent page number and[@5  `{:VALUE:PAGECOUNT:`}] to represent 
+total number of pages. Global page header and footer can be changed 
+by paragraph attributes.&]
+[s0;3 &]
 [s0;3 &]
 [s0;3 &]
 [s2; [3 Examples]&]
@@ -727,4 +788,8 @@ tab`-`|Right tab`]`"]]
 :: [s0; a2]
 :: [s0; a1]
 :: [s0; a2]}}]}}]}}&]
-[s0; ]
+[s0;*_@3%- &]
+[s0;3%- &]
+[ {{10000 [s0;%- [*C@3;1 `"`{`{1`~a30/50o Round border`}`}`"]]
+:: [ {{10000f0;Kg0;l30/50r30/50t30/50b30/50o [s0;%- Round border]}}]}}&]
+[s0;*_@3%- ]]

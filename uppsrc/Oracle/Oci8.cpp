@@ -1,8 +1,7 @@
 #include "Oracle8.h"
 #include "OciCommon.h"
-#pragma hdrstop
 
-NAMESPACE_UPP
+namespace Upp {
 
 #define LLOG(x) RLOG(x)
 
@@ -100,8 +99,8 @@ protected:
 			byte           buffer[8];
 		};
 
-		byte *Data()                 { return total_len > sizeof(buffer) ? ptr : buffer; }
-		const byte *Data() const     { return total_len > sizeof(buffer) ? ptr : buffer; }
+		byte *Data()                 { return total_len > (int)sizeof(buffer) ? ptr : buffer; }
+		const byte *Data() const     { return total_len > (int)sizeof(buffer) ? ptr : buffer; }
 		bool  IsNull() const         { return ind[0] < 0; }
 		bool  Alloc(int count, OCIEnv *envhp, int type, int len, int res = 0);
 		void  Clear();
@@ -183,7 +182,7 @@ void OCI8Connection::Item::Clear() {
 	if(type == SQLT_BLOB || type == SQLT_CLOB)
 		oci8.OCIDescriptorFree((dvoid *)lob, OCI_DTYPE_LOB);
 	else
-	if(total_len > sizeof(buffer))
+	if(total_len > (int)sizeof(buffer))
 		delete[] ptr;
 	total_len = 0;
 	lob = NULL;
@@ -217,7 +216,7 @@ bool OCI8Connection::Item::Alloc(int _count, OCIEnv *envhp, int _type, int _len,
 	array_count = _count;
 	if(type == SQLT_BLOB || type == SQLT_CLOB)
 		oci8.OCIDescriptorAlloc(envhp, (dvoid **) &lob, OCI_DTYPE_LOB, 0, NULL);
-	if(total_len > sizeof(buffer))
+	if(total_len > (int)sizeof(buffer))
 		ptr = new byte[total_len];
 	ind.Alloc(_count);
 	ind[0] = -1;
@@ -346,6 +345,7 @@ void OCI8Connection::SetRawParam(int i, const String& s) {
 	p.ind[0] = l ? 0 : -1;
 }
 
+/*
 class Oracle8RefCursorStub : public SqlSource {
 public:
 	Oracle8RefCursorStub(SqlConnection *cn) : cn(cn) {}
@@ -354,6 +354,7 @@ public:
 private:
 	SqlConnection *cn;
 };
+*/
 
 void OCI8Connection::SetParam(int i, Sql& rc) {
 	Item& w = PrepareParam(i, SQLT_RSET, -1, 0, VOID_V);
@@ -361,8 +362,9 @@ void OCI8Connection::SetParam(int i, Sql& rc) {
 	w.refcursor -> refcursor = true;
 	*(OCIStmt **)w.Data() = w.refcursor -> stmthp;
 	w.ind[0] = 0;
-	Oracle8RefCursorStub stub(w.refcursor);
-	rc = Sql(stub);
+//	Oracle8RefCursorStub stub(w.refcursor);
+	Attach(rc, w.refcursor);
+//	rc = Sql(stub);
 }
 
 void  OCI8Connection::SetParam(int i, const Value& q) {
@@ -393,7 +395,7 @@ void  OCI8Connection::SetParam(int i, const Value& q) {
 			case TIME_V:
 				SetParam(i, (Time)q);
 				break;
-			case UNKNOWN_V:
+			default:
 				if(IsTypeRaw<Sql *>(q)) {
 					SetParam(i, *ValueTo<Sql *>(q));
 					break;
@@ -402,7 +404,6 @@ void  OCI8Connection::SetParam(int i, const Value& q) {
 					SetParam(i, OracleRef(q));
 					break;
 				}
-			default:
 				NEVER();
 		}
 }
@@ -520,7 +521,7 @@ bool OCI8Connection::BulkExecute(const char *stmt, const Vector< Vector<Value> >
 
 		switch(sql_type) {
 			case SQLT_INT: {
-				ASSERT(sum_len >= nrows * sizeof(max_row_len));
+				ASSERT(sum_len >= nrows * (int)sizeof(max_row_len));
 				if(max_row_len == sizeof(int)) {
 					int *datp = (int *)p.Data();
 					for(int r = 0; r < nrows; r++) {
@@ -542,7 +543,7 @@ bool OCI8Connection::BulkExecute(const char *stmt, const Vector< Vector<Value> >
 				break;
 			}
 			case SQLT_FLT: {
-				ASSERT(sum_len >= nrows * sizeof(double));
+				ASSERT(sum_len >= nrows * (int)sizeof(double));
 				double *datp = (double *)p.Data();
 				for(int r = 0; r < nrows; r++) {
 					double d = (param_rows[r].GetCount() > a ? (double)param_rows[r][a] : (double)Null);
@@ -553,7 +554,7 @@ bool OCI8Connection::BulkExecute(const char *stmt, const Vector< Vector<Value> >
 				break;
 			}
 			case SQLT_DAT: {
-				ASSERT(sum_len >= nrows * 7u);
+				ASSERT(sum_len >= nrows * 7);
 				byte *datp = p.Data();
 				for(int r = 0; r < nrows; r++) {
 					Time d = (param_rows[r].GetCount() > a ? (Time)param_rows[r][a] : (Time)Null);
@@ -577,7 +578,7 @@ bool OCI8Connection::BulkExecute(const char *stmt, const Vector< Vector<Value> >
 					memcpy(datp, s, rawlen);
 					datp += max_row_len;
 				}
-				ASSERT((unsigned)(datp - (byte *)p.Data()) <= sum_len);
+				ASSERT((int)(datp - (byte *)p.Data()) <= sum_len);
 				break;
 			}
 			default: {
@@ -816,6 +817,23 @@ void OCI8Connection::GetColumn(int i, String& s) const {
 	}
 	const Item& c = column[i];
 	if(c.type == SQLT_BLOB || c.type == SQLT_CLOB) {
+		if (sizeof(int) < sizeof(uintptr_t)){ // CPU_64
+			int64 handle;
+			GetColumn(i, handle);
+			if(!IsNull(handle)) {
+				if(c.type == SQLT_CLOB && session->utf8_session) {
+					OracleClob clob(*session, handle);
+					s = FromUnicode(clob.Read());
+				}
+				else {
+					OracleBlob blob(*session, handle);
+					s = LoadStream(blob);
+				}
+			}
+			else
+				s = Null;
+			return;
+		}
 		int handle;
 		GetColumn(i, handle);
 		if(!IsNull(handle)) {
@@ -849,6 +867,24 @@ void OCI8Connection::GetColumn(int i, WString& ws) const {
 	}
 	const Item& c = column[i];
 	if(c.type == SQLT_BLOB || c.type == SQLT_CLOB) {
+		if (sizeof(int) < sizeof(uintptr_t)){ // CPU_64
+			int64 handle;
+			GetColumn(i, handle);
+			if(!IsNull(handle)) {
+				if(session->utf8_session && c.type == SQLT_CLOB) {
+					OracleClob clob(*session, handle);
+					ws = clob.Read();
+				}
+				else {
+					OracleBlob blob(*session, handle);
+					String s = LoadStream(blob);
+					ws = s.ToWString();
+				}
+			}
+			else
+				ws = Null;
+			return;
+		}
 		int handle;
 		GetColumn(i, handle);
 		if(!IsNull(handle)) {
@@ -1235,9 +1271,9 @@ bool Oracle8::Login(const char *name, const char *pwd, const char *db, bool use_
 	if(!disable_utf8_mode
 	&& oci8.OCIEnvNlsCreate) {
 		if(oci8.OCIEnvNlsCreate(&envhp, accessmode, 0, 0, 0, 0, 0, 0,
-		OCI_NLS_NCHARSET_ID_AL32UT8, OCI_NLS_NCHARSET_ID_AL32UT8)
+		OCI_NLS_NCHARSET_ID_AL32UT8, OCI_NLS_NCHARSET_ID_AL32UT8) != OCI_SUCCESS
 		&& oci8.OCIEnvNlsCreate(&envhp, accessmode, 0, 0, 0, 0, 0, 0,
-		OCI_NLS_NCHARSET_ID_UT8, OCI_NLS_NCHARSET_ID_UT8))
+		OCI_NLS_NCHARSET_ID_UT8, OCI_NLS_NCHARSET_ID_UT8) != OCI_SUCCESS)
 			LLOG("OCI8: error on initialization utf8 NLS");
 		else
 			utf8_session = true;
@@ -1304,6 +1340,7 @@ bool Oracle8::Login(const char *name, const char *pwd, const char *db, bool use_
 }
 
 void Oracle8::Logoff() {
+	SessionClose();
 	LOG("Oracle8::Logoff, #" << conn_count << " connections pending");
 	while(!clink.IsEmpty()) {
 		clink.GetNext()->Clear();
@@ -1720,4 +1757,4 @@ OracleClob::~OracleClob() {
 	Close();
 }
 
-END_UPP_NAMESPACE
+}

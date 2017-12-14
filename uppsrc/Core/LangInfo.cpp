@@ -6,7 +6,9 @@
 #endif
 #ifdef PLATFORM_POSIX
 #include <locale.h>
-#include <langinfo.h>
+	#ifndef PLATFORM_ANDROID
+	#include <langinfo.h>
+	#endif
 #endif
 
 namespace Upp {
@@ -87,20 +89,13 @@ int DefaultLanguageCompare(const wchar *a, int a_length, const wchar *b, int b_l
 		if(i1 != i2)
 			return i1 >= i2 ? 1 : -1;
 
-		if(u1 != u2) // different diacritics
-			if(middle == 0)
-				middle = u1 - u2;
+		if(u1 != u2 && middle == 0) // different diacritics
+			middle = u1 - u2;
 
-		if(c1 != c2) // different case
-		{
-			if(little == 0)
-				little = (u1 != c1) - (u2 != c2);
-		}
+		if(c1 != c2 && little == 0) // different case
+			little = (u1 != c1) - (u2 != c2);
 	}
-	little += 4 * middle;
-	if(little == 0)
-		little = a_length - b_length;
-	return sgn(little);
+	return a_length != b_length ? cmp(a_length, b_length) : sgn(middle ? middle : little);
 }
 
 WString CSCZGetIndexLetter(const wchar *s, int)
@@ -109,16 +104,16 @@ WString CSCZGetIndexLetter(const wchar *s, int)
 	temp[0] = temp[1] = temp[2] = 0;
 	if(*s <= 2047 && IsLetter(*s)) // IsLetter
 	{
-		temp[0] = ToUpper(*s);
+		temp[0] = (wchar)ToUpper(*s);
 		if(s[1] <= 2047 && IsLetter(s[1]))
-			temp[1] = ToLower(s[1]);
+			temp[1] = (wchar)ToLower(s[1]);
 		if(temp[0] != 'C' || temp[1] != 'h')
 			temp[1] = 0;
 		switch(ToUpper(ToAscii(*s)))
 		{
 		case 'A': case 'E': case 'I': case 'N':
 		case 'O': case 'T': case 'U': case 'Y':
-			temp[0] = ToAscii(temp[0]);
+			temp[0] = (wchar)ToAscii(temp[0]);
 			break;
 		}
 	}
@@ -179,8 +174,7 @@ int CSCZLanguageCompare(const wchar *a, int a_length, const wchar *b, int b_leng
 			return i1 >= i2 ? 1 : -1;
 
 		if(u1 != u2) // different diacritics
-			switch(i1)
-			{
+			switch(i1) {
 			case 'A': case 'E': case 'I': case 'N':
 			case 'O': case 'T': case 'U': case 'Y':
 				if(middle == 0)
@@ -189,59 +183,30 @@ int CSCZLanguageCompare(const wchar *a, int a_length, const wchar *b, int b_leng
 			default:
 				return u1 >= u2 ? 1 : -1;
 			}
-		if(c1 != c2) // different case
-		{
-			if(little == 0)
-
-				little = (u1 != c1) - (u2 != c2);
-		}
+		if(c1 != c2 && little == 0) // different case
+			little = (u1 != c1) - (u2 != c2);
 	}
-	little += 4 * middle;
-	if(little == 0)
-		little = a_length - b_length;
-	return sgn(little);
+	return a_length != b_length ? cmp(a_length, b_length) : sgn(middle ? middle : little);
 }
 
 #ifdef PLATFORM_WIN32
-#ifdef PLATFORM_WINCE //TODO?
+
 String GetLocaleInfoA(LCID lcid, LCTYPE lctype)
 {
 	wchar cbuf[1000];
 	::GetLocaleInfoW(lcid, lctype, cbuf, __countof(cbuf));
-	return FromSystemCharset(cbuf);
+	return FromSystemCharsetW(cbuf);
 }
-#else
-String GetLocaleInfoA(LCID lcid, LCTYPE lctype)
-{
-	if(IsWinNT()) {
-		wchar cbuf[1000];
-		UnicodeWin32().GetLocaleInfoW(lcid, lctype, cbuf, __countof(cbuf));
-		return FromSystemCharsetW(cbuf);
-	}
-	else {
-		char cbuf[1000];
-		::GetLocaleInfoA(lcid, lctype, cbuf, __countof(cbuf));
-		return FromSystemCharset(cbuf);
-	}
-}
-#endif
 
 WString GetLocaleInfoW(LCID lcid, LCTYPE lctype)
 {
-	union {
-		wchar wbuf[1000];
-		char abuf[1000];
-	};
+	wchar wbuf[1000];
 	Zero(wbuf);
 	if(::GetLocaleInfoW(lcid, lctype, (WCHAR *)wbuf, __countof(wbuf)))
 		return wbuf;
-#ifdef PLATFORM_WINCE
 	return Null;
-#else
-	::GetLocaleInfoA(lcid, lctype, abuf, __countof(abuf));
-	return ToUnicode(abuf, CHARSET_DEFAULT);
-#endif
 }
+
 #endif
 
 static dword sGetLanguageDetails(int language, String *english_name, String *native_name)
@@ -332,7 +297,7 @@ void LanguageInfo::Set(int lang_)
 	}
 #endif
 
-#ifdef PLATFORM_POSIX
+#if defined(PLATFORM_POSIX) && !defined(PLATFORM_ANDROID)
 	String langtext = LNGAsText(language);
 	char ltext[6];
 	ltext[0] = ToLower(langtext[0]);

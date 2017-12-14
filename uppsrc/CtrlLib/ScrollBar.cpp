@@ -1,6 +1,6 @@
 #include "CtrlLib.h"
 
-NAMESPACE_UPP
+namespace Upp {
 
 #define LLOG(x) // LOG(x)
 
@@ -32,6 +32,7 @@ CH_STYLE(ScrollBar, Style, StyleDefault)
 	Sb(right, CtrlsImg::RA());
 	Sb(right2, CtrlsImg::RA());
 	isup2 = isdown2 = isleft2 = isright2 = false;
+	thumbwidth = Null;
 }
 
 ScrollBar::ScrollBar() {
@@ -66,6 +67,7 @@ ScrollBar::ScrollBar() {
 	style = NULL;
 	SetStyle(StyleDefault());
 	BackPaint();
+	is_active = false;
 }
 
 ScrollBar::~ScrollBar() {}
@@ -123,6 +125,8 @@ Rect ScrollBar::GetPartRect(int p) const {
 		HV(h.left, h.top) = thumbpos + ts / 2 + sbo + off;
 		break;
 	case 2:
+		if(!IsNull(style->thumbwidth))
+			h.Deflate((style->barsize - style->thumbwidth) / 2);
 		HV(h.left, h.top) = thumbpos - sbo + off;
 		HV(h.right, h.bottom) = thumbpos + ts + sbo + off;
 		break;
@@ -283,6 +287,11 @@ void ScrollBar::LeftRepeat(Point p, dword) {
 	Refresh();
 }
 
+void ScrollBar::MouseWheel(Point p, int zdelta, dword keyflags)
+{
+	Wheel(zdelta);
+}
+
 void ScrollBar::CancelMode() {
 	push = light = -1;
 }
@@ -326,18 +335,18 @@ bool  ScrollBar::Set(int apagepos) {
 void ScrollBar::Set(int _pagepos, int _pagesize, int _totalsize) {
 	pagesize = _pagesize;
 	totalsize = _totalsize;
-	bool a = totalsize > pagesize && pagesize > 0;
-	if(autohide && a != IsShown()) {
-		Show(a);
+	is_active = totalsize > pagesize && pagesize > 0;
+	if(autohide && is_active != IsShown()) {
+		Show(is_active);
 		WhenVisibility();
 	}
 	if(autodisable) {
-		if(prev.IsEnabled() != a)
+		if(prev.IsEnabled() != is_active)
 			Refresh();
-		prev.Enable(a);
-		next.Enable(a);
-		prev2.Enable(a);
-		next2.Enable(a);
+		prev.Enable(is_active);
+		next.Enable(is_active);
+		prev2.Enable(is_active);
+		next2.Enable(is_active);
 	}
 	Set(_pagepos);
 }
@@ -390,6 +399,10 @@ void ScrollBar::NextPage() {
 
 void ScrollBar::Wheel(int zdelta, int lines) {
 	Uset(pagepos - lines * linesize * zdelta / 120);
+}
+
+void ScrollBar::Wheel(int zdelta) {
+	Wheel(zdelta, GUI_WheelScrollLines());
 }
 
 bool ScrollBar::VertKey(dword key, bool homeend) {
@@ -775,9 +788,17 @@ ScrollBars& ScrollBars::FixedBox()
 	return *this;
 }
 
+ScrollBars& ScrollBars::WithSizeGrip()
+{
+	box_bg.Color(SColorFace());
+	the_box.Add(box_bg.SizePos());
+	the_box.Add(grip);
+	return *this;
+}
+
 ScrollBars::ScrollBars() {
 	box = &the_box;
-	the_box.NoTransparent();
+//	the_box.NoTransparent();
 	x.WhenScroll = y.WhenScroll = callback(this, &ScrollBars::Scroll);
 	x.WhenLeftClick = y.WhenLeftClick = Proxy(WhenLeftClick);
 	x.AutoHide();
@@ -813,4 +834,4 @@ void Scroller::Scroll(Ctrl& p, int newposy)
 	Scroll(p, p.GetSize(), newposy);
 }
 
-END_UPP_NAMESPACE
+}

@@ -4,13 +4,15 @@ uses
 	Draw;
 
 file
-	PdfDraw.h,
+	PdfDraw.h options(BUILDER_OPTION) PCH,
 	TTFStream.cpp,
 	TTFStruct.cpp,
 	TTFReader.cpp,
 	TTFSubset.cpp,
+	ICCColorSpace.i,
 	PdfDraw.cpp,
-	PdfReport.icpp,
+	PdfReport.cpp,
+	PdfInit.icpp,
 	Info readonly separator,
 	Copying;
 

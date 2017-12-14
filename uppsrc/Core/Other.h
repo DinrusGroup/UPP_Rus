@@ -1,11 +1,21 @@
-template <class T>
+template <class T, class... Args>
+T& Single(Args... args) {
+	static T o(args...);
+	return o;
+}
+
+template <class T> // Workaround for GCC bug - specialization needed...
 T& Single() {
-	static T *p;
-	ONCELOCK {
-		static T o;
-		p = &o;
-	}
-	return *p;
+	static T o;
+	return o;
+}
+
+int RegisterTypeNo__(const char *type);
+
+template <class T>
+int StaticTypeNo() {
+	static int typeno = RegisterTypeNo__(typeid(T).name());
+	return typeno;
 }
 
 template <class T>
@@ -13,40 +23,59 @@ class One : MoveableAndDeepCopyOption< One<T> > {
 	mutable T  *ptr;
 
 	void        Free()                     { if(ptr && ptr != (T*)1) delete ptr; }
-	void        Chk() const                { ASSERT(ptr != (T*)1); }
-	void        ChkP() const               { Chk(); ASSERT(ptr); }
-	void        Pick(pick_ One<T>& data)   { T *p = data.ptr; data.ptr = (T*)1; ptr = p; }
+	template <class TT>
+	void        Pick(One<TT>&& data)       { ptr = data.Detach(); }
 
 public:
 	void        Attach(T *data)            { Free(); ptr = data; }
-	T          *Detach() pick_             { ChkP(); T *t = ptr; ptr = NULL; return t; }
-	T          *operator-() pick_          { return Detach(); }
+	T          *Detach()                   { T *t = ptr; ptr = NULL; return t; }
 	void        Clear()                    { Free(); ptr = NULL; }
 
 	void        operator=(T *data)         { Attach(data); }
-	void        operator=(pick_ One<T>& d) { Free(); Pick(d); }
-
-	const T    *operator->() const         { ChkP(); return ptr; }
-	T          *operator->()               { ChkP(); return ptr; }
-	const T    *operator~() const          { Chk(); return ptr; }
-	T          *operator~()                { Chk(); return ptr; }
-	const T&    operator*() const          { ChkP(); return *ptr; }
-	T&          operator*()                { ChkP(); return *ptr; }
-
+	
 	template <class TT>
+	void        operator=(One<TT>&& d)     { if((void *)this != (void *)&d) { Free(); Pick(pick(d)); }}
+
+	const T    *operator->() const         { ASSERT(ptr); return ptr; }
+	T          *operator->()               { ASSERT(ptr); return ptr; }
+	const T    *operator~() const          { return ptr; }
+	T          *operator~()                { return ptr; }
+	const T    *Get() const                { return ptr; }
+	T          *Get()                      { return ptr; }
+	const T&    operator*() const          { ASSERT(ptr); return *ptr; }
+	T&          operator*()                { ASSERT(ptr); return *ptr; }
+
+	template <class TT, class... Args>
+	TT&         Create(Args... args)       { TT *q = new TT(args...); Attach(q); return *q; }
+	template <class TT> // with C++ conforming compiler, this would not be needed - GCC bug workaround
 	TT&         Create()                   { TT *q = new TT; Attach(q); return *q; }
+	template <class... Args>
+	T&          Create(Args... args)       { T *q = new T(args...); Attach(q); return *q; }
 	T&          Create()                   { T *q = new T; Attach(q); return *q; }
 
-	bool        IsPicked() const           { return ptr == (T*)1; }
-	bool        IsEmpty() const            { Chk(); return !ptr; }
+	template <class TT>
+	bool        Is() const                 { return dynamic_cast<const TT *>(ptr); }
+
+	bool        IsEmpty() const            { return !ptr; }
 
 	operator bool() const                  { return ptr; }
+	
+	String ToString() const                { return ptr ? AsString(*ptr) : "<empty>"; }
 
 	One()                                  { ptr = NULL; }
 	One(T *newt)                           { ptr = newt; }
-	One(pick_ One<T>& p)                   { Pick(p); }
+	template <class TT>
+	One(One<TT>&& p)                       { Pick(pick(p)); }
 	One(const One<T>& p, int)              { ptr = p.IsEmpty() ? NULL : DeepCopyNew(*p); }
+	One(const One<T>& p) = delete;
 	~One()                                 { Free(); }
+};
+
+template <class T>
+struct MakeOne : One<T> {
+	template <class... Args>
+	MakeOne(Args... args)                  { One<T>::Create(args...); }
+	MakeOne()                              { One<T>::Create(); }
 };
 
 class Any : Moveable<Any> {
@@ -60,74 +89,72 @@ class Any : Moveable<Any> {
 	struct Data : BaseData {
 		T        data;
 
-		Data()                                    { typeno = StaticTypeNo<T>(); }
+		template <class... Args>
+		Data(Args... args) : data(args...)        { typeno = StaticTypeNo<T>(); }
 	};
 
 	BaseData *ptr;
 
 	void Chk() const                              { ASSERT(ptr != (void *)1); }
-	void Pick(pick_ Any& s)                       { ptr = s.ptr; const_cast<Any&>(s).ptr = (BaseData *)1; }
+	void Pick(Any&& s)                            { ptr = s.ptr; const_cast<Any&>(s).ptr = NULL; }
 
 public:
-	template <class T> T& Create()                { Clear(); Data<T> *x = new Data<T>; ptr = x; return x->data; }
+	template <class T, class... Args> T& Create(Args... args) { Clear(); Data<T> *x = new Data<T>(args...); ptr = x; return x->data; }
 	template <class T> bool Is() const            { return ptr && ptr->typeno == StaticTypeNo<T>(); }
 	template <class T> T& Get()                   { ASSERT(Is<T>()); Chk(); return ((Data<T>*)ptr)->data; }
 	template <class T> const T& Get() const       { ASSERT(Is<T>()); Chk(); return ((Data<T>*)ptr)->data; }
 
-	void Clear()                                  { if(ptr && !IsPicked()) delete ptr; ptr = NULL; }
+	void Clear()                                  { if(ptr) delete ptr; ptr = NULL; }
 
 	bool IsEmpty() const                          { return ptr == NULL; }
-	bool IsPicked() const                         { return ptr == (void *)1; }
 
-	void operator=(pick_ Any& s)                  { Clear(); Pick(s); }
-	Any(pick_ Any& s)                             { Pick(s); }
+	void operator=(Any&& s)                       { if(this != &s) { Clear(); Pick(pick(s)); } }
+	Any(Any&& s)                                  { Pick(pick(s)); }
 
 	Any()                                         { ptr = NULL; }
 	~Any()                                        { Clear(); }
 };
 
-template <class T>
-class Buffer : Moveable< Buffer<T> > {
-	mutable T *ptr;
-
-public:
-	operator T*()                     { return ptr; }
-	operator const T*() const         { return ptr; }
-	T *operator~()                    { return ptr; }
-	const T *operator~() const        { return ptr; }
-
-	void Alloc(int size)              { Clear(); ptr = new T[size]; }
-	void Alloc(int size, const T& in) { Clear(); ptr = new T[size];
-	                                    Fill(ptr, ptr + size, in); }
-
-	void Clear()                      { if(ptr) delete[] ptr; ptr = NULL; }
-
-	Buffer()                          { ptr = NULL; }
-	Buffer(int size)                  { ptr = new T[size]; }
-	Buffer(int size, const T& init)   { ptr = new T[size]; Fill(ptr, ptr + size, init); }
-	~Buffer()                         { if(ptr) delete[] ptr; }
-
-	void operator=(pick_ Buffer& v)   { if(ptr) delete[] ptr; ptr = v.ptr; v.ptr = NULL; }
-	Buffer(pick_ Buffer& v)           { ptr = v.ptr; v.ptr = NULL; }
-};
-
 class Bits : Moveable<Bits> {
-	mutable int alloc;
+	int         alloc;
 	dword      *bp;
+	
+	void Expand(int q);
+	void Realloc(int nalloc);
+	int  GetLast() const;
 
 public:
 	void   Clear();
-	void   Set(int i, bool b = true);
-	void   Set(int i, bool b, int count);
+	void   Set(int i, bool b = true) { ASSERT(i >= 0 && alloc >= 0); int q = i >> 5;
+		                               if(q >= alloc) Expand(q); i &= 31; bp[q] = (bp[q] & ~(1 << i)) | (b << i); }
 	bool   Get(int i) const        { ASSERT(i >= 0 && alloc >= 0); int q = i >> 5;
 	                                 return q < alloc ? bp[q] & (1 << (i & 31)) : false; }
 	bool   operator[](int i) const { return Get(i); }
 
-	Bits()                         { bp = NULL; alloc = 0; }
-	~Bits()                        { Clear(); }
+	void   Set(int i, dword bits, int count);
+	dword  Get(int i, int count);
+	void   Set64(int i, uint64 bits, int count);
+	uint64 Get64(int i, int count);
 
-	Bits(pick_ Bits& b)            { alloc = b.alloc; bp = b.bp; b.alloc = -1; }
-	void operator=(pick_ Bits& b)  { Clear(); alloc = b.alloc; bp = b.bp; b.alloc = -1; }
+	void   SetN(int i, bool b, int count);
+	void   SetN(int i, int count)         { SetN(i, true, count); }
+	
+	void   Reserve(int nbits);
+	void   Shrink();
+	
+	String ToString() const;
+
+	dword       *CreateRaw(int n_dwords);
+	const dword *Raw(int& n_dwords) const { n_dwords = alloc; return bp; }
+	dword       *Raw(int& n_dwords)       { n_dwords = alloc; return bp; }
+	
+	void         Serialize(Stream& s);
+
+	Bits()                                { bp = NULL; alloc = 0; }
+	~Bits()                               { Clear(); }
+
+	Bits(Bits&& b)                        { alloc = b.alloc; bp = b.bp; b.bp = NULL; }
+	void operator=(Bits&& b)              { if(this != &b) { Clear(); alloc = b.alloc; bp = b.bp; b.bp = NULL; } }
 };
 
 //# System dependent
@@ -140,7 +167,7 @@ class Mitor : Moveable< Mitor<T> > {
 	byte elem0[sizeof(T)];
 
 	T&        Get(int i) const;
-	void      Pick(pick_ Mitor& m);
+	void      Pick(Mitor&& m);
 	void      Copy(const Mitor& m);
 	void      Chk() const               { ASSERT(count != 2); }
 
@@ -153,11 +180,10 @@ public:
 	void      Clear();
 	void      Shrink();
 
-	Mitor(pick_ Mitor& m)               { Pick(m); }
-	void operator=(pick_ Mitor& m)      { Clear(); Pick(m); }
+	Mitor(Mitor&& m)                    { Pick(pick(m)); }
+	void operator=(Mitor&& m)           { if(this != &m) { Clear(); Pick(pick(m)); } }
 
 	Mitor(Mitor& m, int)                { Copy(m); }
-	void operator<<=(const Mitor& m)    { Clear(); Copy(m); }
 
 	Mitor()                             { count = 0; }
 	~Mitor()                            { Clear(); }
@@ -171,7 +197,7 @@ T& Mitor<T>::Get(int i) const
 }
 
 template <class T>
-void Mitor<T>::Pick(pick_ Mitor& m)
+void Mitor<T>::Pick(Mitor&& m)
 {
 	m.Chk();
 	vector = m.vector;
@@ -243,11 +269,11 @@ void Mitor<T>::Shrink()
 
 //#
 template <class T, int N = 1>
-class Link {
-protected:
+struct Link {
 	T *link_prev[N];
 	T *link_next[N];
 
+protected:
 	void LPN(int i)                      { link_prev[i]->link_next[i] = link_next[i]->link_prev[i] = (T *)this; }
 
 public:
@@ -298,7 +324,8 @@ public:
 };
 
 template <class T, class K = String>
-struct LRUCache {
+class LRUCache {
+public:
 	struct Maker {
 		virtual K      Key() const = 0;
 		virtual int    Make(T& object) const = 0;
@@ -307,7 +334,7 @@ struct LRUCache {
 
 private:
 	struct Item : Moveable<Item> {
-		int16  prev, next;
+		int    prev, next;
 		int    size;
 		One<T> data;
 		bool   flag;
@@ -338,10 +365,18 @@ private:
 
 public:
 	int  GetSize() const            { return size; }
+	int  GetCount() const           { return count; }
 
-	void Shrink(int maxsize);
+	template <class P> void AdjustSize(P getsize);
 
-	const T& Get(const Maker& m);
+	T&   GetLRU();
+	void DropLRU();
+	void Shrink(int maxsize, int maxcount = 30000);
+
+	template <class P> int  Remove(P predicate);
+	template <class P> bool RemoveOne(P predicate);
+
+	T&   Get(const Maker& m);
 
 	void Clear();
 
@@ -379,24 +414,90 @@ void LRUCache<T, K>::Unlink(int i)
 	else {
 		if(head == i)
 			head = m.next;
-		data[(int)m.next].prev = m.prev;
-		data[(int)m.prev].next = m.next;
+		data[m.next].prev = m.prev;
+		data[m.prev].next = m.next;
 	}
 	count--;
 }
 
 template <class T, class K>
-void LRUCache<T, K>::Shrink(int maxsize)
+T& LRUCache<T, K>::GetLRU()
 {
-	if(maxsize < 0)
-		return;
-	while((count > 30000 || size > maxsize) && head >= 0) {
+	int tail = data[head].prev;
+	return *data[tail].data;
+}
+
+template <class T, class K>
+void LRUCache<T, K>::DropLRU()
+{
+	if(head >= 0) {
 		int tail = data[head].prev;
 		size -= data[tail].size;
 		data[tail].data.Clear();
 		Unlink(tail);
 		key.Unlink(tail);
 	}
+}
+
+template <class T, class K>
+template <class P>
+void LRUCache<T, K>::AdjustSize(P getsize)
+{
+	size = 0;
+	count = 0;
+	for(int i = 0; i < data.GetCount(); i++)
+		if(!key.IsUnlinked(i)) {
+			size += (data[i].size = getsize(*data[i].data));
+			count++;
+		}
+}
+
+template <class T, class K>
+template <class P>
+int LRUCache<T, K>::Remove(P predicate)
+{
+	int n = 0;
+	int i = 0;
+	while(i < data.GetCount())
+		if(!key.IsUnlinked(i) && predicate(*data[i].data)) {
+			size -= data[i].size;
+			Unlink(i);
+			key.Unlink(i);
+			n++;
+			break;
+		}
+		else
+			i++;
+	return n;
+}
+
+template <class T, class K>
+template <class P>
+bool LRUCache<T, K>::RemoveOne(P predicate)
+{
+	int i = head;
+	if(i >= 0)
+		for(;;) {
+			int next = data[i].next;
+			if(predicate(*data[i].data)) {
+				size -= data[i].size;
+				Unlink(i);
+				key.Unlink(i);
+				return true;
+			}
+			if(i == next || next == head || next < 0)
+				break;
+			i = next;
+		}
+	return false;
+}
+
+template <class T, class K>
+void LRUCache<T, K>::Shrink(int maxsize, int maxcount)
+{
+	if(maxsize >= 0 && maxcount >= 0)
+		while(count > maxcount || size > maxsize)
+			DropLRU();
 }
 
 template <class T, class K>
@@ -418,7 +519,7 @@ void LRUCache<T, K>::ClearCounters()
 }
 
 template <class T, class K>
-const T& LRUCache<T, K>::Get(const Maker& m)
+T& LRUCache<T, K>::Get(const Maker& m)
 {
 	Key k;
 	k.key = m.Key();

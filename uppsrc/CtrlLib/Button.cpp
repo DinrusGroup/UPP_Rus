@@ -1,6 +1,6 @@
 #include "CtrlLib.h"
 
-NAMESPACE_UPP
+namespace Upp {
 
 #define LLOG(x) // LOG(x)
 
@@ -13,7 +13,7 @@ void Pusher::RefreshPush() {
 }
 
 void Pusher::PerformAction() {
-	WhenAction();
+	Action();
 }
 
 void Pusher::GotFocus() {
@@ -91,9 +91,10 @@ void Pusher::KeyPush() {
 
 bool Pusher::FinishPush()
 {
-	if(!IsPush())
-		return false;
+	bool b = IsPush();
 	EndPush();
+	if(!b)
+		return false;
 	if(IsReadOnly())
 		return false;
 	PerformAction();
@@ -128,9 +129,8 @@ void Pusher::PseudoPush() {
 }
 
 void Pusher::EndPush() {
-	if(push || keypush)
-		RefreshPush();
 	keypush = push = false;
+	RefreshPush();
 }
 
 Pusher&  Pusher::SetFont(Font fnt) {
@@ -214,6 +214,12 @@ CH_STYLE(Button, Style, StyleScroll)
 {
 	Assign(Button::StyleNormal());
 	CtrlsImageLook(look, CtrlsImg::I_SB);
+}
+
+CH_STYLE(Button, Style, StyleNaked)
+{
+	Assign(Button::StyleNormal());
+	look[0] = look[1] = look[2] = look[3] = Null;
 }
 
 Color ButtonMonoColor(int i)
@@ -436,6 +442,7 @@ Button::Button() {
 	style = NULL;
 	type = NORMAL;
 	monoimg = false;
+	font = Null;
 }
 
 Button::~Button() {}
@@ -445,7 +452,7 @@ CH_STYLE(SpinButtons, Style, StyleDefault)
 	inc = dec = Button::StyleNormal();
 	CtrlsImageLook(inc.look, CtrlsImg::I_EB, CtrlsImg::SpU(), inc.monocolor);
 	CtrlsImageLook(dec.look, CtrlsImg::I_EB, CtrlsImg::SpD(), dec.monocolor);
-	width = 12;
+	width = Zx(12);
 }
 
 void SpinButtons::FrameLayout(Rect& r)
@@ -556,7 +563,7 @@ void Option::Paint(Draw& w) {
 		w.DrawRect(0, 0, sz.cx, sz.cy, SColorFace);
 	
 	Size isz = CtrlsImg::O0().GetSize();
-	Size tsz;
+	Size tsz(0, 0);
 	int ix = 0, iy = 0, ty = 0;
 	
 	if(showlabel) {
@@ -580,7 +587,7 @@ void Option::Paint(Draw& w) {
 	if(showlabel) {
 		bool ds = !IsShowEnabled();
 		DrawSmartText(w, isz.cx + 4, ty, tsz.cx, label, font,
-		              ds || IsReadOnly() ? SColorDisabled : GetLabelTextColor(this),
+		              ds || IsReadOnly() ? SColorDisabled : Nvl(color, GetLabelTextColor(this)),
 		              VisibleAccessKeys() ? accesskey : 0);
 		if(HasFocus())
 			DrawFocus(w, RectC(isz.cx + 2, ty - 1, tsz.cx + 3, tsz.cy + 2) & sz);
@@ -627,6 +634,7 @@ Option::Option() {
 	showlabel = true;
 	Transparent();
 	font = StdFont();
+	color = Null;
 }
 
 Option::~Option() {}
@@ -863,4 +871,4 @@ void DataPusher::SetDataAction(const Value& value)
 	UpdateActionRefresh();
 }
 
-END_UPP_NAMESPACE
+}

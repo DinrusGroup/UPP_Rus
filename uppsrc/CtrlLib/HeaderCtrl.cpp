@@ -1,6 +1,6 @@
 #include "CtrlLib.h"
 
-NAMESPACE_UPP
+namespace Upp {
 
 HeaderCtrl::Column::Column()
 {
@@ -13,6 +13,7 @@ HeaderCtrl::Column::Column()
 	SetAlign(ALIGN_LEFT);
 	paper = Null;
 	index = Null;
+	NoWrap();
 }
 
 HeaderCtrl::Column&  HeaderCtrl::Column::SetMargin(int m)
@@ -151,12 +152,13 @@ double HeaderCtrl::Denominator() const {
 	return rs;
 }
 
-void HeaderCtrl::SbTotal()
+void HeaderCtrl::DoSbTotal()
 {
 	if(mode == SCROLL) {
 		int cx = 0;
 		for(int i = 0; i < col.GetCount(); i++)
-			cx += (int)col[i].ratio;
+			if(col[i].visible)
+				cx += (int)col[i].ratio;
 		sb.AutoHide(autohidesb);
 		sb.SetTotal(cx);
 	}
@@ -164,6 +166,13 @@ void HeaderCtrl::SbTotal()
 		sb.AutoHide();
 		sb.SetTotal(0);
 	}
+}
+
+void HeaderCtrl::SbTotal()
+{
+	if(HasCapture())
+		return;
+	DoSbTotal();
 }
 
 HeaderCtrl& HeaderCtrl::Proportional() { mode = PROPORTIONAL; SbTotal(); return *this; }
@@ -280,7 +289,7 @@ void HeaderCtrl::Distribute(const Vector<int>& sci, double delta)
 
 		if(fabs(delta) < eps)
 			break;
-		ci = nci;
+		ci = pick(nci);
 		if(ci.GetCount() == 0) {
 			double psm = 0;
 			for(int i = 0; i < sci.GetCount(); i++)
@@ -315,8 +324,8 @@ void HeaderCtrl::RefreshDistribution()
 			}
 		else {
 			Distribute(GetVisibleCi(0), 0);
-			oszcx = szcx;
 		}
+		oszcx = szcx;
 		ReCompute();
 	}
 }
@@ -434,7 +443,7 @@ void HeaderCtrl::Paint(Draw& w) {
 	}
 	Column h;
 	h.header = this;
-	h.Paint(first, w, x, 0, 999, sz.cy, false, false, false);
+	h.Paint(first, w, x, 0, sz.cx - x + 5, sz.cy, false, false, false);
 	if(isdrag) {
 		w.DrawImage(dragx + dragd, 0, dragtab);
 		DrawVertDrop(w, IsNull(dx) ? sz.cx - 2 : dx - (dx > 0), 0, sz.cy);
@@ -541,13 +550,28 @@ void HeaderCtrl::LeftDown(Point p, dword keyflags) {
 		return;
 	}
 	li = pushi = -1 - split;
-	if(!col[pushi].WhenAction) {
-		pushi = -1;
-		return;
+	col[pushi].WhenLeftClick();
+#ifdef _DEBUG
+	if((keyflags & K_ALT) && pushi >= 0)
+		WriteClipboardText(AsString(GetTabWidth(pushi)));
+#endif
+	if(pushi >= 0) {
+		if(!col[pushi].WhenAction) {
+			pushi = -1;
+			return;
+		}
+		colRect = GetTabRect(pushi);
+		push = true;
 	}
-	colRect = GetTabRect(pushi);
-	push = true;
 	Refresh();
+}
+
+void HeaderCtrl::LeftDouble(Point p, dword keyflags)
+{
+	int q = GetSplit(p.x);
+	if(q >= 0 || IsNull(q))
+		return;
+	col[-1 - q].WhenLeftDouble();
 }
 
 void HeaderCtrl::RightDown(Point p, dword)
@@ -668,6 +692,7 @@ void HeaderCtrl::LeftUp(Point, dword) {
 		Action();
 		WhenLayout();
 	}
+	DoSbTotal();
 }
 
 void HeaderCtrl::CancelMode() {
@@ -681,8 +706,19 @@ void HeaderCtrl::ShowTab(int i, bool show) {
 	cm.visible = show;
 	if(mode == PROPORTIONAL)
 		InvalidateDistribution();
+	ReCompute();
 	Refresh();
 	WhenLayout();
+	SbTotal();
+}
+
+void HeaderCtrl::Column::Show(bool b)
+{
+	if(!header)
+		return;
+	int q = header->FindIndex(GetIndex());
+	if(q >= 0)
+		header->ShowTab(q, b);
 }
 
 int HeaderCtrl::FindIndex(int ndx) const
@@ -700,14 +736,39 @@ int HeaderCtrl::FindIndex(int ndx) const
 #endif
 
 void HeaderCtrl::Serialize(Stream& s) {
-	int version = 0x03;
+	int version = 0x04;
 	s / version;
+	if(version >= 0x04) {
+		int n = col.GetCount();
+		s / n;
+		Array<Column> col2 = clone(col);
+		if(s.IsLoading())
+			col2.InsertN(0, n);
+		for(int i = 0; i < n; i++) {
+			int ndx = col2[i].index;
+			s % ndx;
+			if(s.IsLoading())
+				for(int j = n; j < col2.GetCount(); j++)
+					if(col2[j].index == ndx) {
+						col2.Swap(i, j);
+						break;
+					}
+			col2[i].index = ndx;
+			s % col2[i].ratio;
+			s % col2[i].visible;			
+		}
+		if(s.IsLoading() && n == col.GetCount()) {
+			col2.Trim(n);
+			col = pick(col2);
+		}
+	}
+	else
 	if(version < 0x01) {
 		int n = col.GetCount();
 		s / n;
 		for(int i = 0; i < n; i++)
 			if(i < col.GetCount()) {
-				int n;
+				int n = 1;
 				s / n;
 				col[i].ratio = n;
 			}
@@ -846,4 +907,4 @@ HeaderCtrl::HeaderCtrl() {
 
 HeaderCtrl::~HeaderCtrl() {}
 
-END_UPP_NAMESPACE
+}

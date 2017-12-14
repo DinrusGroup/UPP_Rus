@@ -41,6 +41,11 @@ the AString interface.&]
 [s2; Default copy constructor.&]
 [s3; &]
 [s4;%- &]
+[s5;:Upp`:`:String`:`:String`(Upp`:`:String`&`&`):%- [* String]([* String][@(0.0.255) `&`&]_
+[*@3 s])&]
+[s2; Pick constructor.&]
+[s3; &]
+[s4;%- &]
 [s5;:String`:`:String`(const char`*`):%- [* String]([@(0.0.255) const]_[@(0.0.255) char]_`*
 [*@3 s])&]
 [s2; Creates a copy of zero terminated string [%-*@3 s].&]
@@ -89,8 +94,8 @@ assigning [* Null ]to [* String ](which is same as assigning the
 empty [* String]).&]
 [s3;%- &]
 [s4;%- &]
-[s5;:String`:`:String`(const string`&`):%- [* String]([@(0.0.255) const]_std`::string[@(0.0.255) `&
-]_[*@3 s])&]
+[s5;:String`:`:String`(const string`&`):%- [* String]([@(0.0.255) const]_[_^http`:`/`/en`.cppreference`.com`/w`/cpp`/string`/basic`_string^ s
+td`::string][@(0.0.255) `&]_[*@3 s])&]
 [s2; Constructor to achieve minimal STL compatibility.&]
 [s3; &]
 [s0; &]
@@ -220,6 +225,11 @@ r`=]([@(0.0.255) const]_[_^String^ String][@(0.0.255) `&]_[*@3 s])&]
 fast and does not depend on the length of string.&]
 [s3; &]
 [s4;%- &]
+[s5;:Upp`:`:String`:`:operator`=`(Upp`:`:String`&`&`):%- [_^Upp`:`:String^ String][@(0.0.255) `&
+]_[* operator`=]([_^Upp`:`:String^ String][@(0.0.255) `&`&]_[*@3 s])&]
+[s2; Pick assignment.&]
+[s3; &]
+[s4;%- &]
 [s5;:String`:`:operator`=`(const char`*`):%- [_^String^ String][@(0.0.255) `&]_[* operator`=
 ]([@(0.0.255) const]_[@(0.0.255) char]_`*[*@3 s])&]
 [s2; Assign a zero terminated string [%-*@3 s].&]
@@ -236,11 +246,11 @@ rator<<`=]([@(0.0.255) const]_[_^String^ String][@(0.0.255) `&]_[*@3 s])&]
 [s2; `"Deep`" assignment. It is equivalent of standard assignment 
 followed by [* Shrink ]operation (in other words, internal buffer 
 gets reallocated to the exact size of source).&]
-[s3; &]
+[s3;%- &]
 [s4;%- &]
-[s5;:String`:`:operator std`:`:string`(`)const:%- [* operator_std`::string]()_[@(0.0.255) c
-onst]&]
-[s2; Conversion for minimal STL compatibility.&]
+[s5;:String`:`:ToStd`(`)const:%- [_^http`:`/`/en`.cppreference`.com`/w`/cpp`/string`/basic`_string^ s
+td`::string]_[* ToStd]()_[@(0.0.255) const]&]
+[s2; Converts String to std`::string.&]
 [s3;%- &]
 [s4;%- &]
 [s5;:String0`:`:operator const char`*`(`)const:%- [@(0.0.255) operator]_[@(0.0.255) const
@@ -438,8 +448,11 @@ nt]_[*@3 pos], [@(0.0.255) const]_[_^wchar^ wchar]_`*[*@3 s], [@(0.0.255) int]_[
 [s4;%- &]
 [s5;:WString0`:`:Trim`(int`):%- [@(0.0.255) void]_[* Trim]([@(0.0.255) int]_[*@3 pos])&]
 [s2; Sets the number of characters (length) to [%-*@3 pos].&]
-[s3; &]
-[s0;%- &]
+[s3;%- &]
+[s4;%- &]
+[s5;:WString`:`:ToStd`(`)const:%- [_^http`:`/`/en`.cppreference`.com`/w`/cpp`/string`/basic`_string^ s
+td`::wstring]_[* ToStd]()_[@(0.0.255) const]&]
+[s2; Converts WString to std`::string.&]
 [s0;%- &]
 [s0;%- &]
 [ {{10000@(113.42.0) [s0; [*@7;4 AString]]}}&]
@@ -470,7 +483,8 @@ nt]_[*@3 pos], [@(0.0.255) const]_[_^wchar^ wchar]_`*[*@3 s], [@(0.0.255) int]_[
 [s4;%- &]
 [s5;:AString`:`:Last`(`)const:%- [@(0.0.255) const]_[_^AString`:`:tchar^ tchar]_`*[* Last](
 )_[@(0.0.255) const]&]
-[s2; Returns a pointer to the last character in the string.&]
+[s2; Returns a pointer to the last character in the string. If string 
+is empty, returns a pointer to the ending zero.&]
 [s3;%- &]
 [s4;%- &]
 [s5;:AString`:`:GetIter`(int`)const:%- [@(0.0.255) const]_[_^AString`:`:tchar^ tchar]_`*[* G
@@ -508,6 +522,12 @@ rt]([@(0.0.255) int]_[*@3 pos], [@(0.0.255) const]_[_^AString`:`:tchar^ tchar]_`
 times).&]
 [s3; &]
 [s4;%- &]
+[s5;:Upp`:`:AString`:`:TrimLast`(int`):%- [@(0.0.255) void]_[* TrimLast]([@(0.0.255) int]_[*@3 c
+ount]_`=_[@3 1])&]
+[s2; Removes [%-*@3 count] characters from the end of String. Same 
+as Remove(GetCount() `- count).&]
+[s3; &]
+[s4;%- &]
 [s5;:AString`:`:Mid`(int`,int`)const:%- [_^AString`:`:String^ String]_[* Mid]([@(0.0.255) i
 nt]_[*@3 pos], [@(0.0.255) int]_[*@3 length])_[@(0.0.255) const]&]
 [s2; Returns a substring that begins from [%-*@3 pos] and with [%-*@3 length 
@@ -531,22 +551,157 @@ ens of the string.&]
 begin of the string.&]
 [s3; &]
 [s4;%- &]
+[s5;:Upp`:`:AString`:`:Find`(int`,const Upp`:`:AString`:`:tchar`*`,int`)const:%- [@(0.0.255) i
+nt]_[* Find]([@(0.0.255) int]_[*@3 len], [@(0.0.255) const]_[_^Upp`:`:AString`:`:tchar^ tch
+ar]_`*[*@3 s], [@(0.0.255) int]_[*@3 from])_[@(0.0.255) const]&]
 [s5;:AString`:`:Find`(const AString`:`:tchar`*`,int`)const:%- [@(0.0.255) int]_[* Find]([@(0.0.255) c
 onst]_[_^AString`:`:tchar^ tchar]_`*[*@3 s], [@(0.0.255) int]_[*@3 from]_`=_[@3 0])_[@(0.0.255) c
 onst]&]
 [s5;:AString`:`:Find`(const AString`:`:String`&`,int`)const:%- [@(0.0.255) int]_[* Find](
 [@(0.0.255) const]_[_^AString`:`:String^ String][@(0.0.255) `&]_[*@3 s], 
 [@(0.0.255) int]_[*@3 from]_`=_[@3 0])_[@(0.0.255) const]&]
-[s2; Returns first position of substring [%-*@3 s] tested from [%-*@3 from] 
-position, or `-1 if [%-*@3 s] is not found.&]
+[s2; Returns first position of substring [%-*@3 s] greater than or 
+equal to [%-*@3 from], or `-1 if [%-*@3 s] is not found.&]
+[s3; &]
 [s4;%- &]
+[s5;:AString`:`:FindAfter`(const AString`:`:tchar`*`,int`)const:%- [@(0.0.255) int]_[* Fi
+ndAfter]([@(0.0.255) const]_[_^AString`:`:tchar^ tchar]_`*[*@3 s], 
+[@(0.0.255) int]_[*@3 from]_`=_[@3 0])_[@(0.0.255) const]&]
+[s5;:AString`:`:FindAfter`(const AString`:`:String`&`,int`)const:%- [@(0.0.255) int]_[* F
+indAfter]([@(0.0.255) const]_[_^AString`:`:String^ String][@(0.0.255) `&]_[*@3 s], 
+[@(0.0.255) int]_[*@3 from]_`=_[@3 0])_[@(0.0.255) const]&]
+[s2; Similiar to Find, but if found, returns position [*/ after] the 
+substring found. In other words, if not found returns `-1, if 
+found, returns Find([%-*@3 s][%- , ][%-*@3 from]) `+ length of [%-*@3 s].&]
+[s3; &]
+[s4;%- &]
+[s5;:Upp`:`:AString`:`:ReverseFind`(int`,const Upp`:`:AString`:`:tchar`*`,int`)const:%- [@(0.0.255) i
+nt]_[* ReverseFind]([@(0.0.255) int]_[*@3 len], [@(0.0.255) const]_[_^Upp`:`:AString`:`:tchar^ t
+char]_`*[*@3 s], [@(0.0.255) int]_[*@3 from])_[@(0.0.255) const]&]
+[s5;:Upp`:`:AString`:`:ReverseFind`(const Upp`:`:AString`:`:tchar`*`,int`)const:%- [@(0.0.255) i
+nt]_[* ReverseFind]([@(0.0.255) const]_[_^Upp`:`:AString`:`:tchar^ tchar]_`*[*@3 s], 
+[@(0.0.255) int]_[*@3 from])_[@(0.0.255) const]&]
+[s5;:Upp`:`:AString`:`:ReverseFind`(const Upp`:`:AString`:`:String`&`,int`)const:%- [@(0.0.255) i
+nt]_[* ReverseFind]([@(0.0.255) const]_[_^Upp`:`:AString`:`:String^ String][@(0.0.255) `&
+]_[*@3 s], [@(0.0.255) int]_[*@3 from])_[@(0.0.255) const]&]
+[s5;:Upp`:`:AString`:`:ReverseFind`(const Upp`:`:AString`:`:tchar`*`)const:%- [@(0.0.255) i
+nt]_[* ReverseFind]([@(0.0.255) const]_[_^Upp`:`:AString`:`:tchar^ tchar]_`*[*@3 s])_[@(0.0.255) c
+onst]&]
+[s5;:Upp`:`:AString`:`:ReverseFind`(const Upp`:`:AString`:`:String`&`)const:%- [@(0.0.255) i
+nt]_[* ReverseFind]([@(0.0.255) const]_[_^Upp`:`:AString`:`:String^ String][@(0.0.255) `&
+]_[*@3 s])_[@(0.0.255) const]&]
+[s2; Finds the [*/ last] position of [%-*@3 s] less than [%-*@3 from], 
+or `-1 if not found.&]
+[s3; &]
+[s4;%- &]
+[s5;:Upp`:`:AString`:`:ReverseFindAfter`(int`,const Upp`:`:AString`:`:tchar`*`,int`)const:%- [@(0.0.255) i
+nt]_[* ReverseFindAfter]([@(0.0.255) int]_[*@3 len], [@(0.0.255) const]_[_^Upp`:`:AString`:`:tchar^ t
+char]_`*[*@3 s], [@(0.0.255) int]_[*@3 from])_[@(0.0.255) const]&]
+[s5;:Upp`:`:AString`:`:ReverseFindAfter`(const Upp`:`:AString`:`:tchar`*`,int`)const:%- [@(0.0.255) i
+nt]_[* ReverseFindAfter]([@(0.0.255) const]_[_^Upp`:`:AString`:`:tchar^ tchar]_`*[*@3 s],
+ [@(0.0.255) int]_[*@3 from])_[@(0.0.255) const]&]
+[s5;:Upp`:`:AString`:`:ReverseFindAfter`(const Upp`:`:AString`:`:String`&`,int`)const:%- [@(0.0.255) i
+nt]_[* ReverseFindAfter]([@(0.0.255) const]_[_^Upp`:`:AString`:`:String^ String][@(0.0.255) `&
+]_[*@3 s], [@(0.0.255) int]_[*@3 from])_[@(0.0.255) const]&]
+[s5;:Upp`:`:AString`:`:ReverseFindAfter`(const Upp`:`:AString`:`:tchar`*`)const:%- [@(0.0.255) i
+nt]_[* ReverseFindAfter]([@(0.0.255) const]_[_^Upp`:`:AString`:`:tchar^ tchar]_`*[*@3 s])
+_[@(0.0.255) const]&]
+[s5;:Upp`:`:AString`:`:ReverseFindAfter`(const Upp`:`:AString`:`:String`&`)const:%- [@(0.0.255) i
+nt]_[* ReverseFindAfter]([@(0.0.255) const]_[_^Upp`:`:AString`:`:String^ String][@(0.0.255) `&
+]_[*@3 s])_[@(0.0.255) const]&]
+[s2; Similar to ReverseFind, but returns position [*/ after] the substring 
+found. In other words, if not found returns `-1, if found, returns 
+Find([%-*@3 s][%- , ][%-*@3 from]) `+ length of [%-*@3 s].&]
+[s3; &]
+[s4;%- &]
+[s5;:Upp`:`:AString`:`:Replace`(const Upp`:`:AString`:`:tchar`*`,int`,const Upp`:`:AString`:`:tchar`*`,int`):%- [@(0.0.255) v
+oid]_[* Replace]([@(0.0.255) const]_[_^Upp`:`:AString`:`:tchar^ tchar]_`*[*@3 find], 
+[@(0.0.255) int]_[*@3 findlen], [@(0.0.255) const]_[_^Upp`:`:AString`:`:tchar^ tchar]_`*[*@3 r
+eplace], [@(0.0.255) int]_[*@3 replacelen])&]
 [s5;:AString`:`:Replace`(const AString`:`:String`&`,const AString`:`:String`&`):%- [@(0.0.255) v
 oid]_[* Replace]([@(0.0.255) const]_[_^AString`:`:String^ String][@(0.0.255) `&]_[*@3 find],
  [@(0.0.255) const]_[_^AString`:`:String^ String][@(0.0.255) `&]_[*@3 replace])&]
 [s5;:AString`:`:Replace`(const AString`:`:tchar`*`,const AString`:`:tchar`*`):%- [@(0.0.255) v
 oid]_[* Replace]([@(0.0.255) const]_[_^AString`:`:tchar^ tchar]_`*[*@3 find], 
 [@(0.0.255) const]_[_^AString`:`:tchar^ tchar]_`*[*@3 replace])&]
+[s5;:AString`:`:Replace`(const AString`:`:String`&`,const AString`:`:tchar`*`):%- [@(0.0.255) v
+oid]_[* Replace]([@(0.0.255) const]_[_^AString`:`:String^ String][@(0.0.255) `&]_[*@3 find],
+ [@(0.0.255) const]_[_^AString`:`:tchar^ tchar]_`*[*@3 replace])&]
+[s5;:AString`:`:Replace`(const AString`:`:tchar`*`,const AString`:`:String`&`):%- [@(0.0.255) v
+oid]_[* Replace]([@(0.0.255) const]_[_^AString`:`:tchar^ tchar]_`*[*@3 find], 
+[@(0.0.255) const]_[_^AString`:`:String^ String][@(0.0.255) `&]_[*@3 replace])&]
 [s2; Replaces substring [%-*@3 find] with [%-*@3 replace ]string for 
 all times [%-*@3 find] string appears.&]
 [s3; &]
-[s0; ]
+[s4;%- &]
+[s5;:Upp`:`:AString`:`:StartsWith`(const Upp`:`:AString`:`:tchar`*`,int`)const:%- [@(0.0.255) b
+ool]_[* StartsWith]([@(0.0.255) const]_[_^Upp`:`:AString`:`:tchar^ tchar]_`*[*@3 s], 
+[@(0.0.255) int]_[*@3 len])_[@(0.0.255) const]&]
+[s5;:Upp`:`:AString`:`:StartsWith`(const Upp`:`:AString`:`:tchar`*`)const:%- [@(0.0.255) b
+ool]_[* StartsWith]([@(0.0.255) const]_[_^Upp`:`:AString`:`:tchar^ tchar]_`*[*@3 s])_[@(0.0.255) c
+onst]&]
+[s5;:Upp`:`:AString`:`:StartsWith`(const Upp`:`:AString`:`:String`&`)const:%- [@(0.0.255) b
+ool]_[* StartsWith]([@(0.0.255) const]_[_^Upp`:`:AString`:`:String^ String][@(0.0.255) `&
+]_[*@3 s])_[@(0.0.255) const]&]
+[s2; Returns true if string starts with [%-*@3 s].&]
+[s3; &]
+[s4;%- &]
+[s5;:Upp`:`:AString`:`:TrimStart`(const Upp`:`:AString`:`:tchar`*`,int`):%- [@(0.0.255) b
+ool]_[* TrimStart]([@(0.0.255) const]_[_^Upp`:`:AString`:`:tchar^ tchar]_`*[*@3 s], 
+[@(0.0.255) int]_[*@3 len])&]
+[s5;:Upp`:`:AString`:`:TrimStart`(const Upp`:`:AString`:`:tchar`*`):%- [@(0.0.255) bool
+]_[* TrimStart]([@(0.0.255) const]_[_^Upp`:`:AString`:`:tchar^ tchar]_`*[*@3 s])&]
+[s5;:Upp`:`:AString`:`:TrimStart`(const Upp`:`:AString`:`:String`&`):%- [@(0.0.255) boo
+l]_[* TrimStart]([@(0.0.255) const]_[_^Upp`:`:AString`:`:String^ String][@(0.0.255) `&]_[*@3 s
+])&]
+[s2; If string starts with [%-*@3 s], trims the start to remove it 
+and returns true.&]
+[s3; &]
+[s4;%- &]
+[s5;:Upp`:`:AString`:`:EndsWith`(const Upp`:`:AString`:`:tchar`*`,int`)const:%- [@(0.0.255) b
+ool]_[* EndsWith]([@(0.0.255) const]_[_^Upp`:`:AString`:`:tchar^ tchar]_`*[*@3 s], 
+[@(0.0.255) int]_[*@3 len])_[@(0.0.255) const]&]
+[s5;:Upp`:`:AString`:`:EndsWith`(const Upp`:`:AString`:`:tchar`*`)const:%- [@(0.0.255) b
+ool]_[* EndsWith]([@(0.0.255) const]_[_^Upp`:`:AString`:`:tchar^ tchar]_`*[*@3 s])_[@(0.0.255) c
+onst]&]
+[s5;:Upp`:`:AString`:`:EndsWith`(const Upp`:`:AString`:`:String`&`)const:%- [@(0.0.255) b
+ool]_[* EndsWith]([@(0.0.255) const]_[_^Upp`:`:AString`:`:String^ String][@(0.0.255) `&]_
+[*@3 s])_[@(0.0.255) const]&]
+[s2; Returns true if string ends with [%-*@3 s].&]
+[s3; &]
+[s4;%- &]
+[s5;:Upp`:`:AString`:`:TrimEnd`(const Upp`:`:AString`:`:tchar`*`,int`):%- [@(0.0.255) b
+ool]_[* TrimEnd]([@(0.0.255) const]_[_^Upp`:`:AString`:`:tchar^ tchar]_`*[*@3 s], 
+[@(0.0.255) int]_[*@3 len])&]
+[s5;:Upp`:`:AString`:`:TrimEnd`(const Upp`:`:AString`:`:tchar`*`):%- [@(0.0.255) bool]_
+[* TrimEnd]([@(0.0.255) const]_[_^Upp`:`:AString`:`:tchar^ tchar]_`*[*@3 s])&]
+[s5;:Upp`:`:AString`:`:TrimEnd`(const Upp`:`:AString`:`:String`&`):%- [@(0.0.255) bool]_
+[* TrimEnd]([@(0.0.255) const]_[_^Upp`:`:AString`:`:String^ String][@(0.0.255) `&]_[*@3 s])
+&]
+[s2; If string ends with [%-*@3 s], trims the end to remove it and 
+returns true.&]
+[s3; &]
+[s4;%- &]
+[s5;:Upp`:`:AString`:`:FindFirstOf`(int`,const Upp`:`:AString`:`:tchar`*`,int`)const:%- [@(0.0.255) i
+nt]_[* FindFirstOf]([@(0.0.255) int]_[*@3 len], [@(0.0.255) const]_[_^Upp`:`:AString`:`:tchar^ t
+char]_`*[*@3 set], [@(0.0.255) int]_[*@3 from])_[@(0.0.255) const]&]
+[s2; Returns the first position of any character from [%-*@3 set] starting 
+at [%-*@3 from]. The number of characters in [%-*@3 set] is [%-*@3 len]. 
+Returns `-1 if not found.&]
+[s3; &]
+[s4;%- &]
+[s5;:Upp`:`:AString`:`:FindFirstOf`(const Upp`:`:AString`:`:tchar`*`,int`)const:%- [@(0.0.255) i
+nt]_[* FindFirstOf]([@(0.0.255) const]_[_^Upp`:`:AString`:`:tchar^ tchar]_`*[*@3 set], 
+[@(0.0.255) int]_[*@3 from]_`=_[@3 0])_[@(0.0.255) const]&]
+[s2; Returns the first position of any character from zero terminated 
+[%-*@3 set] starting at [%-*@3 from]. Returns `-1 if not found.&]
+[s3; &]
+[s4;%- &]
+[s5;:Upp`:`:AString`:`:FindFirstOf`(const Upp`:`:AString`:`:String`&`,int`)const:%- [@(0.0.255) i
+nt]_[* FindFirstOf]([@(0.0.255) const]_[_^Upp`:`:AString`:`:String^ String][@(0.0.255) `&
+]_[*@3 set], [@(0.0.255) int]_[*@3 from]_`=_[@3 0])_[@(0.0.255) const]&]
+[s2; Returns the first position of any character from [%-*@3 set] starting 
+at [%-*@3 from]. Returns `-1 if not found.&]
+[s2; &]
+[s3; &]
+[s3; ]]

@@ -1,7 +1,6 @@
 #include "GeomDraw.h"
-#pragma hdrstop
 
-NAMESPACE_UPP
+namespace Upp {
 
 //#define BILINEAR_TIMING
 
@@ -567,4 +566,4 @@ Image BilinearRotate(const Image& m, int angle)
 	return ib;
 }
 
-END_UPP_NAMESPACE
+}

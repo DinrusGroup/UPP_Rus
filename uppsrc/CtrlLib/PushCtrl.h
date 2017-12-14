@@ -42,7 +42,7 @@ public:
 	Pusher&  SetLabel(const char *text);
 	Pusher&  ClickFocus(bool cf = true);
 	Pusher&  NoClickFocus()                                 { return ClickFocus(false); }
-	bool     IsClickFocus() const { return clickfocus; }
+	bool     IsClickFocus() const                           { return clickfocus; }
 	
 	Font     GetFont() const                                { return font; }
 	String   GetLabel() const                               { return label; }
@@ -51,8 +51,8 @@ public:
 
 	int      GetVisualState() const;
 
-	Callback WhenPush;
-	Callback WhenRepeat;
+	Event<>  WhenPush;
+	Event<>  WhenRepeat;
 
 	Pusher();
 	virtual ~Pusher();
@@ -104,6 +104,7 @@ public:
 	static const Style& StyleEdge();
 	static const Style& StyleLeftEdge();
 	static const Style& StyleScroll();
+	static const Style& StyleNaked();
 
 	Button&  SetStyle(const Style& s);
 	Button&  AutoStyle();
@@ -112,6 +113,7 @@ public:
 	Button&  EdgeStyle()                          { return SetStyle(StyleEdge()); }
 	Button&  LeftEdgeStyle()                      { return SetStyle(StyleLeftEdge()); }
 	Button&  ScrollStyle()                        { return SetStyle(StyleScroll()); }
+	Button&  NakedStyle()                         { return SetStyle(StyleNaked()); }
 
 	Button&  Ok();
 	Button&  Cancel();
@@ -182,6 +184,7 @@ protected:
 	bool   notnull;
 	bool   blackedge;
 	bool   showlabel;
+	Color  color;
 
 public:
 	Option& Set(int b);
@@ -201,6 +204,7 @@ public:
 	Option& NotNull(bool nn = true)               { notnull = nn; Refresh(); return *this; }
 	Option& NoNotNull()                           { return NotNull(false); }
 	bool    IsNotNull() const                     { return notnull; }
+	Option& SetColor(Color c)                     { color = c; Refresh(); return *this; }
 
 	Option();
 	virtual ~Option();
@@ -295,6 +299,7 @@ private:
 	int          linecy;
 	int          light;
 	int          mincy;
+	int          direction;
 
 	int   GetIndex() const;
 	int   GetIndex(Point p);
@@ -331,6 +336,9 @@ public:
 	Switch& SetFont(Font f)                                     { font = f; Refresh(); return *this; }
 	Font    GetFont() const                                     { return font; }
 	Switch& MinCaseHeight(int cy)                               { mincy = cy; Refresh(); return *this; }
+	Switch& SetAutoDirection()                                  { direction = 0; return *this; }
+	Switch& SetHorizontal()                                     { direction = 1; return *this; }
+	Switch& SetVertical()                                       { direction = -1; return *this; }
 
 	Switch();
 	virtual ~Switch();
@@ -355,7 +363,7 @@ protected:
 	virtual void   DoAction();
 
 public:
-	Callback       WhenPreAction;
+	Event<>        WhenPreAction;
 
 
 	DataPusher&    SetConvert(const Convert& _convert) { convert = &_convert; Refresh(); return *this; }

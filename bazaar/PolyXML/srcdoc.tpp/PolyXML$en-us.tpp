@@ -22,25 +22,12 @@ topic "WithFactory and PolyXML";
 [C2 $$20,20#70211524482531209251820423858195:class`-nested]
 [b50;2 $$21,21#03324558446220344731010354752573:Par]
 [{_}%EN-US 
-[s2; WithFactory and PolyXML templates&]
-[s0; &]
-[s0; [^topic`:`/`/PolyXML`/src`/WithFactory`$en`-us`#WithFactory`:`:class^ WithFactory 
-]is a generic class`-factory template.&]
-[s0; It allows registering classes derived from it and provide many 
-useful functions on them :&]
-[s0; &]
-[s0;i150;O0; Object creation by class name&]
-[s0;i150;O0; Query of class name from object&]
-[s0;i150;O0; Association of some fields to class types, as an icon, 
-a group, a description and so on&]
-[s0;i150;O0; Query of above fields given any object belonging to 
-the class hierarchy&]
-[s0;i150;O0; Get a list of registered classes belonging to hierarchy&]
+[s2; WithPolyXML template&]
 [s0; &]
 [s0; [^topic`:`/`/PolyXML`/src`/WithPolyXML`$en`-us`#WithPolyXML`:`:class^ WithPolyXML 
 ]template, derived from [^topic`:`/`/PolyXML`/src`/WithFactory`$en`-us`#WithFactory`:`:class^ W
-ithFactory ]one, provides the necessary behaviour to handle XML 
-streaming of classes belong to hierarchy.&]
+ithFactory ]one (see [* ClassFactory ]package), provides the necessary 
+behaviour to handle XML streaming of classes belong to hierarchy.&]
 [s0; All classes derived from [^topic`:`/`/PolyXML`/src`/WithPolyXML`$en`-us`#WithPolyXML`:`:class^ W
 ithPolyXML ]template can be inserted into any of following containers 
 :&]

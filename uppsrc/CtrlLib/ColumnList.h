@@ -43,7 +43,7 @@ private:
 	bool       nobg;
 	bool       popupex;
 	bool       selclick;
-	int	   	   mode;
+	int        mode;
 
 	DisplayPopup info;
 
@@ -92,25 +92,25 @@ private:
 public:
 	enum {
 		MODE_LIST,
-		MODE_COLUMN,		
-		MODE_ROWS	
+		MODE_COLUMN,
+		MODE_ROWS
 	};
 
-	Callback         WhenLeftClick;
-	Callback1<Point> WhenLeftClickPos;
-	Callback         WhenLeftDouble;
-	Callback1<Bar&>  WhenBar;
-	Callback         WhenSel;
+	Event<>      WhenLeftClick;
+	Event<Point> WhenLeftClickPos;
+	Event<>      WhenLeftDouble;
+	Event<Bar&>  WhenBar;
+	Event<>      WhenSel;
 
-	Callback                     WhenDrag;
-	Callback2<int, PasteClip&>   WhenDropItem;
-	Callback2<int, PasteClip&>   WhenDropInsert;
-	Callback1<PasteClip&>        WhenDrop;
+	Event<>                  WhenDrag;
+	Event<int, PasteClip&>   WhenDropItem;
+	Event<int, PasteClip&>   WhenDropInsert;
+	Event<PasteClip&>        WhenDrop;
 
-	// depracated - use WhenSel
-	Callback         WhenSelection;
-	Callback         WhenEnterItem;
-	Callback         WhenKillCursor;
+	// deprecated - use WhenSel
+	Event<>          WhenSelection;
+	Event<>          WhenEnterItem;
+	Event<>          WhenKillCursor;
 
 	int     GetColumnItems() const;
 	int     GetColumnCx(int i = 0) const;
@@ -126,6 +126,9 @@ public:
 
 	int     GetSbPos() const                           { return GetSbPos(GetSize()); }
 	void    SetSbPos(int y);
+	
+	int     GetScroll() const                          { return sb; }
+	void    ScrollTo(int a)                            { sb.Set(a); }
 
 	void    SetFrame(CtrlFrame& frame);
 
@@ -183,9 +186,9 @@ public:
 	ColumnList&  ColumnMode()                         { return Mode(MODE_COLUMN); }
 	ColumnList&  Columns(int _n)                      { ncl = _n; Refresh(); return *this; }
 	int          GetColumns() const                   { return ncl; }
-	ColumnList&  ItemHeight(int _cy)                  { cy = _cy; RefreshLayout(); Refresh(); return *this; }
+	ColumnList&  ItemHeight(int _cy)                  { cy = _cy; RefreshLayout(); SetSb(); Refresh(); return *this; }
 	int          GetItemHeight() const                { return cy; }
-	ColumnList&  ItemWidth(int _cx)                   { cx = _cx; RefreshLayout(); Refresh(); return *this; }
+	ColumnList&  ItemWidth(int _cx)                   { cx = _cx; RefreshLayout(); SetSb(); Refresh(); return *this; }
 	int          GetItemWidth() const                 { return cx; }
 	ColumnList&  RoundSize(bool b = true);
 	ColumnList&  NoRoundSize()                        { return RoundSize(false); }

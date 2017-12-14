@@ -1,6 +1,6 @@
 #include "Core.h"
 
-NAMESPACE_UPP
+namespace Upp {
 
 unsigned stou(const char *s, void *endptr, unsigned base)
 {
@@ -13,8 +13,12 @@ unsigned stou(const char *s, void *endptr, unsigned base)
 		return ~0;
 	}
 	unsigned value = digit;
-	while((digit = ctoi(*++s)) < base)
+	while((digit = ctoi(*++s)) < base) {
+		unsigned v0 = value;
 		value = value * base + digit;
+		if(v0 > value) // overflow
+			return ~0;
+	}
 	if(endptr)
 		*(const char **)endptr = s;
 	return value;
@@ -31,8 +35,12 @@ unsigned stou(const wchar *s, void *endptr, unsigned base)
 		return ~0;
 	}
 	unsigned value = digit;
-	while((digit = ctoi(*++s)) < base)
+	while((digit = ctoi(*++s)) < base) {
+		unsigned v0 = value;
 		value = value * base + digit;
+		if(v0 > value) // overflow
+			return ~0;
+	}
 	if(endptr)
 		*(const wchar **)endptr = s;
 	return value;
@@ -50,8 +58,12 @@ uint64 stou64(const char *s, void *endptr, unsigned base)
 		return ~0;
 	}
 	uint64 value = digit;
-	while((digit = ctoi(*++s)) < base)
+	while((digit = ctoi(*++s)) < base) {
+		uint64 v0 = value;
 		value = value * base + digit;
+		if(v0 > value) // overflow
+			return ~0;
+	}
 	if(endptr)
 		*(const char **)endptr = s;
 	return value;
@@ -102,12 +114,15 @@ int64 ScanInt64(const char *ptr, const char **endptr, int base)
 		return Null;
 }
 
-double ScanDouble(const char *p, const char **endptr, bool accept_comma)
+template <class T>
+double ScanDoubleT(const T *p, const T **endptr, bool accept_comma)
 {
-	const char *begin = p;
+	const T *begin = p;
 	while(*p && (byte)*p <= ' ')
 		p++;
 	bool neg = false;
+	if(endptr)
+		*endptr = p;
 	if(*p == '+' || *p == '-')
 		neg = (*p++ == '-');
 	if((byte)(*p - '0') >= 10 && !((*p == '.' || accept_comma && *p == ',') && (byte)(p[1] - '0') < 10)) {
@@ -115,7 +130,7 @@ double ScanDouble(const char *p, const char **endptr, bool accept_comma)
 		return Null;
 	}
 	double mantissa = 0;
-	char c;
+	T c;
 	int exp = 0;
 	while((byte)(*p - '0') < 10)
 		if((c = *p++) != '0') {
@@ -126,95 +141,89 @@ double ScanDouble(const char *p, const char **endptr, bool accept_comma)
 			exp++;
 	int raise = exp;
 	if(*p == '.' || accept_comma && *p == ',') // decimal part
-		while((byte)((c = *++p) - '0') < 10)
+		while((byte)((c = *++p) - '0') < 10) {
 			if(c != '0') {
-				if(raise) { mantissa *= ipow10(raise); exp -= raise; raise = 0; }
+				if(raise) {
+					mantissa *= ipow10(raise);
+					exp -= raise;
+					raise = 0;
+				}
 				exp--;
 				mantissa = 10 * mantissa + c - '0';
+				if(!IsFin(mantissa))
+					return Null;
 			}
 			else
 				raise++;
+		}
 	if(*p == 'E' || *p == 'e') { // exponent
-		int vexp = ScanInt(p + 1, endptr);
-		if(!IsNull(vexp))
-			exp += vexp;
+		int vexp = ScanInt(p + 1, &p);
+		if(IsNull(vexp))
+			return Null;
+		exp += vexp;
 	}
-	else
-		if(endptr) *endptr = p;
+	if(endptr) *endptr = p;
 	if(exp) {
 		double e = ipow10(tabs(exp));
 		mantissa = (exp > 0 ? mantissa * e : mantissa / e);
 	}
+	if(!IsFin(mantissa))
+		return Null;
 	return neg ? -mantissa : mantissa;
+}
+
+double ScanDouble(const char *p, const char **endptr, bool accept_comma)
+{
+	return ScanDoubleT(p, endptr, accept_comma);
 }
 
 double ScanDouble(const wchar *p, const wchar **endptr, bool accept_comma)
 {
-	const wchar *begin = p;
-	while(*p && *p <= ' ')
-		p++;
-	bool neg = false;
-	if(*p == '+' || *p == '-')
-		neg = (*p++ == '-');
-	if((unsigned)(*p - '0') >= 10) {
-		if(endptr) *endptr = begin;
-		return Null;
-	}
-	double mantissa = 0;
-	wchar c;
-	int exp = 0;
-	while((unsigned)(*p - '0') < 10)
-		if((c = *p++) != '0') {
-			if(exp) { mantissa *= ipow10(exp); exp = 0; }
-			mantissa = 10 * mantissa + c - '0';
-		}
-		else
-			exp++;
-	int raise = exp;
-	if(*p == '.' || accept_comma && *p == ',') // decimal part
-		while((unsigned)((c = *++p) - '0') < 10)
-			if(c != '0') {
-				if(raise) { mantissa *= ipow10(raise); exp -= raise; raise = 0; }
-				exp--;
-				mantissa = 10 * mantissa + c - '0';
-			}
-			else
-				raise++;
-	if(*p == 'E' || *p == 'e') { // exponent
-		int vexp = ScanInt(p + 1, endptr);
-		if(!IsNull(vexp))
-			exp += vexp;
-	}
-	else
-		if(endptr) *endptr = p;
-	if(exp) {
-		double e = ipow10(tabs(exp));
-		mantissa = (exp > 0 ? mantissa * e : mantissa / e);
-	}
-	return neg ? -mantissa : mantissa;
+	return ScanDoubleT(p, endptr, accept_comma);
+}
+
+double Atof(const char *s)
+{
+	return Nvl(ScanDouble(s));
 }
 
 Value StrIntValue(const char *s)
 {
 	if(s && *s) {
-		int64 q = ScanInt64(s);
-		return IsNull(q) ? ErrorValue(t_("Неправильное число !")) : Value(q);
+		const char *p;
+		int64 q = ScanInt64(s, &p);
+		if(!IsNull(q))
+			while(*p) {
+				if((byte)*p > ' ')
+					return ErrorValue(t_("Invalid number !"));
+				p++;
+			}
+		return IsNull(q) ? ErrorValue(t_("Invalid number !")) : Value(q);
 	}
-	return Null;
+	return (int)Null;
 }
 
 Value StrDblValue(const char *s)
 {
 	if(s && *s) {
-		double q = ScanDouble(s);
-		return IsNull(q) ? ErrorValue(t_("Неправильное число !")) : Value(q);
+		const char *p;
+		double q = ScanDouble(s, &p);
+		if(!IsNull(q))
+			while(*p) {
+				if((byte)*p > ' ')
+					return ErrorValue(t_("Invalid number !"));
+				p++;
+			}
+		return IsNull(q) ? ErrorValue(t_("Invalid number !")) : Value(q);
 	}
-	return Null;
+	return (double)Null;
 }
 
-Value Scan(dword qtype, const String& text, const Value& def) {
+Value Scan(dword qtype, const String& text, const Value& def, bool *hastime) {
 	Date date;
 	const char *s;
+	if(hastime)
+		*hastime = false;
 	switch(qtype) {
 	case INT64_V:
 	case INT_V:
@@ -231,7 +240,7 @@ Value Scan(dword qtype, const String& text, const Value& def) {
 					return date;
 				s++;
 			}
-		return ErrorValue(t_("Неправильная дата !"));
+		return ErrorValue(t_("Invalid date !"));
 	case TIME_V: {
 		if(text.IsEmpty()) return (Time) Null;
 		s = StrToDate(date, text, (Date)def);
@@ -245,6 +254,8 @@ Value Scan(dword qtype, const String& text, const Value& def) {
 				tm.second = d.second;
 				if(p.IsEof())
 					return tm;
+				if(hastime)
+					*hastime = true;
 				int q = p.ReadInt();
 				if(q < 0 || q > 23)
 					throw CParser::Error("");
@@ -267,7 +278,7 @@ Value Scan(dword qtype, const String& text, const Value& def) {
 					return tm;
 			}
 			catch(CParser::Error) {}
-		return ErrorValue(t_("Неправильное время !"));
+		return ErrorValue(t_("Invalid time !"));
 	}
 	case STRING_V:
 	case WSTRING_V:
@@ -313,14 +324,18 @@ int    Convert::Filter(int chr) const {
 	return chr;
 }
 
-GLOBAL_VAR_INIT(const Convert, StdConvert);
+const Convert& StdConvert()
+{
+	static Convert h;
+	return h;
+}
 
 String StdFormat(const Value& q) {
 	return StdConvert().Format(q);
 }
 
 Value NotNullError() {
-	return ErrorValue(t_("Значение Null недопустимо."));
+	return ErrorValue(t_("Null value not allowed."));
 }
 
 #ifdef flagSO
@@ -339,12 +354,13 @@ Value ConvertInt::Scan(const Value& text) const {
 	if(IsError(v)) return v;
 	if(IsNull(v)) return notnull ? NotNullError() : v;
 	int64 m = v;
-	if(m >= minval && m <= maxval)
+	if(m >= minval && m <= maxval) {
 		if(m >= INT_MIN && m <= INT_MAX)
 			return (int)m;
 		else
 			return v;
-	return ErrorValue(UPP::Format(t_("Число должно быть между %d и %d."), minval, maxval));
+	}
+	return ErrorValue(UPP::Format(t_("Number must be between %d and %d."), minval, maxval));
 }
 
 int   ConvertInt::Filter(int chr) const {
@@ -358,13 +374,19 @@ Value ConvertDouble::Format(const Value& q) const
 	return UPP::NFormat(pattern, (double)q);
 }
 
-Value ConvertDouble::Scan(const Value& text) const {
+Value ConvertDouble::Scan(const Value& txt) const {
+	String text = txt;
+	if(pattern.GetCount() && pattern != "%.10g") { // Fix text with patterns like "%2.!n EUR" (e.g. 1.2 EUR)
+		text = UPP::Filter(text, CharFilterDouble);
+		while(ToUpper(*text.Last()) == 'E')
+			text.Trim(text.GetCount() - 1);
+	}
 	Value v = UPP::Scan(DOUBLE_V, text);
 	if(IsError(v)) return v;
 	if(IsNull(v)) return notnull ? NotNullError() : v;
 	double m = v;
 	if(m >= minval && m <= maxval) return v;
-	return ErrorValue(UPP::Format(t_("Число должно быть между %g и %g."), minval, maxval));
+	return ErrorValue(UPP::Format(t_("Number must be between %g and %g."), minval, maxval));
 }
 
 int   ConvertDouble::Filter(int chr) const {
@@ -423,6 +445,8 @@ int   ConvertDate::Filter(int chr) const {
 ConvertTime::ConvertTime(Time minval, Time maxval, bool notnull)
 : minval(minval), maxval(maxval), notnull(notnull), seconds(true) {
 	defaultval = Null;
+	timealways = false;
+	dayend = false;
 }
 
 ConvertTime::~ConvertTime()
@@ -431,12 +455,19 @@ ConvertTime::~ConvertTime()
 
 Value ConvertTime::Scan(const Value& text) const
 {
-	Value v = UPP::Scan(TIME_V, text);
+	bool hastime;
+	Value v = UPP::Scan(TIME_V, text, defaultval, &hastime);
 	if(IsError(v)) return v;
 	if(IsNull(v)) return notnull ? NotNullError() : v;
 	Time m = v;
+	if(!hastime && dayend) {
+		m.hour = 23;
+		m.minute = 59;
+		m.second = 59;
+		v = m;
+	}
 	if(m >= minval && m <= maxval) return v;
-	return ErrorValue(t_("Время должно быть между ") + UPP::Format(minval) + t_("диапазоном\v и ") + UPP::Format(maxval) + ".");
+	return ErrorValue(t_("Time must be between ") + UPP::Format(minval) + t_("range\v and ") + UPP::Format(maxval) + ".");
 }
 
 int ConvertTime::Filter(int chr) const
@@ -452,8 +483,9 @@ Value ConvertTime::Format(const Value& q) const
 {
 	if(IsVoid(q) || q.IsNull())
 		return String();
-	else if(q.GetType() == TIME_V)
-		return UPP::Format(Time(q), seconds);
+	else
+	if(q.GetType() == TIME_V || timealways)
+		return ToTime((Date)q) != (Time)q || timealways ? UPP::Format(Time(q), seconds) : UPP::Format(Date(q));
 	else
 		return Convert::Format(q);
 }
@@ -467,33 +499,44 @@ ConvertString::~ConvertString() {}
 
 Value ConvertString::Scan(const Value& text) const {
 	if(IsError(text)) return text;
-	if(IsNull(text)) return notnull ? NotNullError() : Value(text);
-	if(text.GetType() == STRING_V && String(text).GetLength() <= maxlen ||
-	   text.GetType() == WSTRING_V && WString(text).GetLength() <= maxlen) {
+	if(text.GetType() == STRING_V) {
 		String s = text;
 		if(trimleft)
 			s = Upp::TrimLeft(s);
 		if(trimright)
 			s = Upp::TrimRight(s);
-		return s;
+		if(IsNull(s)) return notnull ? NotNullError() : Value(s);
+		if(s.GetLength() <= maxlen) return s;
 	}
-	return ErrorValue(UPP::Format(t_("Пожалуйста, введите не более %d символов."), maxlen));
+	if(text.GetType() == WSTRING_V) {
+		WString s = text;
+		if(trimleft)
+			s = Upp::TrimLeft(s);
+		if(trimright)
+			s = Upp::TrimRight(s);
+		if(IsNull(s)) return notnull ? NotNullError() : Value(s);
+		if(s.GetLength() <= maxlen) return s;
+	}
+	return ErrorValue(UPP::Format(t_("Please enter no more than %d characters."), maxlen));
 }
 
-GLOBAL_VAR_INIT(const ConvertInt, StdConvertInt)
-GLOBAL_VARP_INIT(const ConvertInt, StdConvertIntNotNull, (-INT_MAX, INT_MAX, true))
-GLOBAL_VAR_INIT(const ConvertDouble, StdConvertDouble)
-GLOBAL_VARP_INIT(const ConvertDouble, StdConvertDoubleNotNull,
-            (DOUBLE_NULL_LIM, -DOUBLE_NULL_LIM, true))
-GLOBAL_VAR_INIT(const ConvertDate, StdConvertDate)
-GLOBAL_VARP_INIT(const ConvertDate, StdConvertDateNotNull, (Date(0, 0, 0), Date(3000, 12, 31), true))
-GLOBAL_VAR_INIT(const ConvertTime, StdConvertTime)
-GLOBAL_VARP_INIT(const ConvertTime, StdConvertTimeNotNull, (Null, Null, true))
-GLOBAL_VAR_INIT(const ConvertString, StdConvertString);
-GLOBAL_VARP_INIT(const ConvertString, StdConvertStringNotNull, (INT_MAX, true))
+const ConvertInt& StdConvertInt() { static ConvertInt h; return h; }
+const ConvertInt& StdConvertIntNotNull() { static ConvertInt h(-INT_MAX, INT_MAX, true); return h; }
+
+const ConvertDouble& StdConvertDouble() { static ConvertDouble h; return h; }
+const ConvertDouble& StdConvertDoubleNotNull() { static ConvertDouble h(DOUBLE_NULL_LIM, -DOUBLE_NULL_LIM, true); return h; }
+
+const ConvertDate& StdConvertDate() { static ConvertDate h; return h; }
+const ConvertDate& StdConvertDateNotNull() { static ConvertDate h(Date(0, 0, 0), Date(3000, 12, 31), true); return h; }
+
+const ConvertTime& StdConvertTime() { static ConvertTime h; return h; }
+const ConvertTime& StdConvertTimeNotNull() { static ConvertTime h(Null, Null, true); return h; }
+
+const ConvertString& StdConvertString() { static ConvertString h; return h; }
+const ConvertString& StdConvertStringNotNull() { static ConvertString h(INT_MAX, true); return h; }
 
 Value  MapConvert::Format(const Value& q) const {
-	return map.Get(q, Null);
+	return map.Get(q, default_value);
 }
 
 NoConvertClass::NoConvertClass() {}
@@ -502,7 +545,9 @@ Value NoConvertClass::Format(const Value& q) const {
 	return q;
 }
 
-GLOBAL_VAR_INIT(const NoConvertClass, NoConvert)
+const NoConvertClass& NoConvert() {
+	return Single<NoConvertClass>();
+}
 
 Value ErrorConvertClass::Scan(const Value& v) const
 {
@@ -573,4 +618,4 @@ Value FormatConvert::Format(const Value& v) const
 	return UPP::Format(format, va.Get());
 }
 
-END_UPP_NAMESPACE
+}

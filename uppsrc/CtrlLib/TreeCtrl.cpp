@@ -1,6 +1,6 @@
 #include "CtrlLib.h"
 
-NAMESPACE_UPP
+namespace Upp {
 
 TreeCtrl::Node::Node()
 {
@@ -56,7 +56,7 @@ TreeCtrl::Node::Node(const Image& img, Ctrl& ctrl, int cx, int cy)
 TreeCtrl::TreeCtrl()
 {
 	display = &StdDisplay();
-	levelcx = 16;
+	levelcx = DPI(16);
 	nocursor = false;
 	noroot = false;
 	dirty = true;
@@ -66,10 +66,12 @@ TreeCtrl::TreeCtrl()
 	mousemove = false;
 	accel = false;
 	treesize = Size(0, 0);
+	multiroot = false;
 	Clear();
 	SetFrame(ViewFrame());
 	AddFrame(sb);
 	sb.WhenScroll = THISBACK(Scroll);
+	sb.Box(sb_box);
 	WhenLeftDouble = THISBACK(StdLeftDouble);
 	chldlck = false;
 	highlight_ctrl = false;
@@ -115,7 +117,7 @@ Size   TreeCtrl::Item::GetValueSize(const Display *treedisplay) const
 Size   TreeCtrl::Item::GetCtrlSize() const
 {
 	if(!ctrl) return Size(0, 0);
-	Size csz = ctrl->GetStdSize();
+	Size csz = ctrl->GetMinSize();
 	return Size(Nvl(size.cx, csz.cx), Nvl(size.cy, csz.cy));
 }
 
@@ -123,12 +125,12 @@ Size   TreeCtrl::Item::GetSize(const Display *treedisplay) const
 {
 	Size sz = GetValueSize(treedisplay);
 	Size csz = GetCtrlSize();
-	sz += Size(2 * margin, 2 * margin);
 	Size isz = image.GetSize();
 	sz.cx += isz.cx;
 	sz.cy = max(sz.cy, isz.cy);
 	sz.cx += csz.cx;
 	sz.cy = max(sz.cy, csz.cy);
+	sz += Size(2 * margin, 2 * margin);
 	return sz;
 }
 
@@ -174,6 +176,8 @@ int    TreeCtrl::Insert(int parentid, int i, const TreeCtrl::Node& n)
 		parent.child.Insert(i, id);
 	}
 	dirty = true;
+	if(m.ctrl) // Done during SyncTree too, however we need widget to be child (and Open) until then
+		AddChild(m.ctrl);
 	Dirty(parentid);
 	return id;
 }
@@ -210,6 +214,16 @@ int    TreeCtrl::Insert(int parentid, int i, const Image& img, Value v, Value t,
 	return Insert(parentid, i, TreeCtrl::Node(img, v, t).CanOpen(withopen));
 }
 
+int TreeCtrl::Insert(int parentid, int i, const Image& img, Value key, const String& value, bool withopen)
+{
+	return Insert(parentid, i, img, key, (Value)value, withopen);
+}
+
+int TreeCtrl::Insert(int parentid, int i, const Image& img, Value key, const char *value, bool withopen)
+{
+	return Insert(parentid, i, img, key, (Value)value, withopen);
+}
+
 int    TreeCtrl::Add(int parentid, const Image& img, Value v, bool withopen)
 {
 	return Add(parentid, TreeCtrl::Node(img, v).CanOpen(withopen));
@@ -218,6 +232,16 @@ int    TreeCtrl::Add(int parentid, const Image& img, Value v, bool withopen)
 int    TreeCtrl::Add(int parentid, const Image& img, Value v, Value t, bool withopen)
 {
 	return Add(parentid, TreeCtrl::Node(img, v, t).CanOpen(withopen));
+}
+
+int TreeCtrl::Add(int parentid, const Image& img, Value key, const String& value, bool withopen)
+{
+	return Add(parentid, img, key, (Value)value, withopen);
+}
+
+int TreeCtrl::Add(int parentid, const Image& img, Value key, const char *value, bool withopen)
+{
+	return Add(parentid, img, key, (Value)value, withopen);
 }
 
 int    TreeCtrl::Insert(int parentid, int i, const Image& img, Ctrl& ctrl, int cx, int cy, bool withopen)
@@ -293,9 +317,12 @@ bool TreeCtrl::IsValid(int id) const
 
 void   TreeCtrl::SetNode(int id, const TreeCtrl::Node& n)
 {
-	(TreeCtrl::Node&)item[id] = n;
+	TreeCtrl::Node& m = item[id];
+	m = n;
 	Dirty(id);
 	SetOption(id);
+	if(m.ctrl)
+		AddChildBefore(m.ctrl, GetLastChild());
 }
 
 void   TreeCtrl::RemoveChildren(int id)
@@ -364,6 +391,7 @@ void   TreeCtrl::Clear()
 	selectcount = 0;
 	Dirty();
 	cursor = anchor = -1;
+	sb.Set(0, 0);
 }
 
 void TreeCtrl::RemoveCtrls(int itemi)
@@ -384,12 +412,8 @@ void TreeCtrl::ReLine(int itemi, int level, Size& sz)
 	l.y = sz.cy;
 	l.ll = -1;
 	Item& m = item[itemi];
-	if(m.ctrl) {
+	if(m.ctrl)
 		hasctrls = true;
-//		chldlck = true;
-//		m.ctrl->Remove();
-//		chldlck = false;
-	}
 	m.linei = ii;
 	Size msz = m.GetSize(display);
 	sz.cy += msz.cy;
@@ -417,7 +441,7 @@ void TreeCtrl::SyncAfterSync(Ptr<Ctrl> restorefocus)
 	SyncInfo();
 }
 
-void TreeCtrl::SyncTree()
+void TreeCtrl::SyncTree(bool immediate)
 {
 	if(!dirty)
 		return;
@@ -443,7 +467,10 @@ void TreeCtrl::SyncTree()
 	dirty = false;
 	if(cursorid >= 0)
 		SetCursor(cursorid, false, false, false);
-	PostCallback(PTEBACK1(SyncAfterSync, restorefocus));
+	if(immediate)
+		SyncAfterSync(restorefocus);
+	else
+		PostCallback(PTEBACK1(SyncAfterSync, restorefocus));
 }
 
 void TreeCtrl::SyncCtrls(bool add, Ctrl *restorefocus)
@@ -473,6 +500,22 @@ void TreeCtrl::SyncCtrls(bool add, Ctrl *restorefocus)
 bool TreeCtrl::IsOpen(int id) const
 {
 	return item[id].isopen;
+}
+
+Vector<int> TreeCtrl::GetOpenIds() const
+{
+	Vector<int> r;
+	for(int id = 0; id < item.GetCount(); id++)
+		if(!item[id].free && item[id].isopen)
+			r.Add(id);
+	return r;
+}
+
+void TreeCtrl::OpenIds(const Vector<int>& ids)
+{
+	for(int id : ids)
+		if(IsValid(id))
+			Open(id);
 }
 
 void TreeCtrl::Dirty(int id)
@@ -633,8 +676,8 @@ void TreeCtrl::SetCursorLine(int i, bool sc, bool sel, bool cb)
 		RefreshLine(cursor);
 		cursor = i;
 		RefreshLine(cursor);
-		if(m.ctrl && m.ctrl->SetWantFocus())
-			return;
+		if(m.ctrl)
+			m.ctrl->SetWantFocus();
 		if(cb) {
 			WhenCursor();
 			if(!multiselect) WhenSel();
@@ -685,7 +728,7 @@ void TreeCtrl::SetCursor(int id, bool sc, bool sel, bool cb)
 	while(id > 0) {
 		ASSERT(id >= 0 && id < item.GetCount());
 		MakeVisible(id);
-		SyncTree();
+		SyncTree(true);
 		const Item& m = item[id];
 		if(m.linei >= 0) {
 			SetCursorLine(m.linei, sc, sel, cb);
@@ -774,7 +817,8 @@ void TreeCtrl::ShiftSelect(int l1, int l2)
 	if(l1 > l2)
 		UPP::Swap(l1, l2);
 	for(int i = 0; i < line.GetCount(); i++)
-		SelectOne0(line[i].itemi, i >= l1 && i <= l2, true);
+		SelectOne0(line[i].itemi, i >= l1 && i <= l2, false);
+	UpdateSelect();
 }
 
 void TreeCtrl::LeftDrag(Point p, dword keyflags)
@@ -801,7 +845,7 @@ void TreeCtrl::DoClick(Point p, dword flags, bool down)
 			Open(l.itemi, !IsOpen(l.itemi));
 	}
 	else {
-		if(down && IsSel(l.itemi)) {
+		if(down && IsSel(l.itemi)) { // make possible DnD of multiple items
 			selclick = true;
 			if(down)
 				WhenLeftClick();
@@ -839,21 +883,23 @@ void TreeCtrl::SyncInfo()
 	if(IsShutdown() || IsPainting())
 		return;
 	if((HasMouse() || info.HasMouse()) && popupex) {
-		Size sz = GetSize();
 		Point p = GetMouseViewPos();
 		Point org = sb;
-//		if(p.y + org.y > sb.GetTotal().cy)
-//			return;
 		int i = FindLine(p.y + org.y);
 		if(i < line.GetCount()) {
+			Size sz = GetSize();
 			const Line& l = line[i];
 			const Item& m = item[l.itemi];
 			int x = levelcx + l.level * levelcx - org.x + m.image.GetSize().cx;
-			Rect r = RectC(x, l.y - org.y, sz.cx - x, m.GetSize(display).cy);
+			Size csz = m.GetCtrlSize();
+			if(m.ctrl && !highlight_ctrl)
+				x += csz.cx;
+			Rect r = RectC(x, l.y - org.y, sz.cx - x, m.GetValueSize(display).cy + 2 * m.margin);
 			if(r.Contains(p)) {
 				Color fg, bg;
 				dword st;
 				const Display *d = GetStyle(i, fg, bg, st);
+				info.UseDisplayStdSize();
 				info.Set(this, r, m.value, d, fg, bg, st, m.margin);
 				return;
 			}
@@ -957,7 +1003,8 @@ void TreeCtrl::Paint(Draw& w)
 	if(!nobg)
 		w.DrawRect(sz, SColorPaper);
 	int levelcx2 = levelcx >> 1;
-	for(int i = 0; i < line.GetCount(); i++) {
+	int start = multiroot ? 1 : 0;
+	for(int i = start; i < line.GetCount(); i++) {
 		Line& l = line[i];
 		if(l.ll >= 0) {
 			int yl = line[i].y + item[l.itemi].GetSize(display).cy - org.y;
@@ -968,7 +1015,7 @@ void TreeCtrl::Paint(Draw& w)
 			}
 		}
 	}
-	Rect dri;
+	Rect dri = Null;
 	for(int i = FindLine(org.y); i < line.GetCount(); i++) {
 		Line& l = line[i];
 		const Item& m = item[l.itemi];
@@ -988,11 +1035,26 @@ void TreeCtrl::Paint(Draw& w)
 				dri.top++;
 		}
 		if(w.IsPainting(0, y, sz.cx, msz.cy) && msz.cy > 0) {
-			w.DrawRect(op.x, op.y, levelcx2, 1, SColorShadow);
-			if(m.canopen || m.child.GetCount()) {
-				Image im = m.isopen ? CtrlImg::treeminus() : CtrlImg::treeplus();
-				op -= im.GetSize() / 2;
-				w.DrawImage(op.x, op.y, im);
+			if (multiroot) {
+				if(m.canopen || m.child.GetCount()) {
+					Image im = m.isopen ? CtrlImg::treeminus() : CtrlImg::treeplus();
+					op -= im.GetSize() / 2;
+					w.DrawImage(op.x, op.y, im);
+				}
+				else if (l.level > 0)
+					w.DrawRect(op.x, op.y, levelcx2, 1, SColorShadow);
+				else {
+					op -= CtrlImg::cross().GetSize() / 2;
+					w.DrawImage(op.x, op.y, imgEmpty);
+				}
+			}
+			else {
+				w.DrawRect(op.x, op.y, levelcx2, 1, SColorShadow);
+				if(m.canopen || m.child.GetCount()) {
+					Image im = m.isopen ? CtrlImg::treeminus() : CtrlImg::treeplus();
+					op -= im.GetSize() / 2;
+					w.DrawImage(op.x, op.y, im);
+				}
 			}
 			w.DrawImage(x, y + (msz.cy - isz.cy) / 2, m.image);
 			x += isz.cx;
@@ -1003,9 +1065,10 @@ void TreeCtrl::Paint(Draw& w)
 				x += csz.cx;
 			if(x < sz.cx) {
 				const Display *d = GetStyle(i, fg, bg, st);
+				int ctx = highlight_ctrl * csz.cx;
+				Rect br = RectC(x, y, vsz.cx + 2 * m.margin + ctx, msz.cy);
 				if(!IsNull(m.value) || m.ctrl && highlight_ctrl) {
-					int ctx = highlight_ctrl * csz.cx;
-					w.DrawRect(x, y, vsz.cx + 2 * m.margin + ctx, msz.cy, bg);
+					w.DrawRect(br, bg);
 					Rect r = RectC(x + ctx + m.margin, y + (msz.cy - vsz.cy) / 2, vsz.cx, vsz.cy);
 					w.Clip(r);
 					d->Paint(w, r, m.value, fg, bg, st);
@@ -1013,7 +1076,7 @@ void TreeCtrl::Paint(Draw& w)
 				}
 				if(i == cursor && !nocursor && multiselect && GetSelectCount() != 1 && HasFocus()
 				   && !IsDragAndDropTarget())
-					DrawFocus(w, fr, st & Display::SELECT ? SColorPaper() : SColorText());
+					DrawFocus(w, br, st & Display::SELECT ? SColorPaper() : SColorText());
 			}
 		}
 	}
@@ -1037,7 +1100,6 @@ Image TreeCtrl::GetDragSample()
 		Size msz = m.GetSize(display);
 		Size isz = m.image.GetSize();
 		Size vsz = m.GetValueSize(display);
-		Rect r = RectC(0, y, vsz.cx + 2 * m.margin, msz.cy);
 		int x = 0;
 		if(IsSel(l.itemi)) {
 			iw.DrawImage(x, y + (msz.cy - isz.cy) / 2, m.image);
@@ -1435,13 +1497,14 @@ bool TreeCtrl::DnDInserti(int ii, PasteClip& d, bool bottom)
 		int parent = GetParent(itemi);
 		int childi = GetChildIndex(parent, itemi);
 		int ins = -1;
-		if(bottom)
+		if(bottom) {
 			if(childi != GetChildCount(parent) - 1 && ii + 1 < line.GetCount())
 				return DnDInserti(ii + 1, d, false);
 			else {
 				childi++;
 				ins = 1;
 			}
+		}
 		WhenDropInsert(parent, childi, d);
 		if(d.IsAccepted()) {
 			DnD(itemi, ins);
@@ -1728,4 +1791,4 @@ int Copy(TreeCtrl& dst, int did, int i, const TreeCtrl& src, int id)
 	return did;
 }
 
-END_UPP_NAMESPACE
+}

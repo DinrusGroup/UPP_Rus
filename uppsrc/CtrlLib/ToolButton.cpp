@@ -1,6 +1,6 @@
 #include "CtrlLib.h"
 
-NAMESPACE_UPP
+namespace Upp {
 
 #define LTIMING(x)  // TIMING(x)
 
@@ -17,6 +17,7 @@ CH_STYLE(ToolButton, Style, StyleDefault)
 		contrast[i] = 0;
 	}
 	light[CTRL_PRESSED] = light[CTRL_HOT] = light[CTRL_HOTCHECKED] = true;
+	overpaint = 0;
 }
 
 CH_STYLE(ToolButton, Style, StyleSolid)
@@ -52,18 +53,23 @@ ToolButton::ToolButton()
 
 ToolButton::~ToolButton() {}
 
-void ToolButton::Reset()
+void ToolButton::ResetKeepStyle()
 {
-	Tip("");
-	Help("");
-	Topic("");
-	Description("");
 	repeat = false;
 	accel = 0;
 	checked = false;
 	NoWantFocus();
 	minsize = Size(0, 0);
 	maxiconsize = Size(INT_MAX, INT_MAX);
+	Tip("");
+	Help("");
+	Topic("");
+	Description("");
+}
+
+void ToolButton::Reset()
+{
+	ResetKeepStyle();
 	style = &StyleDefault();
 }
 
@@ -83,16 +89,31 @@ void ToolButton::UpdateTip()
 
 Bar::Item& ToolButton::Text(const char *txt)
 {
-	ExtractAccessKey(txt, text);
-	UpdateTip();
-	Refresh();
+	String newtext;
+	ExtractAccessKey(txt, newtext);
+	if(newtext != text) {
+		text = newtext;
+		UpdateTip();
+		Refresh();
+	}
+	return *this;
+}
+
+ToolButton& ToolButton::SetStyle(const Style& s)
+{
+	if(style != &s) {
+		style = &s;
+		Refresh();
+	}
 	return *this;
 }
 
 Bar::Item& ToolButton::Check(bool check)
 {
-	checked = check;
-	Refresh();
+	if(checked != check) {
+		checked = check;
+		Refresh();
+	}
 	return *this;
 }
 
@@ -132,18 +153,27 @@ ToolButton& ToolButton::Label(const char *text)
 	return *this;
 }
 
+ToolButton& ToolButton::Kind(int _kind)
+{
+	if(kind != _kind)
+		Refresh();
+	return *this;
+}
+
 Image ToolButton::GetImage() const
 {
 	UPP::Image m = img;
 	if(IsDarkColorFace() && !nodarkadjust)
 		m = MakeImage(m, AdjustForDarkBk);
-	return CachedRescale(m, min(m.GetSize(), maxiconsize));
+	m = CachedRescale(m, min(m.GetSize(), maxiconsize));
+	return m;
 }
 
 Bar::Item& ToolButton::Image(const UPP::Image& img_)
 {
-	if(!img_.IsSame(img)) {
-		img = img_;
+	Upp::Image m = img_;
+	if(!m.IsSame(img)) {
+		img = m;
 		Refresh();
 	}
 	return *this;
@@ -157,8 +187,10 @@ Bar::Item& ToolButton::Enable(bool enable)
 
 Bar::Item& ToolButton::Tip(const char *tip)
 {
-	tiptext = tip;
-	UpdateTip();
+	if(tiptext != tip) {
+		tiptext = tip;
+		UpdateTip();
+	}
 	return *this;
 }
 
@@ -224,7 +256,7 @@ void  ToolButton::Paint(Draw& w)
 	ChPaint(w, sz, style->look[li]);
 	Point off = style->offset[li];
 	Point ip = (sz - isz) / 2 + off;
-	Size tsz;
+	Size tsz(0, 0);
 	if(kind != NOLABEL)
 		tsz = GetTextSize(text, style->font);
 	if(kind == BOTTOMLABEL) {
@@ -318,4 +350,9 @@ String ToolButton::GetDesc() const
 	return tiptext;
 }
 
-END_UPP_NAMESPACE
+int ToolButton::OverPaint() const
+{
+	return style->overpaint;
+}
+
+}

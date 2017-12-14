@@ -13,13 +13,18 @@ Convert& LNGConvert();
 byte    GetLNGCharset(int d);
 int     SetLNGCharset(int lng, byte chrset);
 
-#define LNG_CZECH         0xF1CC7A // Deprecated, corresponds to CS-CZ windows-1250
+#ifdef DEPRECATED
+#define LNG_CZECH         0xF1CC7A // corresponds to CS-CZ windows-1250
 #define LNG_ENGLISH       0x2BAB3  // LNG_('E', 'N', 'U', 'S')
+#endif
 
 #define LNG_CURRENT       0
 
 void                      SetLanguage(int lang);
 int                       GetCurrentLanguage();
+
+void                      SetLanguage(const char *s);
+String                    GetCurrentLanguageString();
 
 int                       GetSystemLNG();
 

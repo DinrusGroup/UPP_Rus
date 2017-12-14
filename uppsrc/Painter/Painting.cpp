@@ -1,6 +1,6 @@
 #include "Painter.h"
 
-NAMESPACE_UPP
+namespace Upp {
 
 void PaintingPainter::ClearOp(const RGBA& color)
 {
@@ -102,6 +102,38 @@ void PaintingPainter::FillOp(const Pointf& p1, const RGBA& color1, const Pointf&
 	Put(style);
 }
 
+void PaintingPainter::FillOp(const RGBA& color1, const RGBA& color2, const Xform2D& transsrc, int style)
+{
+	Put(PAINTING_FILL_GRADIENT_X);
+	Put(color1);
+	Put(color2);
+	Putf(transsrc);
+	Put(style);
+}
+
+void PaintingPainter::FillOp(const Pointf& f, const RGBA& color1, const RGBA& color2, const Xform2D& transsrc, int style)
+{
+	Put(PAINTING_FILL_RADIAL_X);
+	Putf(f);
+	Put(color1);
+	Put(color2);
+	Putf(transsrc);
+	Put(style);
+}
+
+void PaintingPainter::StrokeOp(double width, const Pointf& f, const RGBA& color1,
+                               const RGBA& color2, const Xform2D& transsrc, int style)
+{
+	Put(PAINTING_FILL_RADIAL_X);
+	Putf(width);
+	Putf(f);
+	Put(color1);
+	Put(color2);
+	Putf(transsrc);
+	Put(style);
+}
+
+
 void PaintingPainter::FillOp(const Pointf& f, const RGBA& color1,
                              const Pointf& p, double r, const RGBA& color2, int style)
 {
@@ -143,6 +175,17 @@ void PaintingPainter::StrokeOp(double width, const Pointf& p1, const RGBA& color
 	Put(style);
 }
 
+void PaintingPainter::StrokeOp(double width, const RGBA& color1, const RGBA& color2,
+                               const Xform2D& transsrc, int style)
+{
+	Put(PAINTING_STROKE_GRADIENT_X);
+	Putf(width);
+	Put(color1);
+	Put(color2);
+	Putf(transsrc);
+	Put(style);
+}
+
 void PaintingPainter::StrokeOp(double width, const Pointf& f,
                                const RGBA& color1, const Pointf& p, double r,
                                const RGBA& color2, int style)
@@ -170,7 +213,7 @@ void PaintingPainter::CharacterOp(const Pointf& p, int ch, Font fnt)
 	Put(fnt);
 }
 
-void PaintingPainter::TextOp(const Pointf& p, const wchar *text, Font fnt, int n, double *dx)
+void PaintingPainter::TextOp(const Pointf& p, const wchar *text, Font fnt, int n, const double *dx)
 {
 	Put(PAINTING_TEXT);
 	Putf(p);
@@ -290,4 +333,4 @@ void PaintingPainter::Create(Sizef sz)
 	Create(sz.cx, sz.cy);
 }
 
-END_UPP_NAMESPACE
+}

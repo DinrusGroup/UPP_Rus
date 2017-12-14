@@ -8,8 +8,6 @@ void IdeFileIcon0(bool dir, const String& filename, Image& img)
 {
 	if(dir) return;
 	String ext = ToLower(GetFileExt(filename));
-	if(ext == ".di" ||ext == ".h" || ext == ".hpp" || ext == ".hh" || ext == ".hxx")
-		img = IdeCommonImg::Header();
 	for(int i = 0; i < GetIdeModuleCount(); i++) {
 		Image m = GetIdeModule(i).FileIcon(filename);
 		if(!IsNull(m)) {
@@ -17,22 +15,75 @@ void IdeFileIcon0(bool dir, const String& filename, Image& img)
 			break;
 		}
 	}
+	
+	if(ext == ".html")
+		img = IdeCommonImg::html();
+	else
+	if(ext == ".css")
+		img = IdeCommonImg::css();
+	else
+	if(ext == ".witz")
+		img = IdeCommonImg::witz();
+	else
+	if(ext == ".js")
+		img = IdeCommonImg::js();
+	else
+	if(ext == ".json")
+		img = IdeCommonImg::json();
+	else
+	if(ext == ".java" || ext == ".class")
+		img = IdeCommonImg::java();
+	else
+	if(ext == ".log")
+		img = IdeCommonImg::Log();
+	else
+	if(ext == ".xml" || ext == ".xsd")
+		img = IdeCommonImg::xml();
+	else
+	if(ext == ".diff" || ext == ".patch")
+		img = IdeCommonImg::diff();
+	else
+	if(ext == ".py" || ext == ".pyc" || ext == ".pyd" || ext == ".pyo")
+		img = IdeCommonImg::Python();
+	else
 	if(ext == ".usc")
 		img = IdeCommonImg::Script();
+	else
 	if(ext == ".lng" || ext == ".lngj" || ext == ".t" || ext == ".jt")
 		img = IdeCommonImg::Language();
+	else
 	if(ext == ".icpp")
 		img = IdeCommonImg::ISource();
-	if(ext == ".c" || ext == ".cpp" || ext == ".cc" || ext == ".cxx"
-	               || ext == ".m" || ext == ".mm")  //should later have diff img?
+	else
+	if(findarg(ext, ".cpp", ".cc", ".cxx", ".mm") >= 0)
+		img = IdeCommonImg::Cpp();
+	else
+	if(findarg(ext, ".c", ".m") >= 0)
 		img = IdeCommonImg::Source();
-	if(ext == ".d") img = IdeCommonImg::DSource();
+	else
+	if(ext == ".h" || ext == ".hpp" || ext == ".hh" || ext == ".hxx")
+		img = IdeCommonImg::Header();
+	else
 	if(ext == ".sch")
 		img = IdeCommonImg::Sch();
+	else
+	if(ext == ".ddl")
+		img = IdeCommonImg::Ddl();
+	else
 	if(ext == ".sql")
 		img = IdeCommonImg::Sql();
+	else
 	if(filename == "Copying")
 		img = IdeCommonImg::License();
+	else
+	if(filename == "main.conf")
+		img = IdeCommonImg::MainConf();
+	else
+	if(ext == ".key")
+		img = IdeCommonImg::keyboard();
+	else
+	if(ext == ".defs")
+		img = IdeCommonImg::Defs();
 }
 
 struct sImageAdd : ImageMaker {
@@ -65,14 +116,14 @@ Image ImageOver(const Image& back, const Image& over)
 	return MakeImage(h);
 }
 
-Image IdeFileImage(const String& filename, bool fast, bool include_path)
+Image IdeFileImage(const String& filename, bool include_path, bool pch)
 {
 	Image img = CtrlImg::File();
 	IdeFileIcon0(false, filename, img);
-	if(fast)
-		img = ImageOver(img, IdeCommonImg::Fast());
 	if(include_path)
 		img = ImageOver(img, IdeCommonImg::IncludePath());
+	if(pch)
+		img = ImageOver(img, IdeCommonImg::Precompile());
 	return img;
 }
 
@@ -81,7 +132,8 @@ void IdeFileIcon(bool dir, const String& filename, Image& img)
 	IdeFileIcon0(dir, filename, img);
 }
 
-void IdeFs(FileSel& fs) {
+void IdeFs(FileSel& fs)
+{
 	fs.WhenIcon = callback(IdeFileIcon);
 	fs.AllFilesType();
 	fs.Multi();
@@ -89,19 +141,26 @@ void IdeFs(FileSel& fs) {
 	fs.ReadOnlyOption();
 }
 
-void SourceFs(FileSel& fs) {
-	String mask = "*.d *.di *.cpp *.h *.hpp *.c *.C *.cc *.cxx *.lay *.iml *.lng *.sch *.usc *.rc *.brc *.upt";
-	fs.Type("Файлы C++ (*.cpp *.h *.hpp *.c *.C *.cc *.cxx)", "*.cpp *.h *.hpp *.c *.C *.cc *.cxx");
-	fs.Type("Файлы разметки (*.lay)", "*.lay");
-	fs.Type("Файлы Динрус(D)(*.d *.di)", "*.d *.di");
-	fs.Type("Файлы рисунка (*.iml)", "*.iml");
-	fs.Type("Файлы языка (*.lng)", "*.lng");
-	fs.Type("Другие особые файлы (*.sch *.usc *.rc *.brc *.upt)", "*.sch *.usc *.rc *.brc *.upt");
-	fs.Type("Все файлы-исходники (" + mask + ")", mask);
+void SourceFs(FileSel& fs)
+{
+	fs.Type("C/C++ files (*.cpp *.h *.hpp *.c *.C *.cc *.cxx *.icpp)", "*.cpp *.h *.hpp *.c *.C *.cc *.cxx *.icpp");
+	fs.Type("Diff/Patch files (*.diff *.patch)", "*.diff *.patch");
+	fs.Type("Image files (*.iml)", "*.iml");
+	fs.Type("Java files (*.java)", "*.java");
+	fs.Type("Json files (*.json)", "*.json");
+	fs.Type("Language files (*.lng)", "*.lng");
+	fs.Type("Layout files (*.lay)", "*.lay");
+	fs.Type("Python files (*.py *.pyc *.pyd *.pyo)", "*.py *.pyc *.pyd *.pyo");
+	fs.Type("Web development files (*.html *.js *.css *.witz)", "*.html *.js *.css *.witz");
+	fs.Type("Xml files (*.xml *.xsd)", "*.xml *.xsd");
+	fs.Type("Other special files (*.sch *.usc *.rc *.brc *.upt)", "*.sch *.usc *.rc *.brc *.upt");
+	String mask = "*.cpp *.h *.hpp *.c *.C *.cc *.cxx *.icpp *.diff *.patch *.lay *.py *.pyc *.pyd *.pyo *.iml *.java *.json *.lng *.sch *.usc *.rc *.brc *.upt *.html *.js *.css *.witz *.xml *.xsd *.qtf";
+	fs.Type("All source files (" + mask + ")", mask);
 	IdeFs(fs);
 }
 
-FileSel& AnySourceFs() {
+FileSel& AnySourceFs()
+{
 	static FileSel *fsp;
 	if(!fsp) {
 		static FileSel fs;
@@ -112,18 +171,20 @@ FileSel& AnySourceFs() {
 	return *fsp;
 }
 
-FileSel& AnyPackageFs() {
+FileSel& AnyPackageFs()
+{
 	static FileSel fs;
 	static bool b;
 	if(!b) {
-		fs.Type("Пакет Ultimate++ (*.upp)", "*.upp");
+		fs.Type("Ultimate++ package (*.upp)", "*.upp");
 		fs.AllFilesType();
 		b = true;
 	}
 	return fs;
 }
 
-FileSel& BasedSourceFs() {
+FileSel& BasedSourceFs()
+{
 	static FileSel *fsp;
 	if(!fsp) {
 		static FileSel fs;
@@ -134,16 +195,17 @@ FileSel& BasedSourceFs() {
 	return *fsp;
 }
 
-FileSel& OutputFs() {
+FileSel& OutputFs()
+{
 	static FileSel *fsp;
 	if(!fsp) {
 		static FileSel fs;
 		fs.AllFilesType();
-		fs.Type("Разное (*.log *.map *.ini *.sql)", "*.log *.map *.ini *.sql");
-		fs.Type("Файлы журнала (*.log)", "*.log");
-		fs.Type("Файлы карты (*.map)", "*.map");
-		fs.Type("Файлы инициализации (*.ini)", "*.ini");
-		fs.Type("Сценарии SQL (*.sql)", "*.sql");
+		fs.Type("Various (*.log *.map *.ini *.sql)", "*.log *.map *.ini *.sql");
+		fs.Type("Log files (*.log)", "*.log");
+		fs.Type("Map files (*.map)", "*.map");
+		fs.Type("Ini files (*.ini)", "*.ini");
+		fs.Type("SQL scripts (*.sql)", "*.sql");
 		IdeFs(fs);
 		fsp = &fs;
 	}
@@ -156,8 +218,18 @@ void ShellOpenFolder(const String& dir)
 	#if defined(PLATFORM_WIN32)
 		LaunchWebBrowser(dir);
 	#elif __APPLE__
-		system("open " + dir + " &");
+		String tempDir = dir;
+		tempDir.Replace(" ", "\\ ");
+
+		IGNORE_RESULT(
+			system("open " + tempDir + " &")
+		);
 	#else
-		system("xdg-open " + dir + " &");
+		String tempDir = dir;
+		tempDir.Replace(" ", "\\ ");
+		
+		IGNORE_RESULT(
+			system("xdg-open " + tempDir + " &")
+		);
 	#endif
 }

@@ -1,6 +1,6 @@
 #include "SqlCtrl.h"
 
-NAMESPACE_UPP
+namespace Upp {
 
 void SqlLoad(MapConvert& cv, Sql& sql) {
 	cv.Clear();
@@ -47,10 +47,15 @@ void operator*=(DropList& dl, const SqlSelect& set) {
 
 void  SqlOption::SetData(const Value& data) {
 	String s = data;
-	Set(!(IsNull(s) || s == "0"));
+	if(IsThreeState() && IsNull(data))
+		Set(Null);
+	else
+		Set(!(IsNull(s) || s == "0"));
 }
 
 Value SqlOption::GetData() const {
+	if(IsThreeState() && IsNull(Get()))
+		return String();
 	return Get() ? "1" : "0";
 }
 
@@ -60,16 +65,20 @@ Value SqlNOption::GetData() const
 	return Null;
 }
 
-void SqlCtrls::Add(SqlId id, Ctrl& ctrl) {
-	Item& m = item.Add();
-	m.id = id;
-	m.ctrl = &ctrl;
+void SqlCtrls::Table(Ctrl& dlg, SqlId table)
+{
+	Vector<String> col = GetSchColumns(~table);
+	for(Ctrl *q = dlg.GetFirstChild(); q; q = q->GetNext()) {
+		String id = ToUpper(q->GetLayoutId());
+		if(!dynamic_cast<Button *>(q) && !dynamic_cast<Label *>(q) && FindIndex(col, id) >= 0)
+			Add(id, *q);
+	}
 }
 
 SqlSet SqlCtrls::Set() const {
 	SqlSet set;
 	for(int i = 0; i < item.GetCount(); i++)
-		set.Cat(item[i].id);
+		set.Cat(SqlId(item[i].id));
 	return set;
 }
 
@@ -77,7 +86,7 @@ void SqlCtrls::Read(Sql& sql)
 {
 	for(int i = 0; i < item.GetCount(); i++) {
 		Item& m = item[i];
-		m.ctrl->SetData(sql[m.id]);
+		m.ctrl->SetData(sql[SqlId(m.id)]);
 	}
 }
 
@@ -121,36 +130,6 @@ SqlUpdate SqlCtrls::UpdateModified(SqlId table) const {
 	return update;
 }
 
-bool SqlCtrls::Accept()
-{
-	for(int i = 0; i < item.GetCount(); i++)
-		if(!item[i].ctrl->Accept()) return false;
-	return true;
-}
-
-void SqlCtrls::ClearModify() {
-	for(int i = 0; i < item.GetCount(); i++)
-		item[i].ctrl->ClearModify();
-}
-
-bool SqlCtrls::IsModified() {
-	for(int i = 0; i < item.GetCount(); i++)
-		if(item[i].ctrl->IsModified()) return true;
-	return false;
-}
-
-void SqlCtrls::Enable(bool b)
-{
-	for(int i = 0; i < item.GetCount(); i++)
-		item[i].ctrl->Enable(b);
-}
-
-void SqlCtrls::SetNull()
-{
-	for(int i = 0; i < item.GetCount(); i++)
-		item[i].ctrl->SetData(Null);
-}
-
 Callback SqlCtrls::operator<<=(Callback cb)
 {
 	for(int i = 0; i < item.GetCount(); i++)
@@ -171,4 +150,4 @@ bool SqlCtrls::Load(SqlId table, SqlBool set)
 }
 #endif
 
-END_UPP_NAMESPACE
+}

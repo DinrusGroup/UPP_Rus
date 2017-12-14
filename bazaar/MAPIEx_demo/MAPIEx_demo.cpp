@@ -12,6 +12,8 @@
 
 // Ported to U++ Framework by Koldo. See License.txt file
 
+#ifdef _WIN32
+
 #include <MAPIEx/MAPIEx.h>
 #include <conio.h>
 
@@ -28,7 +30,7 @@
 
 // Send a message:
 void SendTest(MAPIEx& mapi) {
-	puts("\nSend Message Test");
+	puts("\nSend Message Test"); 
 	MAPIFolder outbox;
 	if (!mapi.OpenOutbox(outbox))
 		return;
@@ -351,47 +353,57 @@ void EnumerateSubFolders(MAPIEx& mapi, MAPIFolder& folder, String parentName) {
 } 
 
 void FolderList(MAPIEx& mapi) {
-	puts("\nFolder list");
 	MAPIFolder folder;
 	if(mapi.OpenRootFolder(folder)) 
 		EnumerateSubFolders(mapi, folder, "");
 }
 
-CONSOLE_APP_MAIN
-{
+
+#include <mapi.h>
+#include <mapix.h>
+
+
+CONSOLE_APP_MAIN {
 	MAPIEx mapi;
 	if(!mapi.Login()) {
 		puts("Failed to initialize MAPI");
 		return;
 	}
+
 	puts(Format("Profile Name: %s", mapi.GetProfileName()));
 	puts(Format("Profile Email: %s", mapi.GetProfileEmail()));
 
-	puts("\nStore list:");
-	int msc = mapi.GetMessageStoreCount();
-	for (int i = 0; i < msc; ++i) {
+	int stDefault = Null;
+	String stDefaultName;
+	puts("\nStore and folders list:");
+	int msLen = mapi.GetMessageStoreCount();
+	for (int i = 0; i < msLen; ++i) {
 		String name;
 		bool isdefault;
 		if(mapi.GetMessageStoreProperties(i, name, isdefault))
 			puts(Format("%d: %s %s", i, name, isdefault ? "(default)" : ""));	
 		else
 			puts(Format("%d: Problem in store", i));	
+		if (isdefault) {
+			stDefault = i;
+			stDefaultName = name;
+		}
 	}
 	
-	// Opening default store
-	if(!mapi.OpenMessageStore()) {
+	if(!mapi.OpenMessageStore(stDefault)) {
 		puts("Failed to open store");
 		return;
 	}
+	puts(Format("\nOpening default store %d: %s", stDefault, stDefaultName));
 	FolderList(mapi);
 	
 	puts("\nPress a key to continue...");	getchar();
 	
 	// uncomment the functions you're interested in and/or step through these to see how each thing works.
-	ReadMessageTest(mapi);
+	//ReadMessageTest(mapi);
 	//CopyMessageTest(mapi);
 	//CreateContactTest(mapi);
-		//ContactsTest(mapi);
+	ContactsTest(mapi);
 	//SelectContactsTest(mapi);
 	//CreateDraftTest(mapi);
 	//SendTest(mapi);
@@ -402,3 +414,17 @@ CONSOLE_APP_MAIN
 
 	puts("\nPress a key to end...");		getchar();
 }
+
+#else
+
+#include <Core/Core.h>
+
+using namespace Upp;
+
+CONSOLE_APP_MAIN 
+{
+	puts("\nMAPIEx package only works in Windows");	
+	puts("\nPress a key to end...");		getchar();
+}
+
+#endif

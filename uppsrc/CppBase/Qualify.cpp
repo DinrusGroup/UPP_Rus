@@ -1,15 +1,15 @@
 #include "CppBase.h"
 
-NAMESPACE_UPP
+namespace Upp {
 
 #define LLOG(x)     // DLOG(x)
 #define LTIMING(x)  // RTIMING(x)
 
-bool DoQualify(Scopefo& nf, const String& type, String& qt);
+bool DoQualify(ScopeInfo& nf, const String& type, const String& usings, String& qt);
 
-bool Qualify0(Scopefo& nf, const String& type, String& qt)
-{
-	const Vector<String>& nd = nf.GetScopes();
+bool Qualify0(ScopeInfo& nf, const String& type, const String& usings, String& qt)
+{ // Qualify single type based on scoping information
+	const Vector<String>& nd = nf.GetScopes(usings);
 	if(nd.GetCount()) {
 		LTIMING("First test");
 		qt = nd[0] + type;
@@ -20,7 +20,7 @@ bool Qualify0(Scopefo& nf, const String& type, String& qt)
 		int q = type.ReverseFind(':');
 		if(q > 0) {
 			LTIMING("Qualifying qualification");
-			Scopefo hnf(nf);
+			ScopeInfo hnf(nf);
 			hnf.NoBases();
 			String qn;
 			String qs = type.Mid(0, q - 1);
@@ -28,15 +28,15 @@ bool Qualify0(Scopefo& nf, const String& type, String& qt)
 				qt = type;
 				return true;
 			}
-			if(DoQualify(hnf, qs, qn)) {
-				if(nf.base.Find(type) >= 0) {
-					qt = type;
+			if(DoQualify(hnf, qs, usings, qn)) {
+				String tp = type.Mid(q + 1);
+				if(nf.base.Find(qn) >= 0) {
+					qt = qn + "::" + tp;
 					return true;
 				}
 				int scopei = nf.base.Find(qn);
 				if(scopei >= 0) {
-					String tp = type.Mid(q + 1);
-					Scopefo nnf(nf.base, scopei);
+					ScopeInfo nnf(nf.base, scopei);
 					const Vector<String>& bs = nnf.GetBases();
 					for(int i = 0; i < bs.GetCount(); i++) {
 						qt = bs[i] + tp;
@@ -45,6 +45,13 @@ bool Qualify0(Scopefo& nf, const String& type, String& qt)
 					}
 				}
 			}
+			if(nf.base.Find(qs) >= 0) {
+				qt = qs;
+				return true;
+			}
+			qt = type;
+			if(nf.base.Find(qt) >= 0) // e.g. std::string
+				return true;
 			qt = type.Mid(q + 1);
 			return true;
 		}
@@ -69,10 +76,10 @@ bool Qualify0(Scopefo& nf, const String& type, String& qt)
 	int q = type.Find(':');
 	if(q < 0)
 		return false;
-	return Qualify0(nf, type.Mid(q + 1), qt);
+	return Qualify0(nf, type.Mid(q + 1), usings, qt);
 }
 
-bool DoQualify(Scopefo& nf, const String& type, String& qt)
+bool DoQualify(ScopeInfo& nf, const String& type, const String& usings, String& qt)
 {
 	LTIMING("Qualify");
 	int q = nf.cache.Find(type);
@@ -81,16 +88,16 @@ bool DoQualify(Scopefo& nf, const String& type, String& qt)
 		return true;
 	}
 	LTIMING("Qualify0");
-	if(!Qualify0(nf, type, qt))
+	if(!Qualify0(nf, type, usings, qt))
 		return false;
 	nf.cache.Add(type, qt);
 	return true;
 }
 
-String DoQualify(Scopefo& nf, const String& type)
+String DoQualify(ScopeInfo& nf, const String& type, const String& usings)
 {
 	String qt;
-	return DoQualify(nf, type, qt) ? qt : type;
+	return DoQualify(nf, type, usings, qt) ? qt : type;
 }
 
 static String s_int("int");
@@ -104,7 +111,7 @@ static String s_struct("struct");
 static String s_class("class");
 static String s_unsigned("unsigned");
 
-inline void Qualify(String& r, Scopefo& nf, const char *b, const char *s, byte& qual)
+inline void Qualify(String& r, ScopeInfo& nf, const char *b, const char *s, const String& usings)
 {
 	String type(b, s);
 	if(type.GetCount() == 0 || type == s_const ||
@@ -114,10 +121,10 @@ inline void Qualify(String& r, Scopefo& nf, const char *b, const char *s, byte& 
 		r << type;
 		return;
 	}
-	r << DoQualify(nf, type);
+	r << DoQualify(nf, type, usings);
 }
 
-String QualifyIds(Scopefo& nf, const String& k, bool all, byte& qual)
+String QualifyIds(ScopeInfo& nf, const String& k, const String& usings, bool all)
 {
 	LTIMING("QualifyIds");
 	String r;
@@ -128,13 +135,13 @@ String QualifyIds(Scopefo& nf, const String& k, bool all, byte& qual)
 		if(c == ':') {
 			const char *b = s++;
 			while(*s == ':' || iscid(*s)) s++;
-			if(all) {
+/*			if(all) {
 				if(iscid(*r.Last()))
 					r << ' ';
-				Scopefo nnf(nf.GetScope(), nf.base);
-				Qualify(r, nnf, b, s, qual);
+				ScopeInfo nnf(nf.GetScope(), nf.base);
+				Qualify(r, nnf, b, s, usings);
 			}
-			else
+			else*/
 				r.Cat(b, s);
 		}
 		else
@@ -159,7 +166,7 @@ String QualifyIds(Scopefo& nf, const String& k, bool all, byte& qual)
 				const char *b = s++;
 				while(*s == ':' || iscid(*s)) s++;
 				if(all)
-					Qualify(r, nf, b, s, qual);
+					Qualify(r, nf, b, s, usings);
 				else
 					r.Cat(b, s);
 			}
@@ -175,107 +182,106 @@ String QualifyIds(Scopefo& nf, const String& k, bool all, byte& qual)
 	return r;
 }
 
-String Qualify(const CppBase& base, const String& scope, const String& type)
+String Qualify(const CppBase& base, const String& scope, const String& type, const String& usings)
 {
-	Scopefo nf(base, scope);
-	byte dummy = 2;
-	return QualifyIds(nf, type, true, dummy);
+	if(type.StartsWith("::"))
+		return type.Mid(2);
+	ScopeInfo nf(base, scope);
+	return QualifyIds(nf, type, usings, true);
 }
 
-String QualifyKey(const CppBase& base, const String& scope, const String& type)
+String QualifyKey(const CppBase& base, const String& scope, const String& type, const String& usings)
 {
-	Scopefo nf(base, scope);
-	byte dummy = 2;
-	return QualifyIds(nf, type, false, dummy);
+	ScopeInfo nf(base, scope);
+	return QualifyIds(nf, type, usings, false);
 }
 
 void QualifyTypes(CppBase& base, const String& scope, CppItem& m)
 {
-	Scopefo nf(base, scope);
-	m.qtype = QualifyIds(nf, m.type, true, m.qualify_type);
-	m.qptype = QualifyIds(nf, m.ptype, true, m.qualify_param);
+	ScopeInfo nf(base, scope);
+	m.qtype = QualifyIds(nf, m.type, m.using_namespaces, true);
+	m.qptype = QualifyIds(nf, m.ptype, m.using_namespaces, true);
+}
+
+void QualifyPass0(CppBase& base)
+{ // Move scopes - solve: namespace X { struct C { void Foo(); }; using namespace X; void C::Foo() {}
+	Vector<int> remove_scope;
+	for(int ni = 0; ni < base.GetCount(); ni++) {
+		Array<CppItem>& n = base[ni];
+		ScopeInfo nf(base);
+		String scope = base.GetKey(ni);
+		String usings;
+		int    toscopei = -1;
+		Vector<int> remove_item;
+		for(int i = 0; i < n.GetCount(); i++) {
+			CppItem& m = n[i];
+			if(m.qualify && m.impl) {
+				if(usings != m.using_namespaces) {
+					usings = m.using_namespaces;
+					toscopei = -1;
+					Vector<String> h = Split(m.using_namespaces, ';');
+					for(int i = 0; i < h.GetCount(); i++) {
+						String ns = h[i] + "::" + scope;
+						toscopei = base.Find(ns);
+						if(toscopei >= 0)
+							break;
+					}
+				}
+				if(toscopei >= 0 && toscopei != ni) {
+					base[toscopei].Add(m);
+					remove_item.Add(i);
+				}
+			}
+		}
+		n.Remove(remove_item);
+		if(scope.GetCount() && n.GetCount() == 0)
+			remove_scope.Add(ni);
+	}
+	base.Remove(remove_scope);
 }
 
 void QualifyPass1(CppBase& base)
-{
+{ // Qualify types
 	LTIMING("QualifyPass1");
 	for(int ni = 0; ni < base.GetCount(); ni++) {
 		Array<CppItem>& n = base[ni];
-		Scopefo nf(base, ni);
+		ScopeInfo nf(base, ni);
 		for(int i = 0; i < n.GetCount(); i++) {
 			CppItem& m = n[i];
-			if(m.serial != base.serial && m.IsType()) {
-				m.serial = base.serial;
-				if(m.qualify_type) {
-					m.qualify_type = false;
-					m.qtype = QualifyIds(nf, m.type, true, m.qualify_type);
-				}
-				if(m.qualify_param) {
-					m.qualify_param = false;
-					m.qptype = QualifyIds(nf, m.ptype, true, m.qualify_param);
-				}
-				m.qitem = m.item;
+			if(m.kind == NAMESPACE)
+				base.namespaces.FindAdd(base.GetKey(ni));
+			if(m.IsType() && m.qualify) {
+				m.qualify = false;
+				m.qtype = QualifyIds(nf, m.type, m.using_namespaces, true); // type of item, now qualified (probaly already was)
+				m.qptype = QualifyIds(nf, m.ptype, m.using_namespaces, true); // base classes
+				m.qitem = m.item; // name of type (struct) item is already qualified
 			}
-			//LLOG(base.GetKey(ni) << "." << m.item << " " << GetCppFile(m.file) << '(' << m.line << ") "
-			//     << AsCString(m.natural)
-			//     << " impl:" << m.impl << " kind:" << (int)m.kind << " IsType:" << m.IsType()
-			//     << " type: " << m.type << " qtype:" << m.qtype << " tparam:" << m.tparam);
 		}
 	}
 }
 
-struct CmpCppItem {
-	bool operator()(const CppItem& a, const CppItem& b) const
-	{
-		int q = SgnCompare(a.qitem, b.qitem);
-		if(q) return q < 0;
-		q = SgnCompare(a.IsType(), b.IsType());
-		if(q) return q < 0;
-		q = SgnCompare(a.impl, b.impl);
-		if(q) return a.IsType() ? q > 0 : q < 0;
-		q = SgnCompare(GetCppFile(a.file), GetCppFile(b.file));
-		if(q) return q < 0;
-		return a.line < b.line;
-	}
-};
-
 void QualifyPass2(CppBase& base)
-{
+{ // Qualify function parameters
 	LTIMING("QualifyPass2");
 	for(int ni = 0; ni < base.GetCount(); ni++) {
 		Array<CppItem>& n = base[ni];
-		Scopefo nf(base, ni);
-		Index<int> rem;
-		bool sort = false;
+		ScopeInfo nf(base, ni);
 		for(int i = 0; i < n.GetCount(); i++) {
 			CppItem& m = n[i];
 			if(m.uname.GetCount() == 0 && m.name.GetCount())
 				m.uname = ToUpper(m.name);
-			if(m.serial != base.serial && !m.IsType()) {
-				sort = true;
-				m.serial = base.serial;
-				if(m.qualify_type) {
-					m.qualify_type = false;
-					m.qtype = QualifyIds(nf, m.type, true, m.qualify_type);
-				}
-				if(m.qualify_param) {
-					m.qualify_param = false;
-					m.qptype = QualifyIds(nf, m.ptype, true, m.qualify_param);
-					m.qitem = m.IsCode() ? QualifyIds(nf, m.item, false, m.qualify_param)
-					                     : m.item;
-				}
+			if(!m.IsType() && m.qualify) {
+				m.qualify = false;
+				m.qtype = QualifyIds(nf, m.type, m.using_namespaces, true);
+				m.qptype = QualifyIds(nf, m.ptype, m.using_namespaces, true);
+				m.qitem = m.IsCode() ? QualifyIds(nf, m.item, m.using_namespaces, false)
+				                     : m.item;
 			}
-			LLOG(base.GetKey(ni) << "." << m.item << " -> " << m.qitem << "\n   " << GetCppFile(m.file) << '(' << m.line << ") "
-			     << AsCString(m.natural)
-			     << " impl:" << m.impl << " kind:" << (int)m.kind << " IsType:" << m.IsType()
-			     << " qtype:" << m.qtype << " tparam:" << m.tparam);
 		}
-		if(sort)
-			Sort(n, CmpCppItem());
 	}
 }
 
-void   Qualify(CppBase& base)
+void Qualify(CppBase& base)
 {
 	Md5Stream md5;
 	Vector<int> no = GetSortOrder(base.GetKeys());
@@ -291,12 +297,18 @@ void   Qualify(CppBase& base)
 		md5 << '\n';
 	}
 	String c5 = md5.FinishString();
-	if(c5 != base.serial_md5) {
-		base.serial++;
-		base.serial_md5 = c5;
+	if(c5 != base.types_md5) { // set of types changed, requalify everything
+		base.types_md5 = c5;
+		for(int ni = 0; ni < base.GetCount(); ni++) {
+			Array<CppItem>& n = base[ni];
+			for(int i = 0; i < n.GetCount(); i++)
+				n[i].qualify = true;
+		}
 	}
+	base.namespaces.Clear();
+	QualifyPass0(base);
 	QualifyPass1(base);
 	QualifyPass2(base);
 }
 
-END_UPP_NAMESPACE
+}

@@ -23,6 +23,12 @@ for implementation of descent parsers of XML.&]
 [s2;%% Skips any whitespaces in the input XML.&]
 [s3; &]
 [s4; &]
+[s5;:XmlParser`:`:RegisterEntity`(const String`&`,const String`&`): [@(0.0.255) void]_[* R
+egisterEntity]([@(0.0.255) const]_[_^String^ String][@(0.0.255) `&]_[*@3 id], 
+[@(0.0.255) const]_[_^String^ String][@(0.0.255) `&]_[*@3 text])&]
+[s2;%% Registers a new XML entity [%-*@3 id] with value [%-*@3 text].&]
+[s3;%% &]
+[s4; &]
 [s5;:XmlParser`:`:IsEof`(`): [@(0.0.255) bool]_[* IsEof]()&]
 [s2;%% Returns true if parser reached the end of text.&]
 [s3; &]
@@ -34,6 +40,11 @@ onst]&]
 [s4; &]
 [s5;:XmlParser`:`:IsTag`(`): [@(0.0.255) bool]_[* IsTag]()&]
 [s2;%% Returns true if the parser is at XML start`-tag.&]
+[s3; &]
+[s4; &]
+[s5;:XmlParser`:`:PeekTag`(`): [_^String^ String]_[* PeekTag]()&]
+[s2;%% Returns the next tag id, but does not advance. If the parser 
+is not at start`-tag, XmlError is thrown.&]
 [s3; &]
 [s4; &]
 [s5;:XmlParser`:`:ReadTag`(`): [_^String^ String]_[* ReadTag]()&]
@@ -85,6 +96,23 @@ t]_[@(0.0.255) char]_`*[*@3 tag])&]
 [s2;%% Calls PassTag([%-*@3 tag]) and then PassEnd(). In other words, 
 requires to advance over element with empty content.&]
 [s3;%% &]
+[s4; &]
+[s5;:XmlParser`:`:TagElseSkip`(const char`*`): [@(0.0.255) bool]_[* TagElseSkip]([@(0.0.255) c
+onst]_[@(0.0.255) char]_`*[*@3 tag])&]
+[s2;%% If call Tag([%-*@3 tag]).returns true. Otherwise calls Skip 
+and returns else. This is a shortcut to relatively common construct 
+ [*C if(Tag(][%-*C@3 tag][*C )) `{ ... `} else Skip()][* ;]&]
+[s3;%% &]
+[s4; &]
+[s5;:XmlParser`:`:LoopTag`(const char`*`): [@(0.0.255) bool]_[* LoopTag]([@(0.0.255) const]_
+[@(0.0.255) char]_`*[*@3 tag])&]
+[s2;%% If End call returns true, returns false. If call to Tag([%-*@3 tag]) 
+returns true, returns true. Otherwise it calls Skip and repeats. 
+This is useful if we are only interested in just one type of 
+subtag of current level, e.g.: [*C while(LoopTag(`"foo`")) `{ ... 
+`}] is an equivalent of common construct  [*C while(!End()) if(Tag(][%-*C@3 tag][*C )) 
+`{ ... `} else Skip();]&]
+[s3;%% &]
 [s4;%% &]
 [s5;:XmlParser`:`:GetAttrCount`(`)const: [@(0.0.255) int]_[* GetAttrCount]()_[@(0.0.255) co
 nst]&]
@@ -94,6 +122,11 @@ nst]&]
 [s5;:XmlParser`:`:GetAttr`(int`)const: [_^String^ String]_[* GetAttr]([@(0.0.255) int]_[*@3 i
 ])_[@(0.0.255) const]&]
 [s2;%% Returns the name of attribute [%-*@3 i ]of the last start`-tag.&]
+[s3;%% &]
+[s4; &]
+[s5;:XmlParser`:`:IsAttr`(const char`*`)const: [@(0.0.255) bool]_[* IsAttr]([@(0.0.255) con
+st]_[@(0.0.255) char]_`*[*@3 id])_[@(0.0.255) const]&]
+[s2;%% Returns true if [%-*@3 id] an attribute of the last start`-tag.&]
 [s3;%% &]
 [s4;%% &]
 [s5;:XmlParser`:`:operator`[`]`(int`)const: [_^String^ String]_[* operator`[`]]([@(0.0.255) i
@@ -195,16 +228,27 @@ the next start`-tag is processed.&]
 [s4;%% &]
 [s5;:XmlParser`:`:Relaxed`(bool`): [@(0.0.255) void]_[* Relaxed]([@(0.0.255) bool]_[*@3 b])&]
 [s2;%% Activates the relaxed mode. In relaxed mode, XmlParser ignores 
-mismatches of start`-tag and end`-tags. This mode was introduced 
-to deal with broken XML files.&]
-[s3; &]
+mismatches of start`-tag and end`-tags. Unknown entities are 
+replace with character `'`&`'. This mode was introduced to deal 
+with broken XML files.&]
+[s3;%% &]
+[s4; &]
+[s5;:XmlParser`:`:Raw`(bool`): [@(0.0.255) void]_[* Raw]([@(0.0.255) bool]_[*@3 b])&]
+[s2;%% Activtes the raw mode. I raw mode, all logic about start`-tags 
+and end`-tags is completely supressed. This mode was introduced 
+to deal with HTML.&]
 [s0; &]
 [ {{10000F(128)G(128)@1 [s0;%% [* Constructor detail]]}}&]
-[s4;H0; &]
+[s3;%% &]
 [s5;:XmlParser`:`:XmlParser`(const char`*`): [* XmlParser]([@(0.0.255) const]_[@(0.0.255) c
 har]_`*[*@3 s])&]
 [s2;%% Creates the parser for xml input text [%-*@3 s]. The pointed 
 text must be valid through the whole parsing process (XmlParser 
 does not make copy of the text).&]
 [s3; &]
-[s0; ]
+[s4; &]
+[s5;:XmlParser`:`:XmlParser`(Stream`&`): [* XmlParser]([_^Stream^ Stream][@(0.0.255) `&]_[*@3 i
+n])&]
+[s2;%% Creates the parser for the input stream [%-*@3 in].&]
+[s3;%% &]
+[s0; ]]

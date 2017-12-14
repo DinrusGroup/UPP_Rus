@@ -1,13 +1,13 @@
 #include "RichEdit.h"
 
-NAMESPACE_UPP
+namespace Upp {
 
 RichPara::NumberFormat ParaFormatting::GetNumbering()
 {
 	RichPara::NumberFormat f;
-	f.before_number = before_number;
-	f.after_number = after_number;
-	f.reset_number = reset_number;
+	f.before_number = ~before_number;
+	f.after_number = ~after_number;
+	f.reset_number = ~reset_number;
 	for(int i = 0; i < 8; i++)
 		f.number[i] = Nvl((int)~n[i]);
 	return f;
@@ -65,8 +65,28 @@ void ParaFormatting::SetupIndent()
 	indent.ClearModify();
 }
 
-void ParaFormatting::Set(int unit, const RichText::FormatInfo& formatinfo)
+void ParaFormatting::EditHdrFtr()
 {
+	if(EditRichHeaderFooter(header_qtf, footer_qtf))
+		modified = true;
+}
+
+void ParaFormatting::NewHdrFtr()
+{
+	SyncHdrFtr();
+	if(newhdrftr)
+		EditHdrFtr();
+}
+
+void ParaFormatting::SyncHdrFtr()
+{
+	hdrftr.Enable(newhdrftr && newhdrftr.IsEnabled());
+}
+
+void ParaFormatting::Set(int unit, const RichText::FormatInfo& formatinfo, bool baselevel)
+{
+	newhdrftr.Enable(baselevel);
+	hdrftr.Enable(baselevel);
 	font = formatinfo;
 	ruler.Set(unit, RichText::RULER & formatinfo.paravalid ? formatinfo.ruler : Null);
 	before.Set(unit, RichText::BEFORE & formatinfo.paravalid ? formatinfo.before : Null);
@@ -79,6 +99,15 @@ void ParaFormatting::Set(int unit, const RichText::FormatInfo& formatinfo)
 		          formatinfo.align == ALIGN_CENTER  ? 1 :
 		          formatinfo.align == ALIGN_RIGHT   ? 2 :
 		                                            3;
+	if(RichText::NEWHDRFTR & formatinfo.paravalid) {
+		newhdrftr = formatinfo.newhdrftr;
+		header_qtf = formatinfo.header_qtf;
+		footer_qtf = formatinfo.footer_qtf;
+	}
+	else {
+		newhdrftr = Null;
+		newhdrftr.ThreeState();
+	}
 	if(RichText::NEWPAGE & formatinfo.paravalid)
 		page = formatinfo.newpage;
 	else {
@@ -107,6 +136,10 @@ void ParaFormatting::Set(int unit, const RichText::FormatInfo& formatinfo)
 		rulerink <<= formatinfo.rulerink;
 	else
 		rulerink <<= Null;
+	if(RichText::RULERSTYLE & formatinfo.paravalid)
+		rulerstyle <<= formatinfo.rulerstyle;
+	else
+		rulerstyle <<= Null;
 	tabpos.SetUnit(unit);
 	if(RichText::BULLET & formatinfo.paravalid)
 		bullet <<= formatinfo.bullet;
@@ -117,9 +150,9 @@ void ParaFormatting::Set(int unit, const RichText::FormatInfo& formatinfo)
 	else
 		linespacing <<= Null;
 	if(RichText::NUMBERING & formatinfo.paravalid) {
-		before_number = formatinfo.before_number.ToWString();
-		after_number = formatinfo.after_number.ToWString();
-		reset_number = formatinfo.reset_number;
+		before_number <<= formatinfo.before_number.ToWString();
+		after_number <<= formatinfo.after_number.ToWString();
+		reset_number <<= formatinfo.reset_number;
 		for(int i = 0; i < 8; i++)
 			n[i] = formatinfo.number[i];
 	}
@@ -139,6 +172,7 @@ void ParaFormatting::Set(int unit, const RichText::FormatInfo& formatinfo)
 	keepindent = formatinfo.indent != ComputeIndent();
 	SetupIndent();
 	ClearModify();
+	SyncHdrFtr();
 	modified = false;
 }
 
@@ -173,6 +207,16 @@ dword ParaFormatting::Get(RichText::FormatInfo& formatinfo)
 	if(!IsNull(page)) {
 		formatinfo.newpage = page;
 		v |= RichText::NEWPAGE;
+	}
+	if(!IsNull(newhdrftr)) {
+		formatinfo.newhdrftr = newhdrftr;
+		v |= RichText::NEWHDRFTR;
+		if(formatinfo.newhdrftr) {
+			formatinfo.header_qtf = header_qtf;
+			formatinfo.footer_qtf = footer_qtf;
+		}
+		else
+			formatinfo.header_qtf = formatinfo.footer_qtf = Null;
 	}
 	if(!IsNull(keep)) {
 		formatinfo.keep = keep;
@@ -221,8 +265,21 @@ dword ParaFormatting::Get(RichText::FormatInfo& formatinfo)
 		formatinfo.rulerink = ~rulerink;
 		v |= RichText::RULERINK;
 	}
+	if(!IsNull(rulerstyle)) {
+		formatinfo.rulerstyle = ~rulerstyle;
+		v |= RichText::RULERSTYLE;
+	}
 	return v;
 }
+
+struct RulerStyleDisplay : Display {
+	virtual void Paint(Draw& w, const Rect& r, const Value& q, Color ink, Color paper, dword style) const
+	{
+		w.DrawRect(r, paper);
+		if(!IsNull(q))
+			RichPara::DrawRuler(w, r.left, (r.top + r.bottom) / 2 - 1, r.Width(), 2, ink, q);
+	}
+};
 
 ParaFormatting::ParaFormatting()
 {
@@ -250,7 +307,7 @@ ParaFormatting::ParaFormatting()
 	bullet.Add(RichPara::BULLET_BOXWHITE, RichEditImg::BoxWhiteBullet());
 	bullet.Add(RichPara::BULLET_TEXT, RichEditImg::TextBullet());
 	bullet.SetDisplay(CenteredHighlightImageDisplay());
-	bullet.SetLineCy(18);
+	bullet.SetLineCy(RichEditImg::RoundBullet().GetHeight() + Zy(2));
 	for(int i = 0; i < 8; i++) {
 		DropList& list = n[i];
 		list.Add(Null);
@@ -267,8 +324,18 @@ ParaFormatting::ParaFormatting()
 	after_number <<=
 	reset_number <<=
 	bullet <<= THISBACK(SetupIndent);
+	
+	newhdrftr <<= THISBACK(NewHdrFtr);
+	hdrftr <<= THISBACK(EditHdrFtr);
+	SyncHdrFtr();
+	
 	EnableNumbering();
 	rulerink.NullText("---");
+	rulerstyle.SetDisplay(Single<RulerStyleDisplay>());
+	rulerstyle.Add(Null);
+	rulerstyle.Add(RichPara::RULER_SOLID);
+	rulerstyle.Add(RichPara::RULER_DOT);
+	rulerstyle.Add(RichPara::RULER_DASH);
 }
 
 void StyleManager::EnterStyle()
@@ -447,7 +514,7 @@ void StyleManager::Setup(const Vector<int>& faces, int aunit)
 	for(int i = 0; RichEdit::fh[i]; i++)
 		height.AddList(RichEdit::fh[i]);
 	face.ClearList();
-	RichEdit::SetupFaceList(face);
+	SetupFaceList(face);
 	for(int i = 0; i < faces.GetCount(); i++)
 		face.Add(faces[i]);
 }
@@ -472,4 +539,4 @@ StyleManager::StyleManager()
 	Setup(ff, UNIT_DOT);
 }
 
-END_UPP_NAMESPACE
+}

@@ -1,18 +1,31 @@
-description "RusIDE - общая библиотека\377B";
+description "TheIDE - common library\377B";
 
 uses
 	Esc,
-	Web;
+	plugin/bz2,
+	plugin/lzma,
+	plugin/lz4,
+	plugin/zstd;
 
 file
-	Core.h,
+	Core.h options(BUILDER_OPTION) PCH,
 	Core.cpp,
-	Hdepend.cpp optimize_speed,
+	Builder.cpp,
+	Hdepend.cpp,
 	Package.cpp,
 	Workspace.cpp,
 	usc.cpp,
+	BinObj.cpp,
+	Host readonly separator,
 	Host.h,
 	Host.cpp,
-	"Инфо" readonly separator,
-	Copying;
+	HostTools.h,
+	HostTools.cpp,
+	Logger readonly separator,
+	Logger.cpp,
+	Logger.h,
+	Info readonly separator,
+	Copying,
+	Documentation readonly separator,
+	src.tpp;
 

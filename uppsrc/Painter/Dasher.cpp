@@ -1,6 +1,6 @@
 #include "Painter.h"
 
-NAMESPACE_UPP
+namespace Upp {
 
 void Dasher::Put(const Pointf& p)
 {
@@ -40,7 +40,7 @@ void Dasher::Line(const Pointf& p)
 void Dasher::Init(const Vector<double>& p, double distance)
 {
 	pattern = &p;
-	sum = Sum0(p);
+	sum = Sum(p);
 	if(sum == 0)
 		return;
 	distance -= int(distance / sum) * sum;
@@ -59,4 +59,4 @@ void Dasher::Init(const Vector<double>& p, double distance)
 	p0 = Pointf(0, 0);
 }
 
-END_UPP_NAMESPACE
+}

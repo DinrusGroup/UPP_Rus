@@ -4,7 +4,7 @@
 #include <Geom/Geom.h>
 //#include <TCore/TCore.h>
 
-NAMESPACE_UPP
+namespace Upp {
 
 #define MINRAD (DEGRAD / 60.0)
 #define SECRAD (DEGRAD / 3600.0)
@@ -56,7 +56,7 @@ public:
 	}
 
 	void           AddRef() const      { if(this) AtomicInc(refcount); }
-	int            GetRefCount() const { return AtomicXAdd(refcount, 0); }
+	int            GetRefCount() const { return refcount; }
 	void           Release() const     { if(this && !AtomicDec(refcount)) delete this; }
 #ifdef REF_DEBUG
 	int            GetAllocIndex() const { return allocindex; }
@@ -152,15 +152,15 @@ public:
 	{
 		Node() {}
 		Node(int branch) : branch(branch) {}
-		Node(One<Split> split) : branch(-1), split(split) {}
+		Node(One<Split> split) : branch(-1), split(pick(split)) {}
 		int        branch;
 		One<Split> split;
 	};
 
 	struct Split
 	{
-		Split(Pointf n, double c, pick_ Node& minus, pick_ Node& plus)
-			: n(n), c(c), minus(minus), plus(plus) {}
+		Split(Pointf n, double c, Node rval_ minus, Node rval_ plus)
+			: n(n), c(c), minus(pick(minus)), plus(pick(plus)) {}
 
 		Pointf     n;
 		double     c; // np = c
@@ -170,7 +170,7 @@ public:
 
 	struct Tree : GeomRefBase
 	{
-		Tree(pick_ Node& root) : root(root) {}
+		Tree(Node pick_ root) : root(pick(root)) {}
 
 		Node root;
 	};
@@ -178,7 +178,7 @@ public:
 public:
 	GisBSPTree() {}
 	GisBSPTree(int branch) : tree(new Tree(Node(branch))) {}
-	GisBSPTree(pick_ Node& root) : tree(new Tree(root)) {}
+	GisBSPTree(Node pick_ root) : tree(new Tree(pick(root))) {}
 
 	bool         IsEmpty() const   { return !tree->root.split; }
 	int          GetBranch() const { return tree->root.branch; }
@@ -432,6 +432,35 @@ private:
 	bool         sukneg, cukneg;
 };
 
+class SphericalLatitudeFunction : public GisFunction
+{
+public:
+	SphericalLatitudeFunction(double alpha, double k, double R, double e, double U0)
+	: alpha(alpha), k(k), R(R), e(e), U0(U0) {}
+
+	virtual double Get(double x) const;
+
+private:
+	double alpha, k, R, e, U0;
+};
+
+class GisCoordsGaussLatitude {
+public:
+	GisCoordsGaussLatitude();
+	
+	void Create(double a, double e2, double base_parallel);
+	
+	double Spherical(double latitude) const { return gauss_projected(latitude); }
+	double Elliptical(double latitude) const { return gauss_latitude(latitude); }
+	
+public:
+	double radius;
+
+private:
+	mutable GisInterpolator gauss_projected;
+	mutable GisInterpolator gauss_latitude;
+};
+
 class GisEllipsoid
 {
 public:
@@ -451,6 +480,7 @@ public:
 		HAYFORD_1909    = 7022,
 		KRASSOWSKY_1940 = 7024,
 		WGS_1984        = 7030,
+		GRS_1980        = 7019,
 	};
 
 	bool                      IsNullInstance() const { return !a; }
@@ -746,6 +776,9 @@ public:
 	Point     target1;
 	Point     target2;
 	One<Node> split;
+	
+	rval_default(LinearSegmentTree);
+	LinearSegmentTree() {}
 };
 
 LinearSegmentTree CreateLinearTree(Point s1, Point s2, const SegmentTreeInfo& info);
@@ -759,6 +792,9 @@ public:
 		Rect       source;
 		Point      trg_topleft, trg_topright, trg_bottomleft, trg_bottomright;
 		One<Split> split;
+		
+		rval_default(Node);
+		Node() {}
 	};
 
 	struct Split
@@ -771,11 +807,14 @@ public:
 
 public:
 	Node root;
+	
+	rval_default(PlanarSegmentTree);
+	PlanarSegmentTree() {}
 };
 
 PlanarSegmentTree CreatePlanarTree(const LinearSegmentTree& left, const LinearSegmentTree& top,
 	const LinearSegmentTree& right, const LinearSegmentTree& bottom, const SegmentTreeInfo& info);
 
-END_UPP_NAMESPACE
+}
 
 #endif

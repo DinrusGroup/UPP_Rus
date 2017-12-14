@@ -1,6 +1,6 @@
 #include "CtrlLib.h"
 
-NAMESPACE_UPP
+namespace Upp {
 
 #define LLOG(x)  // RLOG(x)
 
@@ -18,6 +18,7 @@ void ChStdSkin()
 {
 	ChSysInit();
 	GUI_GlobalStyle_Write(GUISTYLE_XP);
+	GUI_PopUpEffect_Write(Ctrl::IsCompositedGui() ? GUIEFFECT_NONE : GUIEFFECT_SLIDE);
 	ColoredOverride(CtrlsImg::Iml(), CtrlsImg::Iml());
 }
 
@@ -33,9 +34,11 @@ void SbWc(Value *look)
 void ChClassicSkin()
 {
 	LLOG("ChInitWinClassic");
+
 	ChSysInit();
 	GUI_GlobalStyle_Write(GUISTYLE_CLASSIC);
-
+	GUI_PopUpEffect_Write(Ctrl::IsCompositedGui() ? GUIEFFECT_NONE : GUIEFFECT_SLIDE);
+	
 	ColoredOverride(CtrlsImg::Iml(), ClassicCtrlsImg::Iml());
 	for(int q = 0; q < 4; q++)
 		CtrlsImg::Set(CtrlsImg::I_HTB + q, AdjustColors(CtrlsImg::Get(ClassicCtrlsImg::I_B + q)));
@@ -76,7 +79,7 @@ void ChClassicSkin()
 	LabelBoxTextColor_Write(SColorText());
 }
 
-#ifdef GUI_X11
+#ifdef PLATFORM_X11
 
 void ChSysInit()
 {
@@ -87,4 +90,4 @@ void ChSysInit()
 
 #endif
 
-END_UPP_NAMESPACE
+}

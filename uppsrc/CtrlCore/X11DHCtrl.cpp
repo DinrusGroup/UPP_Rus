@@ -2,7 +2,7 @@
 
 #ifdef GUI_X11
 
-NAMESPACE_UPP
+namespace Upp {
 
 /////////////////////////////////////////////////////////////////////////////////////////
 // Constructor
@@ -385,11 +385,12 @@ XVisualInfo DHCtrl::GetVisualInfo(void)
 		return *UserVisualInfo;
 
 	XVisualInfo visualInfo;
+	memset(&visualInfo, 0, sizeof(visualInfo));
 
 	// get the active visual
 	Visual *visual = GetVisual();
 
-	// gets a list of all available XVsualinfo
+	// gets a list of all available XVisualinfo
 	XVisualInfo *v = 0;
 	XVisualInfo vtemplate;
 	int nVis;
@@ -418,6 +419,6 @@ XVisualInfo DHCtrl::GetVisualInfo(void)
 	return visualInfo;
 }
 
-END_UPP_NAMESPACE
+}
 
 #endif

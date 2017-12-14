@@ -39,7 +39,7 @@ struct FontDisplay : public Display {
 		w.DrawRect(r, paper);
 		Font font = q;
 		String text = FormatFont(font);
-		font.Height(StdFont().Info().GetHeight() - 1);
+		font.Height(StdFont().GetHeight() - 1);
 		w.DrawText(2, (r.Height() - font.Info().GetHeight()) / 2, text, font, ink);
 	}
 };
@@ -85,7 +85,7 @@ Font FontDlg::GetFont() const
 FontDlg::FontDlg()
 {
 	int i;
-	CtrlLayoutOKCancel(*this, "Шрифт");
+	CtrlLayoutOKCancel(*this, "Font");
 	ToolWindow();
 	for(i = 6; i < 70; i++)
 		height.AddList(i);
@@ -119,15 +119,15 @@ void FontProperty::Read(CParser& p) {
 	else
 	if(p.Id("Serif") || p.Id("SerifZ") || p.Id("ScreenSerif") || p.Id("ScreenSerifZ") ||
 	   p.Id("Roman") || p.Id("RomanZ"))
-	   	f.Face(Font::SERIF);
+		f.Face(Font::SERIF);
 	else
 	if(p.Id("SansSerif") || p.Id("SansSerifZ") || p.Id("ScreenSans") || p.Id("ScreenSansZ") ||
 	   p.Id("Arial") || p.Id("ArialZ"))
-	   	f.Face(Font::SANSSERIF);
+		f.Face(Font::SANSSERIF);
 	else
 	if(p.Id("Monospace") || p.Id("MonospaceZ") || p.Id("ScreenFixed") || p.Id("ScreenFixedZ") ||
 	   p.Id("Courier") || p.Id("CourierZ"))
-	   	f.Face(Font::MONOSPACE);
+		f.Face(Font::MONOSPACE);
 	p.PassChar('(');
 	if(p.IsInt())
 		f.Height(p.ReadInt());
@@ -198,7 +198,7 @@ void FontProperty::Perform()
 
 FontProperty::FontProperty() {
 	editor.SetData(StdFont());
-	Add(editor.HSizePos(100, 2).TopPos(2));
+	Add(editor.HSizePosZ(100, 2).TopPos(2));
 	editor.SetDisplay(Single<FontDisplay>());
 	editor.WhenAction = THISBACK(Perform);
 	editor <<= StdFont();

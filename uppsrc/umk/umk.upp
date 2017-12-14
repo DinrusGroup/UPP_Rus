@@ -1,4 +1,4 @@
-description "Построитель сборок/пакетов U++ из командной строки\377";
+description "Commandline U++ package/assembly builder\377";
 
 uses
 	ide\Builders;
@@ -9,7 +9,7 @@ file
 	IdeContext.cpp,
 	MakeBuild.cpp,
 	Export.cpp,
-	umake.cpp charset "UTF-8";
+	umake.cpp;
 
 mainconfig
 	"" = "";

@@ -56,7 +56,7 @@ void HelloWorld::Paint(Draw& w)
 GUI_APP_MAIN
 {
 	HelloWorld hw;
-	hw.Title("Пример 'Привет, Мир'");
-	hw.Text(Nvl(Join(CommandLine(), " "), "Hello World!"));
+	hw.Title("Hello world example");
+	hw.Text(Nvl(Join(CommandLine(), " "), "Hello world !"));
 	hw.Run();
 }

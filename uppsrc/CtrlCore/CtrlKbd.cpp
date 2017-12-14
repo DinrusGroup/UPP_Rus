@@ -1,8 +1,8 @@
 #include "CtrlCore.h"
 
-NAMESPACE_UPP
+namespace Upp {
 
-#define LLOG(x)  //  DLOG(x)
+#define LLOG(x)  // DLOG(x)
 
 Ptr<Ctrl> Ctrl::focusCtrl;
 Ptr<Ctrl> Ctrl::focusCtrlWnd;
@@ -69,24 +69,24 @@ bool Ctrl::DispatchKey(dword keycode, int count)
 	if(!focusCtrl)
 		return false;
 	Ptr<Ctrl> p = focusCtrl;
-	if(IsUsrLog()) {
+	if(Ini::user_log) {
 		String kl;
 		dword k = keycode;
-		int l = 0;
+		const char *l = "";
 		if(k < 65536) {
 			kl << "CHAR \'" << ToUtf8((wchar)keycode) << "\' (" << keycode << ')';
-			l = 2;
+			l = "  ";
 		}
 		else {
 			kl << "KEY";
 			if(k & K_KEYUP) {
 				kl << "UP";
 				k &= ~K_KEYUP;
-				l = 2;
+				l = "  ";
 			}
 			kl << " " << GetKeyDesc(k);
 		}
-		UsrLogT(l, kl);
+		USRLOG(l << kl);
 	}
 	for(;;) {
 		LLOG("Trying to DispatchKey: p = " << Desc(p));
@@ -94,8 +94,8 @@ bool Ctrl::DispatchKey(dword keycode, int count)
 		{
 			LLOG("Ctrl::DispatchKey(" << FormatIntHex(keycode) << ", " << GetKeyDesc(keycode)
 				<< "): eaten in " << Desc(p));
-			if(IsUsrLog())
-				UsrLogT(2, String().Cat() << "-> " << Desc(p));
+			if(Ini::user_log)
+				USRLOG("  -> " << Desc(p));
 			eventCtrl = focusCtrl;
 			return true;
 		}
@@ -110,7 +110,7 @@ bool Ctrl::DispatchKey(dword keycode, int count)
 		p = p->GetParent();
 	}
 
-	UsrLogT(2, "key was ignored");
+	USRLOG("  key was ignored");
 
 	return false;
 }
@@ -118,15 +118,18 @@ bool Ctrl::DispatchKey(dword keycode, int count)
 bool Ctrl::HotKey(dword key)
 {
 	GuiLock __;
+	LLOG("HotKey " << GetKeyDesc(key) << " at " << Name(this));
 	if(!IsEnabled() || !IsVisible()) return false;
 	for(Ptr<Ctrl> ctrl = firstchild; ctrl; ctrl = ctrl->next)
 	{
+		LLOG("Trying HotKey " << GetKeyDesc(key) << " at " << Name(ctrl));
 		if(ctrl->IsOpen() && ctrl->IsVisible() && ctrl->IsEnabled() && ctrl->HotKey(key))
 		{
-			if(IsUsrLog() && s_hotkey) {
-				UsrLogT(2, String().Cat() << "HOT-> " << UPP::Name(ctrl));
+			if(Ini::user_log && s_hotkey) {
+				USRLOG("  HOT-> " << UPP::Name(ctrl));
 				s_hotkey = false;
 			}
+			LLOG("ACCEPTED");
 			return true;
 		}
 	}
@@ -139,8 +142,9 @@ void Ctrl::DoDeactivate(Ptr<Ctrl> pfocusCtrl, Ptr<Ctrl> nfocusCtrl)
 	if(pfocusCtrl) {
 		Ptr<Ctrl> ptop = pfocusCtrl->GetTopCtrl();
 		Ctrl *ntop = nfocusCtrl ? nfocusCtrl->GetTopCtrl() : NULL;
-		LLOG("DoDeactivate " << UPP::Name(ptop) << " in favor of " << UPP::Name(ntop));
 		if(ntop != ptop && !ptop->destroying) {
+			LLOG("DoDeactivate " << UPP::Name(ptop) << " in favor of " << UPP::Name(ntop));
+			ptop->DeactivateBy(ntop);
 			ptop->Deactivate();
 			if(ptop)
 				ptop->StateH(DEACTIVATE);
@@ -155,7 +159,7 @@ void Ctrl::DoKillFocus(Ptr<Ctrl> pfocusCtrl, Ptr<Ctrl> nfocusCtrl)
 	GuiLock __;
 	if(pfocusCtrl && !pfocusCtrl->destroying) {
 		pfocusCtrl->StateH(FOCUS);
-		LLOG("LostFocus: " << Desc(pfocusCtrl));
+		LLOG("LostFocus: " << Name(pfocusCtrl));
 		pfocusCtrl->LostFocus();
 	}
 	if(pfocusCtrl && pfocusCtrl->parent && !pfocusCtrl->parent->destroying)
@@ -182,6 +186,7 @@ void Ctrl::DoSetFocus(Ptr<Ctrl> pfocusCtrl, Ptr<Ctrl> nfocusCtrl, bool activate)
 	if(focusCtrl == nfocusCtrl && nfocusCtrl && nfocusCtrl->parent &&
 	   !nfocusCtrl->parent->destroying)
 		nfocusCtrl->parent->ChildGotFocus();
+	
 	SyncCaret();
 }
 
@@ -222,8 +227,7 @@ bool Ctrl::SetFocus0(bool activate)
 bool Ctrl::SetFocus0(bool activate)
 {
 	GuiLock __;
-	if(IsUsrLog())
-		UsrLogT(6, String().Cat() << "SETFOCUS " << Desc(this));
+	USRLOG("      SETFOCUS " << Desc(this));
 	LLOG("Ctrl::SetFocus " << Desc(this));
 	LLOG("focusCtrlWnd " << UPP::Name(focusCtrlWnd));
 	LLOG("Ctrl::SetFocus0 -> deferredSetFocus = NULL; was: " << UPP::Name(defferedSetFocus));
@@ -237,7 +241,9 @@ bool Ctrl::SetFocus0(bool activate)
 	if(!topwindow) topwindow = topctrl;
 	LLOG("SetFocus -> SetWndFocus: topwindow = " << UPP::Name(topwindow) << ", focusCtrlWnd = " << UPP::Name(focusCtrlWnd));
 	if(!topwindow->HasWndFocus() && !topwindow->SetWndFocus()) return false;// cxl 31.1.2004
-#ifdef GUI_X11 // ugly temporary hack - popups not behaving right in MacOS
+#ifdef PLATFORM_OSX11 // ugly temporary hack - popups not behaving right in MacOS
+	// before 2012-9-2 was #ifdef GUI_X11, but that caused issues in most linux distros (cxl)
+	// as parent window of popup always manages focus/keyboard for popup in X11
 	if(activate) // Dolik/fudadmin 2011-5-1
 		topctrl->SetWndForeground();
 #else
@@ -254,7 +260,6 @@ bool Ctrl::SetFocus0(bool activate)
 		lastActiveWnd = topwindow;
 	return true;
 }
-
 
 bool Ctrl::SetFocus()
 {
@@ -318,7 +323,7 @@ void Ctrl::DefferedFocusSync()
 	GuiLock __;
 	while(defferedChildLostFocus.GetCount() || defferedSetFocus) {
 		LLOG("Ctrl::DeferredFocusSync, defferedSetFocus = " << UPP::Name(defferedSetFocus));
-		Vector< Ptr<Ctrl> > b = defferedChildLostFocus;
+		Vector< Ptr<Ctrl> > b = pick(defferedChildLostFocus);
 		defferedChildLostFocus.Clear();
 		for(int i = 0; i < b.GetCount(); i++)
 			if(b[i]) {
@@ -370,11 +375,12 @@ String GetKeyDesc(dword key)
 	if(key & K_CTRL)  desc << t_("key\vCtrl+");
 	if(key & K_ALT)   desc << t_("key\vAlt+");
 	if(key & K_SHIFT) desc << t_("key\vShift+");
+	if(key & K_KEYUP) desc << t_("key\vUP ");
 
 
-	key &= ~(K_CTRL | K_ALT | K_SHIFT);
+	key &= ~(K_CTRL | K_ALT | K_SHIFT | K_KEYUP);
 	if(key < K_DELTA && key > 32 && key != K_DELETE)
-		return desc + String(key, 1);
+		return desc + ToUtf8((wchar)key);
 	if(key >= K_NUMPAD0 && key <= K_NUMPAD9)
 		desc << "Num " << (char)(key - K_NUMPAD0 + '0');
 	else if(key >= K_0 && key <= K_9)
@@ -398,6 +404,9 @@ String GetKeyDesc(dword key)
 			{ K_INSERT, tt_("key\vInsert") }, { K_DELETE, tt_("key\vDelete") },{ K_BREAK, tt_("key\vBreak") },
 			{ K_MULTIPLY, tt_("key\vNum[*]") }, { K_ADD, tt_("key\vNum[+]") }, { K_SUBTRACT, tt_("key\vNum[-]") }, { K_DIVIDE, tt_("key\vNum[/]") },
 			{ K_ALT_KEY, tt_("key\vAlt") }, { K_SHIFT_KEY, tt_("key\vShift") }, { K_CTRL_KEY, tt_("key\vCtrl") },
+			{ K_PLUS, tt_("key\v[+]") }, { K_MINUS, tt_("key\v[-]") }, { K_COMMA, tt_("key\v[,]") }, { K_PERIOD, tt_("key\v[.]") },
+			{ K_SEMICOLON, tt_("key\v[;]") }, { K_SLASH, tt_("key\v[/]") }, { K_GRAVE, tt_("key\v[`]") }, { K_LBRACKET, tt_("key\v[[]") },
+			{ K_BACKSLASH, tt_("key\v[\\]") }, { K_RBRACKET, tt_("key\v[]]") }, { K_QUOTEDBL, tt_("key\v[']") },
 			{ 0, NULL }
 		};
 		for(int i = 0; nkey[i].key; i++)
@@ -405,14 +414,9 @@ String GetKeyDesc(dword key)
 				desc << GetLngString(nkey[i].name);
 				return desc;
 			}
-		String g = GuiPlatformGetKeyDesc(key);
-		if(g.GetCount()) {
-			desc << g;
-			return desc;
-		}
 		desc << Format("%04x", (int)key);
 	}
 	return desc;
 }
 
-END_UPP_NAMESPACE
+}

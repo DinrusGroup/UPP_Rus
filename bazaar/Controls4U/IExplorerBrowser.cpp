@@ -1,10 +1,10 @@
 #ifdef _WIN32
 
 #include <CtrlLib/CtrlLib.h>
+#include "ActiveX.h" 
 
 using namespace Upp;
-
-#include "ActiveX.h" 
+//NAMESPACE_UPP
 
 bool InternetExplorerBrowser::Browse(const String &strurl) {
 	IIWebBrowser webBrowser(this);
@@ -170,5 +170,19 @@ bool InternetExplorerBrowser::Stop() {
 	
 	return false;
 }
+
+bool InternetExplorerBrowser::SetSilent(bool val) {
+	IIWebBrowser webBrowser(this);
+	if (!webBrowser) 
+		return false;	
+	
+	VARIANT_BOOL vb = val ? VARIANT_TRUE : VARIANT_FALSE;
+	if (webBrowser->put_Silent(vb) == S_OK) 
+		return true;
+	
+	return false;
+}
+
+//END_UPP_NAMESPACE
 
 #endif

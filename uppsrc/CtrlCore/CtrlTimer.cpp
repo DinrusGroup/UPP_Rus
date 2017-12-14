@@ -1,6 +1,6 @@
 #include "CtrlCore.h"
 
-NAMESPACE_UPP
+namespace Upp {
 
 // #define LOG_QUEUE
 #define LLOG(x) // LOG(x)
@@ -10,7 +10,7 @@ int MemoryProbeInt;
 struct TimeEvent : public Link<TimeEvent> {
 	dword      time;
 	int        delay;
-	Callback   cb;
+	Event<>    cb;
 	void      *id;
 	bool       rep;
 };
@@ -29,7 +29,7 @@ static TimeEvent *tevents() {
 	return t.GetPtr();
 }
 
-static void sTimeCallback(dword time, int delay, Callback cb, void *id) {
+static void sTimeCallback(dword time, int delay, Event<>  cb, void *id) {
 	TimeEvent *ne = tevents()->InsertPrev();
 	ne->time = time;
 	ne->cb = cb;
@@ -39,11 +39,11 @@ static void sTimeCallback(dword time, int delay, Callback cb, void *id) {
 	LLOG("sTimeCalllback " << ne->time << " " << ne->delay << " " << ne->id);
 }
 
-void SetTimeCallback(int delay_ms, Callback cb, void *id) {
+void SetTimeCallback(int delay_ms, Function<void ()> cb, void *id) {
 	Mutex::Lock __(sTimerLock);
 	ASSERT(abs(delay_ms) < 0x40000000);
 	LLOG("SetTimeCallback " << delay_ms << " " << id);
-	sTimeCallback(GetTickCount() + abs(delay_ms), delay_ms, cb, id);
+	sTimeCallback(GetTickCount() + abs(delay_ms), delay_ms, Event<> () << cb, id);
 }
 
 void KillTimeCallbacks(void *id, void *idlim) {
@@ -114,7 +114,7 @@ void Ctrl::TimerProc(dword time)
 		if(!todo)
 			break;
 		LLOG("Performing " << todo->time << " " << todo->delay << " " << todo->id);
-		Callback cb = todo->cb;
+		Event<>  cb = todo->cb;
 		if(todo->delay < 0)
 			todo->rep = true;
 		else
@@ -145,7 +145,7 @@ void  Ctrl::InitTimer()
 	tevents();
 }
 
-void  Ctrl::SetTimeCallback(int delay_ms, Callback cb, int id) {
+void  Ctrl::SetTimeCallback(int delay_ms, Function<void ()> cb, int id) {
 	ASSERT(id >= 0 && (size_t)id < (int)sizeof(Ctrl));
 	UPP::SetTimeCallback(delay_ms, cb, (byte *)this + id);
 }
@@ -155,18 +155,18 @@ void  Ctrl::KillTimeCallback(int id) {
 	UPP::KillTimeCallback((byte *)this + id);
 }
 
-void  Ctrl::KillSetTimeCallback(int delay_ms, Callback cb, int id)
+void  Ctrl::KillSetTimeCallback(int delay_ms, Function<void ()> cb, int id)
 {
 	KillTimeCallback(id);
 	SetTimeCallback(delay_ms, cb, id);
 }
 
-void  Ctrl::PostCallback(Callback cb, int id)
+void  Ctrl::PostCallback(Function<void ()> cb, int id)
 {
 	SetTimeCallback(0, cb, id);
 }
 
-void  Ctrl::KillPostCallback(Callback cb, int id)
+void  Ctrl::KillPostCallback(Function<void ()> cb, int id)
 {
 	KillSetTimeCallback(0, cb, id);
 }
@@ -181,36 +181,4 @@ dword GetTimeClick()
 	return sTClick;
 }
 
-void   Ctrl::EndLoop()
-{
-	GuiLock __;
-	inloop = false;
 }
-
-void   Ctrl::EndLoop(int code)
-{
-	GuiLock __;
-	ASSERT(!parent);
-	exitcode = code;
-	EndLoop();
-}
-
-bool   Ctrl::InLoop() const
-{
-	GuiLock __;
-	return inloop;
-}
-
-bool   Ctrl::InCurrentLoop() const
-{
-	GuiLock __;
-	return GetLoopCtrl() == this;
-}
-
-int    Ctrl::GetExitCode() const
-{
-	GuiLock __;
-	return exitcode;
-}
-
-END_UPP_NAMESPACE

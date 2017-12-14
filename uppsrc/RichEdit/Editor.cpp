@@ -1,16 +1,19 @@
 #include "RichEdit.h"
 
-NAMESPACE_UPP
+namespace Upp {
+
+#define TFILE <RichEdit/RichEdit.t>
+#include <Core/t.h>
 
 bool FontHeight::Key(dword key, int count)
 {
 	if(key == K_ENTER) {
-		WhenSelect();
+		if(!IsError(GetData()))
+			WhenSelect();
 		return true;
 	}
 	return WithDropChoice<EditDouble>::Key(key, count);
 }
-
 
 double RichEdit::DotToPt(int dt)
 {
@@ -51,10 +54,10 @@ Draw& EditPageDraw::Page(int _page)
 Rect RichEdit::GetTextRect() const
 {
 	Size sz = GetSize();
-	if(sz.cy < 16)
-		sz.cy = 16;
-	if(sz.cx < 80)
-		return RectC(0, 0, 48, max(sz.cy, 16));
+	if(sz.cy < Zx(16))
+		sz.cy = Zx(16);
+	if(sz.cx < Zx(80))
+		return RectC(0, 0, Zx(48), max(sz.cy, Zy(16)));
 	int cx = zoom * (sz.cx - 2 * viewborder) / 100;
 	return RectC((sz.cx - cx) / 2, 0, cx, sz.cy);
 }
@@ -112,7 +115,7 @@ void RichEdit::Paint(Draw& w)
 			for(int i = 0; i <= py.page; i++)
 				DrawFrame(w, tr.left - 1, i * (pw.size.cy + 3) + 1 - sb,
 				          pw.size.cx + 4, pw.size.cy + 2, SColorShadow);
-		PaintInfo pi;
+		PaintInfo pi = paint_info;
 		pi.context = context;
 		pi.zoom = zoom;
 		pi.top = GetPageY(sb);
@@ -123,7 +126,7 @@ void RichEdit::Paint(Draw& w)
 		pi.showlabels = !IsNull(showcodes) && viewborder >= 16;
 		if(spellcheck)
 			pi.spellingchecker = SpellParagraph;
-		if(IsSelection())
+		if(IsSelection()) {
 			if(tablesel) {
 				pi.tablesel = tablesel;
 				pi.cells = cells;
@@ -132,6 +135,7 @@ void RichEdit::Paint(Draw& w)
 				pi.sell = begtabsel ? -1 : min(cursor, anchor);
 				pi.selh = max(cursor, anchor);
 			}
+		}
 		text.Paint(pw, pagesz, pi);
 	}
 	w.DrawRect(tr.left, GetPosY(py) - sb, 20, 3, showcodes);
@@ -208,9 +212,20 @@ void RichEdit::FixObjectRect()
 	}
 }
 
+RichEdit& RichEdit::Floating(double zoomlevel_)
+{
+	floating_zoom = zoomlevel_;
+	RefreshLayoutDeep();
+	return *this;
+}
+
 void RichEdit::Layout()
 {
-	Size sz = GetTextRect().Size();
+	Size sz = GetTextRect().GetSize();
+	if(!IsNull(floating_zoom)) {
+		Zoom m = GetRichTextStdScreenZoom();
+		SetPage(Size(int(1 / floating_zoom * m.d / m.m * sz.cx), INT_MAX));
+	}
 	sb.SetPage(sz.cy > 10 ? sz.cy - 4 : sz.cy);
 	SetupRuler();
 	SetSb();
@@ -356,7 +371,7 @@ struct DisplayFont : public Display {
 	{
 		Font fnt;
 		fnt.Face((int)q);
-		fnt.Height(r.Height() - 4);
+		fnt.Height(r.Height() - Zy(4));
 		w.DrawRect(r, paper);
 		w.DrawText(r.left, r.top + (r.Height() - fnt.Info().GetHeight()) / 2,
 		           Font::GetFaceName((int)q), fnt, ink);
@@ -389,7 +404,7 @@ void RichEdit::Clear()
 	zsc = 0;
 }
 
-void RichEdit::SetupLanguage(pick_ Vector<int>& _lng)
+void RichEdit::SetupLanguage(Vector<int>&& _lng)
 {
 	Vector<int>& lng = const_cast<Vector<int>&>(_lng);
 	Sort(lng);
@@ -398,16 +413,15 @@ void RichEdit::SetupLanguage(pick_ Vector<int>& _lng)
 		language.Add(lng[i], lng[i] ? LNGAsText(lng[i]) : String(t_("None")));
 }
 
-void RichEdit::Pick(pick_ RichText& t)
+void RichEdit::Pick(RichText pick_ t)
 {
 	Clear();
-	text = t;
+	text = pick(t);
 	if(text.GetPartCount() == 0)
 		text.Cat(RichPara());
 	ReadStyles();
 	EndSizeTracking();
-	Vector<int> all_lang = text.GetAllLanguages();
-	SetupLanguage(all_lang);
+	SetupLanguage(text.GetAllLanguages());
 	Move(0);
 	Update();
 }
@@ -447,11 +461,10 @@ RichEdit& RichEdit::FontFaces(const Vector<int>& ff)
 	return *this;
 }
 
-void RichEdit::SetupFaceList(DropList& face)
+void SetupFaceList(DropList& face)
 {
 	face.ValueDisplay(Single<ValueDisplayFont>());
 	face.SetDisplay(Single<DisplayFont>());
-	face.SetLineCy(20);
 }
 
 void RichEdit::SpellCheck()
@@ -508,18 +521,18 @@ RichEdit::UndoInfo RichEdit::PickUndoInfo()
 {
 	UndoInfo f;
 	f.undoserial = undoserial;
-	f.undo = undo;
-	f.redo = redo;
+	f.undo = pick(undo);
+	f.redo = pick(redo);
 	Clear();
 	return f;
 }
 
-void RichEdit::SetPickUndoInfo(pick_ UndoInfo& f)
+void RichEdit::SetPickUndoInfo(UndoInfo pick_ f)
 {
 	undoserial = f.undoserial;
 	incundoserial = true;
-	undo = f.undo;
-	redo = f.redo;
+	undo = pick(f.undo);
+	redo = pick(f.redo);
 	Finish();
 }
 
@@ -576,12 +589,19 @@ void StdLabelDlg(String& s)
 	EditText(s, t_("Paragraph label"), t_("Label"), CharFilterAscii128, 100);
 }
 
+void StdIndexEntryDlg(String& s)
+{
+	EditText(s, t_("Index Entry"), t_("Index entry"), CharFilterAscii128, 100);
+}
+
 RichEdit::RichEdit()
 {
+	floating_zoom = Null;
+
 	Unicode();
 	BackPaint();
 
-	viewborder = 16;
+	viewborder = Zx(16);
 
 	face.NoWantFocus();
 	height.NoWantFocus();
@@ -619,7 +639,7 @@ RichEdit::RichEdit()
 
 	adjustunits.Image(RichEditImg::AdjustUnits());
 	adjustunits <<= THISBACK(SetupUnits);
-	ruler.Add(adjustunits.RightPos(4, 16).TopPos(2, 16));
+	ruler.Add(adjustunits.RightPosZ(4, 16).VSizePosZ(2, 2));
 
 	undosteps = 500;
 
@@ -693,7 +713,7 @@ RichEdit::RichEdit()
 	paintcarect = false;
 
 	CtrlLayoutOKCancel(findreplace, t_("Find / Replace"));
-	findreplace.cancel <<= THISBACK(CloseFindReplace);
+	findreplace.cancel <<= callback(&findreplace, &TopWindow::Close);
 	findreplace.ok <<= THISBACK(Find);
 	findreplace.amend <<= THISBACK(Replace);
 	notfoundfw = found = false;
@@ -701,6 +721,7 @@ RichEdit::RichEdit()
 
 	WhenHyperlink = callback(StdLinkDlg);
 	WhenLabel = callback(StdLabelDlg);
+	WhenIndexEntry = callback(StdIndexEntryDlg);
 
 	p_size = Size(-1, -1);
 
@@ -715,6 +736,10 @@ RichEdit::RichEdit()
 	clipzoom = Zoom(1, 1);
 	
 	bullet_indent = 150;
+	
+	persistent_findreplace = true;
+	
+	ignore_physical_size = false;
 }
 
 RichEdit::~RichEdit() {}
@@ -729,6 +754,13 @@ void RichEditWithToolBar::RefreshBar()
 	toolbar.Set(THISBACK(TheBar));
 }
 
+void RichEdit::EvaluateFields()
+{
+	WhenStartEvaluating();
+	text.EvaluateFields(vars);
+	Finish();
+}
+
 RichEditWithToolBar::RichEditWithToolBar()
 {
 	InsertFrame(0, toolbar);
@@ -736,4 +768,4 @@ RichEditWithToolBar::RichEditWithToolBar()
 	extended = true;
 }
 
-END_UPP_NAMESPACE
+}

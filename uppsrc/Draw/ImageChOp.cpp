@@ -1,6 +1,6 @@
 #include "Draw.h"
 
-NAMESPACE_UPP
+namespace Upp {
 
 int Diff(RGBA a, RGBA b)
 {
@@ -185,11 +185,11 @@ Image RecreateAlpha(const Image& overwhite, const Image& overblack)
 	RGBA *t = r;
 	RGBA *e = t + r.GetLength();
 	while(t < e) {
-		t->a = bs->r - ws->r + 255;
+		t->a = Saturate255(bs->r - ws->r + 255);
 		if(t->a) {
-			t->r = bs->r * 255 / t->a;
-			t->g = bs->g * 255 / t->a;
-			t->b = bs->b * 255 / t->a;
+			t->r = Saturate255(bs->r * 255 / t->a);
+			t->g = Saturate255(bs->g * 255 / t->a);
+			t->b = Saturate255(bs->b * 255 / t->a);
 		}
 		else
 			t->r = t->g = t->b = 0;
@@ -223,6 +223,33 @@ int ImageMarginV(const Image& _m, int p, int dist)
 		if(Diff(m[sz.cx / 2][d], c) > dist || Diff(m[sz.cx / 2][sz.cy - d - 1], c) > dist)
 			break;
 	return d + 1;
+}
+
+Rect GetImageMargins(const Image& m, RGBA margin_color)
+{
+	Rect r;
+	Size isz = m.GetSize();
+	for(int pass = 0; pass < 2; pass++) {
+		int& y = pass ? r.bottom : r.top;
+		for(y = 0; y < isz.cy; y++) {
+			const RGBA *s = m[pass ? isz.cy - y - 1 : y];
+			for(int x = 0; x < isz.cx; x++)
+				if(*s++ != margin_color)
+					goto foundy;
+		}
+	foundy:
+		int& x = pass ? r.right : r.left;
+		for(x = 0; x < isz.cx; x++) {
+			const RGBA *s = m[0] + (pass ? isz.cx - x - 1 : x);
+			for(int y = 0; y < isz.cy; y++) {
+				if(*s != margin_color)
+					goto foundx;
+				s += isz.cx;
+			}
+		}
+	foundx:;
+	}
+	return r;
 }
 
 ChPartMaker::ChPartMaker(const Image& m)
@@ -271,4 +298,4 @@ Image ChPartMaker::Make() const
 	return ib;
 }
 
-END_UPP_NAMESPACE
+}

@@ -1,11 +1,13 @@
 #include "Debuggers.h"
 
-#ifdef COMPILER_MSC
+#ifdef PLATFORM_WIN32
 
-#define LLOG(x) // LOG(x)
+#define LLOG(x)  // DLOG(x)
 
 int    Pdb::Byte(adr_t addr)
 {
+	if(!win64)
+		addr &= 0xffffffff;
 	int page = (int) (addr >> 10);
 	if(invalidpage.Find(page) >= 0)
 		return -1;
@@ -17,10 +19,11 @@ int    Pdb::Byte(adr_t addr)
 		mempage.Clear();
 	byte data[1024];
 	if(ReadProcessMemory(hProcess, (LPCVOID) (addr & ~1023), data, 1024, NULL)) {
+		LLOG("ReadProcessMemory " << Hex(addr) << " OK");
 		memcpy(mempage.Add(page).data, data, 1024);
 		return (byte)data[pos];
 	}
-	LLOG("ReadProcessMemory: " << GetLastErrorMessage());
+	LLOG("ReadProcessMemory " << Hex(addr) << ": " << GetLastErrorMessage());
 	invalidpage.Add(page);
 	return -1;
 }

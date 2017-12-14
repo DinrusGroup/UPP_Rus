@@ -2,9 +2,9 @@
 
 #ifdef GUI_X11
 
-#define LLOG(x)   // LOG(x)
+#define LLOG(x)   // DLOG(x)
 
-NAMESPACE_UPP
+namespace Upp {
 
 bool Xdnd_waiting_status;
 bool Xdnd_waiting_finished;
@@ -57,6 +57,7 @@ struct DnDLoop : LocalLoop {
 
 	void Request(XSelectionRequestEvent *se);
 	void Sync();
+	Value  GetData() const { return LocalLoop::GetData(); } // Silence CLANG warning
 	String GetData(const String& f);
 	void Leave();
 	virtual void  LeftUp(Point, dword);
@@ -88,7 +89,6 @@ void DnDLoop::Sync()
 	unsigned int d1;
 	int x, y, d2;
 	Window tgt = Xroot;
-	int version;
 	for(;;) {
 		if(XQueryPointer(Xdisplay, tgt, &root, &tgt, &x, &y, &d2, &d2, &d1)) {
 			if(!tgt)
@@ -114,7 +114,7 @@ void DnDLoop::Sync()
 			LLOG("Sending XdndEnter to " << target << ", src = " << src);
 			XEvent e = ClientMsg(target, XdndEnter);
 			e.xclient.data.l[0] = src;
-			e.xclient.data.l[1] = (fmt.GetCount() > 3) | (version << 24);
+			e.xclient.data.l[1] = (fmt.GetCount() > 3) | (Xdnd_version << 24);
 			for(int i = 0; i < min(3, fmt.GetCount()); i++)
 				e.xclient.data.l[i + 2] = fmt[i];
 			XSendEvent(Xdisplay, target, XFalse, 0, &e);
@@ -141,6 +141,7 @@ void DnDLoop::Sync()
 		Xdnd_waiting_status = true;
 		dword timeout = GetTickCount();
 		LLOG("Waiting for XdndStatus");
+		Xdnd_status = DND_NONE;
 		while(Xdnd_waiting_status && GetTickCount() - timeout < 200) {
 			GuiSleep(0);
 			ProcessEvents();
@@ -379,8 +380,7 @@ void Ctrl::DnD(Window src, bool paste)
 	LLOG("Target action " << XdndAction);
 	XEvent e = ClientMsg(src, paste ? XdndFinished : XdndStatus);
 	e.xclient.data.l[0] = GetWindow();
-	(paste ? e.xclient.data.l[2] : e.xclient.data.l[4])
-		= XdndAction == DND_MOVE ? XdndActionMove : XdndActionCopy;
+	e.xclient.data.l[paste ? 2 : 4] = XdndAction == DND_MOVE ? XdndActionMove : XdndActionCopy;
 	if(d.IsAccepted())
 		e.xclient.data.l[1] = 1;
 	LLOG("Sending status/finished to " << src << " accepted: " << d.IsAccepted());
@@ -425,6 +425,6 @@ void Ctrl::DropEvent(XWindow& w, XEvent *event)
 	}
 }
 
-END_UPP_NAMESPACE
+}
 
 #endif

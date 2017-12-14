@@ -1,6 +1,6 @@
 #include "CtrlLib.h"
 
-NAMESPACE_UPP
+namespace Upp {
 
 #ifdef GUI_WIN
 #ifndef PLATFORM_WINCE
@@ -37,7 +37,7 @@ bool NoUpdate(const char *dsf, const char *srf, int& len) {
 	if(!src) return true;
 	len = (int)src.GetLength();
 	if(!dst) return false;
-	return abs((int)(FileTimeToTime(dst.GetLastWriteTime()) - FileTimeToTime(src.GetLastWriteTime())))
+	return abs(FileTimeToTime(dst.GetLastWriteTime()) - FileTimeToTime(src.GetLastWriteTime()))
 		    < 100 && len == dst.GetLength();
 }
 
@@ -49,13 +49,13 @@ void UpdateFile(String dst, String src)
 	if(NoUpdate(dst, src, len)) return;
 	String tmp = dst + ".tmp";
 	Progress pi;
-	pi.Title((t_("Обновляется ") + filename).ToWString());
-	pi.SetText(t_("Обновляется ") + filename);
+	pi.Title((t_("Updating ") + filename).ToWString());
+	pi.SetText(t_("Updating ") + filename);
 //	pi.Open();
 	FileIn in(src);
 	if(!in)
 	{
-		Exclamation(NFormat(t_("Ошибка при открытии файла [* \1%s\1]."), src));
+		Exclamation(NFormat(t_("Error opening file [* \1%s\1]."), src));
 		return;
 	}
 	FileDelete(tmp);
@@ -64,7 +64,7 @@ void UpdateFile(String dst, String src)
 	char buffer[2048];
 	if(!out)
 	{
-		Exclamation(NFormat(t_("Ошибка при создании файла [* \1%s\1]."), tmp));
+		Exclamation(NFormat(t_("Error creating file [* \1%s\1]."), tmp));
 		return;
 	}
 	for(;;)
@@ -74,7 +74,7 @@ void UpdateFile(String dst, String src)
 		out.Put(buffer, i);
 		n += i;
 		pi.Set(n, len);
-		if(pi.Canceled() && PromptYesNo(t_("Прерывание обновления может вызвать сбой при повторном запуске приложения.\nПродолжить?")))
+		if(pi.Canceled() && PromptYesNo(t_("Aborting update is likely to cause trouble when running the application for the next time.\nContinue?")))
 		{
 			out.Close();
 			FileDelete(tmp);
@@ -85,12 +85,12 @@ void UpdateFile(String dst, String src)
 	out.Close();
 	if(out.IsError())
 	{
-		Exclamation(NFormat(t_("Ошибка при записи файла [* \1%s\1]."), tmp));
+		Exclamation(NFormat(t_("Error writing file [* \1%s\1]."), tmp));
 		FileDelete(tmp);
 		return;
 	}
 	String old = dst + ".old";
-	pi.SetText(NFormat(t_("Перезаписывается %s"), dst));
+	pi.SetText(NFormat(t_("Overwriting %s"), dst));
 	pi.SetTotal(10000);
 	int start = msecs();
 	for(;;)
@@ -100,7 +100,7 @@ void UpdateFile(String dst, String src)
 		FileMove(dst, old);
 		if(FileMove(tmp, dst))
 			return;
-		if(pi.SetPosCanceled(msecs(start) % 10000) && PromptYesNo(t_("Прерывание обновления может вызвать сбой при повторном запуске приложения.\nПродолжить?")))
+		if(pi.SetPosCanceled(msecs(start) % 10000) && PromptYesNo(t_("Aborting update is likely to cause trouble when running the application for the next time.\nContinue?")))
 			return;
 		Sleep(500);
 	}
@@ -184,4 +184,4 @@ bool SelfUpdateSelf()
 #endif
 #endif
 
-END_UPP_NAMESPACE
+}

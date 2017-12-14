@@ -1,6 +1,6 @@
 #include "Geom.h"
 
-NAMESPACE_UPP
+namespace Upp {
 
 Pointf Length(const Pointf& p, double length)
 {
@@ -184,7 +184,7 @@ Matrixf MatrixfMirror(Pointf A, Pointf B)
 	double vx2 = sqr(V.x);
 	double vy2 = sqr(V.y);
 	double det = vx2 + vy2;
-	double dif = (vx2 - vy2) / det;
+//	double dif = (vx2 - vy2) / det;
 	double mul = 2 * V.x * V.y / det;
 	Matrixf out(Pointf(vx2 - vy2, mul), Pointf(mul, vy2 - vx2));
 	out.Fix(A);
@@ -266,4 +266,4 @@ String Matrixf::ToString() const
 	return String().Cat() << "[x = " << x << ", y = " << y << ", a = " << a << "]";
 }
 
-END_UPP_NAMESPACE
+}

@@ -1,7 +1,6 @@
 #include "Updater.h"
 
 #include <Draw/Draw.h>
-#include <Web/Web.h>
 
 #include <SysExecGui/SysExecGui.h>
 
@@ -103,6 +102,29 @@ Updater::Updater()
 	updateBehaviour = AskUser;
 }
 
+// progress callback
+void Updater::doProgress(void)
+{
+	if(http.InProgress())
+	{
+		if(!progress.IsOpen())
+		{
+			progress.SetText(t_("Downloading application.... please wait"));
+			progress.Set(0, 0);
+			progress.Create();
+		}
+		if(progress.GetTotal() == 0 && http.GetContentLength() != 0)
+			progress.Set(0, http.GetContentLength() / 4096);
+		else
+			progress.SetPos(progress.GetPos() + 1);
+	}
+	else
+	{
+		if(progress.IsOpen())
+			progress.Close();
+	}
+}
+		
 // sets applicaton name (defaults with current executable title if not used)
 // allows easy separation of installer from main application code
 // if you want to deploy a small installer
@@ -561,9 +583,9 @@ ProductVersions Updater::FetchVersions(void)
 
 	if(isWebServer)
 	{
-		HttpClient http;
-		http.TimeoutMsecs(1000);
-		http.URL(GetPlatformRoot() + "versions");
+		http.Timeout(1000);
+		http.Url(GetPlatformRoot() + "versions");
+		http.WhenDo.Clear();
 
 		// fetch version file from server
 		verStr = http.Execute();
@@ -610,21 +632,21 @@ bool Updater::FetchApp(ProductVersion ver, bool devel)
 		destPath = AppendFileName(GetProgramsFolder(), appName);
 	#else
 		appServerPath = GetPlatformRoot() + ver.ToString() + "/" + appName + ".exe";
-		destPath = AppendFileName(GetProgramsFolder(), appName + "/" + appName + ".exe");
+		destPath = AppendFileName(GetProgramsFolder(), appName + "\\" + appName + ".exe");
+		RealizePath(destPath);
 	#endif
 
 	if(isWebServer)
 	{
-		HttpClient http;
-		http.URL(appServerPath);
-		http.TimeoutMsecs(1000*60*30);
+		http.Url(appServerPath);
+		http.Timeout(1000*60*30);
 		http.MaxContentSize(100000000);
+		http.WhenDo = THISBACK(doProgress);
 
 		// fetch version file from server
-		Progress progress(t_("Downloading application.... please wait"));
-		appBuffer = http.Execute(progress);
+		appBuffer = http.Execute();
 		err = http.GetStatusCode();
-		if(err != 200 || http.IsAborted() || http.IsError())
+		if(err != 200 || http.IsAbort() || http.IsError())
 		{
 			appBuffer = "";
 			return false;
@@ -637,13 +659,14 @@ bool Updater::FetchApp(ProductVersion ver, bool devel)
 	else
 		FileCopy(appServerPath, destPath);
 #ifdef PLATFORM_POSIX
-		if(chmod(~destPath, 0755) != 0)
-			return false;
+	if(chmod(~destPath, 0755) != 0)
+		return false;
 #endif
 
 	// stores current version inside system config path
 	if(!SaveFile(AppendFileName(systemConfigPath, "version"), ver.ToString()))
 		return false;
+
 	installedVersion = ver;
 
 	return true;
@@ -659,11 +682,11 @@ bool Updater::Run()
 {
 	// create user config path only on normal run
 	if(state == NormalRun)
-		RealizePath(userConfigPath);
+		RealizeDirectory(userConfigPath);
 	
 	// creates system config path on superuser mode
 	if(state == InsideUpdater)
-		RealizePath(systemConfigPath);
+		RealizeDirectory(systemConfigPath);
 	
 	switch(state)
 	{

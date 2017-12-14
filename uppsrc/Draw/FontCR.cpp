@@ -1,6 +1,6 @@
 #include "Draw.h"
 
-NAMESPACE_UPP
+namespace Upp {
 
 enum {
 	CG_NONE,
@@ -259,6 +259,10 @@ struct sRFace {
 	{ "FreeSans", 0xfff23d00, 0xfc00000f },
 	{ "FreeSerif", 0xfffd3938, 0xfc00080f },
 	{ "Symbol", 0xe4000000, 0x8800000f },
+	{ "NanumGothic", 0xe5800000, 0xae7ff7e1 },
+	{ "WenQuanYi Micro Hei Mono", 0xffe00008, 0xda7ff7e1 },
+	{ "NanumMyeongjo", 0xe5800000, 0x8a0007e1 },
+	{ "WenQuanYi Micro Hei", 0xffe00008, 0xda7ff7e1 },
 };
 
 struct sFontMetricsReplacement {
@@ -283,8 +287,8 @@ bool Replace(Font fnt, int chr, Font& rfnt)
 	}
 
 	Font f = fnt;
-	dword tl = chr < 4096 ? 0x80000000 >> (chr >> 7) : 0;
-	dword th = 0x80000000 >> ((dword)chr >> 11);
+//	dword tl = chr < 4096 ? 0x80000000 >> (chr >> 7) : 0;
+//	dword th = 0x80000000 >> ((dword)chr >> 11);
 	for(int i = 0; i < rface.GetCount(); i++) {
 		if(/*((l[i] & tl) || (h[i] & th)) && */IsNormal(f.Face(rface[i]), chr)) {
 			int a = fnt.GetAscent();
@@ -310,4 +314,4 @@ bool Replace(Font fnt, int chr, Font& rfnt)
 	return false;
 }
 
-END_UPP_NAMESPACE
+}

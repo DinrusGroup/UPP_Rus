@@ -2,7 +2,12 @@
 #define COMMON_H
 
 #include <Esc/Esc.h>
-#include <Web/Web.h>
+#include <plugin/bz2/bz2.h>
+#include <plugin/lz4/lz4.h>
+#include <plugin/lzma/lzma.h>
+#include <plugin/zstd/zstd.h>
+
+#include "Logger.h"
 
 using namespace Upp;
 
@@ -19,7 +24,9 @@ inline String GetPrintTime(dword time0) { return PrintTime(msecs(time0)); }
 bool   SaveChangedFile(const char *path, String data, bool delete_empty = false);
 
 bool IsDoc(String s);
-void CopyFolder(const char *_dst, const char *_src, Index<String>& used, bool all);
+
+void CopyFile(const String& dst, const String& src, bool brc = false);
+void CopyFolder(const char *_dst, const char *_src, Index<String>& used, bool all, bool brc = false);
 
 class Workspace;
 
@@ -28,27 +35,32 @@ struct Ide;
 namespace Upp {
 class  Ctrl;
 class  Image;
-};
+}
 
 class IdeContext
 {
 public:
+	virtual bool      IsVerbose() const = 0;
 	virtual void      PutConsole(const char *s) = 0;
 	virtual void      PutVerbose(const char *s) = 0;
+	virtual void      PutLinking() = 0;
+	virtual void      PutLinkingEnd(bool ok) = 0;
 
 	virtual const Workspace& IdeWorkspace() const = 0;
 	virtual bool             IdeIsBuilding() const = 0;
 	virtual String           IdeGetOneFile() const = 0;
-	virtual int              IdeConsoleExecute(const char *cmdline, Stream *out = NULL, const char *envptr = NULL, bool quiet = false) = 0;
-	virtual int              IdeConsoleExecuteWithInput(const char *cmdline, Stream *out, const char *envptr, bool quiet) = 0;
-	virtual int              IdeConsoleExecute(One<SlaveProcess> process, const char *cmdline, Stream *out = NULL, bool quiet = false) = 0;
+	virtual int              IdeConsoleExecute(const char *cmdline, Stream *out = NULL, const char *envptr = NULL, bool quiet = false, bool noconvert = false) = 0;
+	virtual int              IdeConsoleExecuteWithInput(const char *cmdline, Stream *out, const char *envptr, bool quiet, bool noconvert = false) = 0;
+	virtual int              IdeConsoleExecute(One<AProcess> pick_ process, const char *cmdline, Stream *out = NULL, bool quiet = false) = 0;
 	virtual int              IdeConsoleAllocSlot() = 0;
 	virtual bool             IdeConsoleRun(const char *cmdline, Stream *out = NULL, const char *envptr = NULL, bool quiet = false, int slot = 0, String key = Null, int blitz_count = 1) = 0;
-	virtual bool             IdeConsoleRun(One<SlaveProcess> process, const char *cmdline, Stream *out = NULL, bool quiet = false, int slot = 0, String key = Null, int blitz_count = 1) = 0;
+	virtual bool             IdeConsoleRun(One<AProcess> pick_ process, const char *cmdline, Stream *out = NULL, bool quiet = false, int slot = 0, String key = Null, int blitz_count = 1) = 0;
 	virtual void             IdeConsoleFlush() = 0;
 	virtual void             IdeConsoleBeginGroup(String group) = 0;
 	virtual void             IdeConsoleEndGroup() = 0;
 	virtual bool             IdeConsoleWait() = 0;
+	virtual bool             IdeConsoleWait(int slot) = 0;
+	virtual void             IdeConsoleOnFinish(Event<>  cb) = 0;
 
 	virtual bool      IdeIsDebug() const = 0;
 	virtual void      IdeEndDebug() = 0;
@@ -73,9 +85,13 @@ public:
 	virtual void      IdeFlushFile() = 0;
 	virtual String    IdeGetFileName() = 0;
 	virtual String    IdeGetNestFolder() = 0;
+	virtual String    IdeGetIncludePath() = 0;
 
-	virtual String GetDefaultMethod();
+	virtual String                    GetDefaultMethod();
 	virtual VectorMap<String, String> GetMethodVars(const String& method);
+	virtual String                    GetMethodName(const String& method);
+	
+	virtual bool      IsPersistentFindReplace() = 0;
 
 	virtual ~IdeContext() {}
 };
@@ -83,26 +99,32 @@ public:
 IdeContext *TheIde();
 void        TheIde(IdeContext *context);
 
+bool      IsVerbose();
 void      PutConsole(const char *s);
 void      PutVerbose(const char *s);
+void      PutLinking();
+void      PutLinkingEnd(bool ok);
 
 const Workspace& GetIdeWorkspace();
 bool             IdeIsBuilding();
 String           IdeGetOneFile();
-int              IdeConsoleExecute(const char *cmdline, Stream *out = NULL, const char *envptr = NULL, bool quiet = false);
-int              IdeConsoleExecuteWithInput(const char *cmdline, Stream *out, const char *envptr, bool quiet);
-int              IdeConsoleExecute(One<SlaveProcess> process, const char *cmdline, Stream *out = NULL, bool quiet = false);
+int              IdeConsoleExecute(const char *cmdline, Stream *out = NULL, const char *envptr = NULL, bool quiet = false, bool noconvert = false);
+int              IdeConsoleExecuteWithInput(const char *cmdline, Stream *out, const char *envptr, bool quiet, bool noconvert = false);
+int              IdeConsoleExecute(One<AProcess> process, const char *cmdline, Stream *out = NULL, bool quiet = false);
 int              IdeConsoleAllocSlot();
 bool             IdeConsoleRun(const char *cmdline, Stream *out = NULL, const char *envptr = NULL, bool quiet = false, int slot = 0, String key = Null, int blitz_count = 1);
-bool             IdeConsoleRun(One<SlaveProcess> process, const char *cmdline, Stream *out = NULL, bool quiet = false, int slot = 0, String key = Null, int blitz_count = 1);
+bool             IdeConsoleRun(One<AProcess> pick_ process, const char *cmdline, Stream *out = NULL, bool quiet = false, int slot = 0, String key = Null, int blitz_count = 1);
 void             IdeConsoleFlush();
 void             IdeConsoleBeginGroup(String group);
 void             IdeConsoleEndGroup();
 bool             IdeConsoleWait();
+bool             IdeConsoleWait(int slot);
+void             IdeConsoleOnFinish(Event<>  cb);
 void             IdeGotoCodeRef(String s);
 
 String GetDefaultMethod();
 VectorMap<String, String> GetMethodVars(const String& method);
+String GetMethodPath(const String& method);
 
 bool      IdeIsDebug();
 void      IdeEndDebug();
@@ -124,6 +146,9 @@ bool      IdeIsDebugLock();
 
 void      IdeSetBar();
 
+void      IdeGotoFileAndId(const String& path, const String& id);
+
+#include "HostTools.h"
 #include "Host.h"
 
 struct IdeMacro {
@@ -143,14 +168,10 @@ void SetIdeModuleUsc(bool (*IdeModuleUsc)(CParser& p));
 void UscSetReadMacro(void (*ReadMacro)(CParser& p));
 
 void CleanUsc();
-void ParseUscFile(const char *filename) throw(CParser::Error);
+void ParseUscFile(const char *filename);
 
 Point ReadNums(CParser& p);
 Point ReadPoint(CParser& p);
-
-struct SemiTextTest : public TextTest {
-	virtual const char *Accept(const char *s) const;
-};
 
 Vector<String> SplitDirs(const char *s);
 
@@ -184,6 +205,11 @@ Vector<String> GetUppDirs();
 String GetUppDir();
 void   SetVar(const String& var, const String& val, bool save = true);
 
+String GetCurrentBuildMethod();
+String GetCurrentMainPackage();
+
+int    GetHydraThreads();
+
 String GetAnyFileName(const char *path);
 String GetAnyFileTitle(const char *path);
 String CatAnyPath(String path, const char *more);
@@ -194,6 +220,8 @@ String SourcePath(const String& package, const String& name);
 inline
 String PackageDirectory(const String& name) { return GetFileDirectory(PackagePath(name)); }
 bool   IsNestReadOnly(const String& path);
+
+String GetPackagePathNest(const String& path);
 
 String GetLocalDir();
 String LocalPath(const String& filename);
@@ -233,7 +261,7 @@ struct CustomStep {
 	String command;
 	String output;
 
-	void   Load(CParser& p) throw(CParser::Error);
+	void   Load(CParser& p);
 	String AsString() const;
 
 	String GetExt() const;
@@ -255,10 +283,19 @@ int    GetType(const Vector<String>& conf, const char *flags, int def);
 bool   GetFlag(const Vector<String>& conf, const char *flag);
 String RemoveType(Vector<String>& conf, const char *flags);
 
-enum { CHARSET_UTF8_BOM = 250 }; // Same as TextCtrl::CHARSET_UTF8_BOM
+enum IdeCharsets {
+	CHARSET_UTF8_BOM = 250, // same as TextCtrl::CHARSET_UTF8_BOM; CtrlLib not included here
+	CHARSET_UTF16_LE,
+	CHARSET_UTF16_BE,
+	CHARSET_UTF16_LE_BOM,
+	CHARSET_UTF16_BE_BOM
+};
+
+String ReadValue(CParser& p);
 
 class Package {
 	void Reset();
+	void Option(bool& option, const char *name);
 
 public:
 	struct File : public String {
@@ -270,28 +307,32 @@ public:
 		byte           charset;
 		int            font;
 		String         highlight;
-		int            optimize_speed;
+		bool           pch, nopch, noblitz;
+		int            spellcheck_comments;
 
 		void operator=(const String& s)   { String::operator=(s); readonly = separator = false; }
 		void Init()  { readonly = separator = false; tabsize = Null; charset = 0; font = 0;
-		               optimize_speed = false; }
+		               pch = nopch = noblitz = false; spellcheck_comments = Null; }
 
 		File()                            { Init(); }
 		File(const String& s) : String(s) { Init(); }
+		rval_default(File);
 	};
 	struct Config {
 		String name;
 		String param;
 	};
 	byte                     charset;
-	bool                     optimize_speed;
+	int                      tabsize;
 	bool                     noblitz;
+	bool                     nowarnings;
 	String                   description;
 	Vector<String>           accepts;
 	Array<OptItem>           flag;
 	Array<OptItem>           uses;
 	Array<OptItem>           target;
 	Array<OptItem>           library;
+	Array<OptItem>           static_library;
 	Array<OptItem>           link;
 	Array<OptItem>           option;
 	Array<OptItem>           include;
@@ -301,18 +342,21 @@ public:
 	Time                     time;
 	bool                     bold, italic;
 	Color                    ink;
+	int                      spellcheck_comments;
 
 	int   GetCount() const                { return file.GetCount(); }
 	File& operator[](int i)               { return file[i]; }
 	const File& operator[](int i) const   { return file[i]; }
 
-	void  Load(const char *path);
+	bool  Load(const char *path);
 	bool  Save(const char *file) const;
 
 	static void SetPackageResolver(bool (*Resolve)(const String& error, const String& path, int line));
 
 	Package();
 };
+
+String IdeCharsetName(byte charset);
 
 class Workspace {
 	void     AddUses(Package& p, bool match, const Vector<String>& flag);
@@ -355,51 +399,83 @@ struct MakeFile {
 String GetMakePath(String fn, bool win32);
 String AdjustMakePath(const char *fn);
 
-enum {
-	R_OPTIMAL,
-	R_SPEED,
-	R_SIZE
-};
+String Join(const String& a, const String& b, const char *sep = " ");
+
+String GetExeExt();
+String NormalizeExePath(String exePath);
+String NormalizePathSeparator(String path);
 
 struct Builder {
 	Host            *host;
 	Index<String>    config;
-	String           compiler;
 	String           method;
+	
+	String           compiler;
 	String           outdir;
 	Vector<String>   include;
 	Vector<String>   libpath;
 	String           target;
+	String           cpp_options;
+	String           c_options;
 	String           debug_options;
 	String           release_options;
-	String           release_size_options;
+	String           common_link;
 	String           debug_link;
 	String           release_link;
 	String           version;
+	
 	String           script;
+	String           mainpackage;
+	
 	bool             doall;
+	bool             main_conf;
+	bool             allow_pch;
+	FileTime         start_time;
 
-	virtual bool BuildPackage(const String& package, Vector<String>& linkfile, String& linkoptions,
-		const Vector<String>& all_uses, const Vector<String>& all_libraries, int optimize)
+	virtual bool BuildPackage(const String& package, Vector<String>& linkfile, Vector<String>& immfile,
+	    String& linkoptions, const Vector<String>& all_uses, const Vector<String>& all_libraries, int optimize)
 	{ return false; }
 	virtual bool Link(const Vector<String>& linkfile, const String& linkoptions, bool createmap)
 	{ return false; }
 	virtual bool Preprocess(const String& package, const String& file, const String& result, bool asmout)
 	{ return false; }
-	virtual void   AddFlags(Index<String>& cfg) {}
-	virtual void   AddMakeFile(MakeFile& mfinfo, String package,
+	virtual void CleanPackage(const String& package, const String& outdir) {}
+	virtual void AfterClean() {}
+	virtual void AddFlags(Index<String>& cfg) {}
+	virtual void AddMakeFile(MakeFile& mfinfo, String package,
 		const Vector<String>& all_uses, const Vector<String>& all_libraries,
 		const Index<String>& common_config, bool exporting) {}
 	virtual String GetTargetExt() const = 0;
 
-	Builder()          { doall = false; }
+	Builder()          { doall = false; main_conf = false; }
 	virtual ~Builder() {}
+	
+	// TODO: move other methods if needed
+	void                   ChDir(const String& path);
+	String                 GetHostPath(const String& path) const;
+	String                 GetHostPathShort(const String& path) const;
+	String                 GetHostPathQ(const String& path) const;
+	String                 GetHostPathShortQ(const String& path) const;
+	Vector<Host::FileInfo> GetFileInfo(const Vector<String>& path) const;
+	Host::FileInfo         GetFileInfo(const String& path) const;
+	Time                   GetFileTime(const String& path) const;
+	int                    Execute(const char *cmdline);
+	int                    Execute(const char *cl, Stream& out);
+	void                   DeleteFile(const Vector<String>& path);
+	void                   DeleteFile(const String& path);
+	bool                   FileExists(const String& path) const;
+	bool                   RealizeDir(const String& path);
+	bool                   SaveFile(const String& path, const String& data);
+	String                 LoadFile(const String& path);
+	bool                   HasFlag(const char *f) const { return config.Find(f) >= 0; }
 };
 
 VectorMap<String, Builder *(*)()>& BuilderMap();
 void RegisterBuilder(const char *name, Builder *(*create)());
 
-void                  HdependSetDirs(pick_ Vector<String>& id);
+String                FindIncludeFile(const char *s, const String& filedir, const Vector<String>& incdir);
+
+void                  HdependSetDirs(Vector<String> pick_ id);
 void                  HdependTimeDirty();
 void                  HdependClearDependencies();
 void                  HdependAddDependency(const String& file, const String& depends);
@@ -409,5 +485,49 @@ String                FindIncludeFile(const char *s, const String& filedir);
 bool                  HdependBlitzApproved(const String& path);
 const Vector<String>& HdependGetDefines(const String& path);
 const Vector<String>& HdependGetAllFiles();
+
+bool IsHeaderExt(const String& ext);
+
+class BinObjInfo {
+public:
+	BinObjInfo();
+
+	void Parse(CParser& binscript, String base_dir);
+
+	struct Block {
+		Block() : index(-1), length(0), scriptline(-1), encoding(ENC_PLAIN), flags(0), offset(-1), len_meta_offset(-1) {}
+
+		String ident;
+		int    index;
+		String file;
+		int    length;
+		int    scriptline;
+		int    encoding;
+		enum {
+			ENC_PLAIN,
+			ENC_ZIP,
+			ENC_BZ2,
+			ENC_LZ4,
+			ENC_LZMA,
+			ENC_ZSTD,
+		};
+		int    flags;
+		enum {
+			FLG_ARRAY = 0x01,
+			FLG_MASK  = 0x02,
+		};
+
+		int    offset;
+		int    off_meta_offset;
+		int    len_meta_offset;
+		
+		void Compress(String& data);
+	};
+
+	VectorMap< String, ArrayMap<int, Block> > blocks;
+};
+
+void RegisterPCHFile(const String& pch_file);
+void DeletePCHFiles();
 
 #endif

@@ -24,7 +24,7 @@ void CallbackGen(String name, String rettype, int n, String extension, String at
 		paramlist << Format("p%d", i);
 	}
 	String cl_list = If(classlist, "<" + classlist + ">");
-	String cl_temp = String("template <class OBJECT, class METHOD") << If(classdef, ", " + classdef) << ">";
+	String cl_temp = String("template <class OBJECT, class METHOD").Cat() << If(classdef, ", " + classdef) << ">";
 	String return_ = rettype == "void" ? "" : "return ";
 	String name_cl = name + cl_list;
 	LOG("");
@@ -45,6 +45,24 @@ void CallbackGen(String name, String rettype, int n, String extension, String at
 	LOG("};");
 	LOG("");
 
+	LOG("#ifdef HAS_LAMBDA");
+	if(!IsNull(classdef))
+		LOG("template <" << classdef << ">");
+	LOG("struct Lambda" << name << " : public " << name << "Action" << cl_list + " {");
+	LOGBEGIN();
+		LOG("std::function<" << rettype << " (" << classlist << ")> fn;");
+		if(rettype == "void")
+			LOG("virtual void Execute(" << paramdef << ") { fn(" << paramlist << "); }");
+		else
+			LOG("virtual " << rettype << " Execute(" << paramdef << ") { return fn(" << paramlist << "); }");
+		LOG("");
+		LOG("Lambda" << name << "(std::function<" << rettype << " (" << classlist << ")> fn) : fn(fn) {}");
+		LOGEND();
+	LOG("};");
+	LOG("#endif");
+	LOG("");
+
+#if 0
 	LOG(cl_temp);
 	LOG("struct " << name << "MethodActionPte : public " << name << "Action" << cl_list + " {");
 	LOGBEGIN();
@@ -121,6 +139,7 @@ void CallbackGen(String name, String rettype, int n, String extension, String at
 	LOGEND();
 	LOG("};");
 	LOG("");
+#endif
 
 	if(!IsNull(classdef))
 		LOG("template <" << classdef << ">");
@@ -154,6 +173,13 @@ void CallbackGen(String name, String rettype, int n, String extension, String at
 		LOG(name << "() { action = NULL; }");
 		LOG(name << "(_CNULL) { action = NULL; }");
 		LOG("~" << name << "();");
+	LOGEND();
+	LOG("#ifdef HAS_LAMBDA");
+	LOGBEGIN();
+		LOG(name << "& operator=(std::function<" << rettype << " (" << classlist << ")> l) { Clear(); action = new Lambda" << name << "<" << classlist << ">(l); return *this; }");
+	LOGEND();
+	LOG("#endif");
+	LOGBEGIN();
 		LOG("");
 		LOG("static " << name << " Empty() { return CNULL; }");
 		LOG("");
@@ -165,6 +191,7 @@ void CallbackGen(String name, String rettype, int n, String extension, String at
 	LOG("};");
 	LOG("");
 
+#if 0
 	LOG(cl_temp);
 	LOG(name_cl << " pteback(OBJECT *object, " << rettype <<
 	    " (METHOD::*method)(" << paramdef << ")) {");
@@ -290,6 +317,7 @@ void CallbackGen(String name, String rettype, int n, String extension, String at
 		LOG("#ifndef CPP_PART__");
 		LOG("");
 	}
+#endif
 };
 
 CONSOLE_APP_MAIN

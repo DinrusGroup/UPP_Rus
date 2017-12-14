@@ -18,10 +18,10 @@ inline String  FormatHex(const void *ptr)    { return FormatIntHex((int)(uintptr
 #endif
 
 String         FormatInteger(int a);
+String         FormatInt64(int64 a);
 String         FormatUnsigned(unsigned long a);
 String         FormatDouble(double a);
 String         FormatBool(bool a);
-String         FormatInt64(int64 a);
 
 template<> inline String AsString(const short& a)           { return FormatInteger(a); }
 template<> inline String AsString(const unsigned short& a)  { return FormatUnsigned(a); }
@@ -40,7 +40,7 @@ enum
 	FD_REL      = 0x02,  // relative decimal places (valid digits)
 	FD_SIGN_EXP = 0x04,  // always prepend sign to exponent (1e+2)
 	FD_CAP_E    = 0x08,  // capital E for exponent (1E10)
-	FD_ZERO     = 0x10,  // keep trailing zeros (1.25000)
+	FD_ZEROS    = 0x10,  // keep trailing zeros (1.25000)
 	FD_FIX      = 0x20,  // always use fixed notation (FormatDouble)
 	FD_EXP      = 0x40,  // always use exponential notation (FormatDouble)
 	FD_COMMA    = 0x80,  // use ',' instead of '.'
@@ -54,10 +54,6 @@ String         FormatDoubleExp(double d, int digits, int flags = 0, int fill_exp
 
 String         FormatDate(Date date, const char *format, int language = 0);
 String         FormatTime(Time time, const char *format, int language = 0);
-
-inline String  IntStr(int i)         { return FormatInt(i); }
-inline String  IntStr64(int64 i)     { return FormatInt64(i); }
-inline String  DblStr(double d)      { return FormatDouble(d, 10); }
 
 /*
 Date        ScanDate(const char *text, const char **endptr, const char *format, int language, Date base_date);
@@ -102,8 +98,6 @@ String Sprintf(const char *fmt, ...);
 
 //$-
 
-#if 1
-
 #define E__NFValue(I)  const Value& COMBINE(p, I)
 #define E__NFBody(I) \
 String Format(const char *fmt, __List##I(E__NFValue)); \
@@ -116,11 +110,5 @@ __Expand20(E__NFBody)
 
 String Format(const char *s, const Vector<Value>& v);
 String Format(int language, const char *s, const Vector<Value>& v);
-
-#else
-
-String Format(const char *fmt, ...);
-
-#endif
 
 String DeFormat(const char *text);

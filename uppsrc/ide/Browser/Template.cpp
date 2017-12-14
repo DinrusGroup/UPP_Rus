@@ -38,19 +38,19 @@ void TopicEditor::ApplyStylesheet()
 {
 	if(!topic.IsCursor())
 		return;
-	String t = ChooseTemplate("Применить шаблонный стиль");
+	String t = ChooseTemplate("Apply template stylesheet");
 	if(t.GetCount())
 		editor.ApplyStylesheet(ParseQTF(LoadFile(t)));
 }
 
 void TopicEditor::ApplyStylesheetGroup()
 {
-	String t = ChooseTemplate("Применить шаблонный стиль к текущей группе");
+	String t = ChooseTemplate("Apply template stylesheet to current group");
 	if(IsNull(t))
 		return;
 	RichText ss = ParseQTF(LoadFile(t));
 	int c = topic.GetCursor();
-	Progress pi("Применяется стилизация");
+	Progress pi("Applying stylesheet");
 	for(int i = 0; i < topic.GetCount(); i++) {
 		topic.SetCursor(i);
 		editor.ApplyStylesheet(ss);

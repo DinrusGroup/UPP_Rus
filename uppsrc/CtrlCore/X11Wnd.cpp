@@ -4,14 +4,15 @@
 
 #include <X11/Xlocale.h>
 
-NAMESPACE_UPP
+namespace Upp {
 
 #ifdef _DEBUG
 
-
 bool Ctrl::LogMessages
+
 // = true _DBG_
 ;
+bool __X11_Grabbing = false;
 #endif
 
 #define LLOG(x)      // DLOG(x)
@@ -70,7 +71,7 @@ void Ctrl::DoPaint(const Vector<Rect>& invalid)
 	}
 }
 
-void  Ctrl::WndScrollView0(const Rect& r, int dx, int dy)
+void  Ctrl::WndScrollView(const Rect& r, int dx, int dy)
 {
 	GuiLock __;
 	if(r.IsEmpty() || !GetWindow()) return;
@@ -93,6 +94,7 @@ void  Ctrl::WndScrollView0(const Rect& r, int dx, int dy)
 
 bool Ctrl::IsWaitingEvent()
 {
+	ASSERT_(IsMainThread(), "IsWaitingEvent can only run in the main thread");
 	GuiLock __;
 	return XPending(Xdisplay);
 }
@@ -171,11 +173,11 @@ dword X11mods(dword key)
 	return mod;
 }
 
-Vector<Callback> Ctrl::hotkey;
+Vector<Event<> > Ctrl::hotkey;
 Vector<dword> Ctrl::keyhot;
 Vector<dword> Ctrl::modhot;
 
-int Ctrl::RegisterSystemHotKey(dword key, Callback cb)
+int Ctrl::RegisterSystemHotKey(dword key, Function<void ()> cb)
 {
 	GuiLock __;
 	ASSERT(key >= K_DELTA);
@@ -197,7 +199,7 @@ int Ctrl::RegisterSystemHotKey(dword key, Callback cb)
 			q = i;
 			break;
 		}
-	hotkey.At(q) = cb;
+	hotkey.At(q) << cb;
 	keyhot.At(q) = k;
 	modhot.At(q) = mod;
 	return q;
@@ -327,7 +329,7 @@ void Ctrl::TimerAndPaint() {
 			if(xw.ctrl) {
 				LLOG("..and paint " << UPP::Name(xw.ctrl));
 				xw.ctrl->SyncScroll();
-				Vector<Rect> x = xw.invalid;
+				Vector<Rect> x = pick(xw.invalid);
 				xw.invalid.Clear();
 				xw.ctrl->DoPaint(x);
 			}
@@ -355,6 +357,7 @@ void SweepMkImageCache();
 
 bool Ctrl::ProcessEvents(bool *)
 {
+	ASSERT_(IsMainThread(), "ProcessEvents can only run in the main thread");
 	GuiLock __;
 	if(ProcessEvent()) {
 		while(ProcessEvent() && (!LoopCtrl || LoopCtrl->InLoop())); // LoopCtrl-MF 071008
@@ -367,23 +370,41 @@ bool Ctrl::ProcessEvents(bool *)
 	return false;
 }
 
-void Ctrl::GuiSleep0(int ms)
+static bool WakePipeOK;
+static int  WakePipe[2];
+
+INITBLOCK {
+	WakePipeOK = pipe(WakePipe) == 0;
+	fcntl(WakePipe[0], F_SETFL, O_NONBLOCK);
+	fcntl(WakePipe[1], F_SETFL, O_NONBLOCK);
+}
+
+void WakeUpGuiThread()
+{
+	if(WakePipeOK)
+		IGNORE_RESULT(write(WakePipe[1], "\1", 1));
+}
+
+void Ctrl::GuiSleep(int ms)
 {
 	GuiLock __;
-	ASSERT(IsMainThread());
-	fd_set fdset;
-	FD_ZERO(&fdset);
-	FD_SET(Xconnection, &fdset);
+	LLOG(GetTickCount() << " GUISLEEP " << ms);
+	ASSERT_(IsMainThread(), "Only main thread can perform GuiSleep");
 	timeval timeout;
 	timeout.tv_sec = ms / 1000;
 	timeout.tv_usec = ms % 1000 * 1000;
 	XFlush(Xdisplay);
-	do {
-		int level = LeaveGMutexAll();
-		select(Xconnection + 1, &fdset, NULL, NULL, &timeout);
-		EnterGMutex(level);
-	}
-	while(DoCall());
+	fd_set fdset;
+	FD_ZERO(&fdset);
+	FD_SET(Xconnection, &fdset);
+	if(WakePipeOK)
+		FD_SET(WakePipe[0], &fdset);
+	int level = LeaveGuiMutexAll(); // Give  a chance to nonmain threads to touch GUI things
+	select((WakePipeOK ? max(WakePipe[0], Xconnection) : Xconnection) + 1, &fdset, NULL, NULL, &timeout);
+	char h;
+	while(WakePipeOK && read(WakePipe[0], &h, 1) > 0) // There might be relatively harmless race condition here causing delay in ICall
+		LLOG(GetTickCount() << " WakeUpGuiThread detected!"); // or "void" passes through timer & paint
+	EnterGuiMutex(level);
 }
 
 static int granularity = 10;
@@ -394,15 +415,19 @@ void Ctrl::SetTimerGranularity(int ms)
 	granularity = ms;
 }
 
-void Ctrl::EventLoop0(Ctrl *ctrl)
+void Ctrl::SysEndLoop()
+{
+}
+
+void Ctrl::EventLoop(Ctrl *ctrl)
 {
 	GuiLock __;
-	ASSERT(IsMainThread());
+	ASSERT_(IsMainThread(), "EventLoop can only run in the main thread");
 	ASSERT(LoopLevel == 0 || ctrl);
 	LoopLevel++;
 	int64 loopno = ++EventLoopNo;
 	LLOG("Entering event loop at level " << LoopLevel << LOG_BEGIN);
-	Ctrl *ploop;
+	Ctrl *ploop = NULL;
 	if(ctrl) {
 		ploop = LoopCtrl;
 		LoopCtrl = ctrl;
@@ -411,20 +436,7 @@ void Ctrl::EventLoop0(Ctrl *ctrl)
 
 	while(loopno > EndSessionLoopNo && (ctrl ? ctrl->InLoop() && ctrl->IsOpen() : GetTopCtrls().GetCount())) {
 		XEvent event;
-		fd_set fdset;
-		FD_ZERO(&fdset);
-		FD_SET(Xconnection, &fdset);
-		timeval timeout;
-		timeout.tv_sec = 0;
-		timeout.tv_usec = 1000 * granularity;
-		XFlush(Xdisplay);
-		do {
-			int level = LeaveGMutexAll();
-			select(Xconnection + 1, &fdset, NULL, NULL, &timeout);
-			EnterGMutex(level);
-		}
-		while(DoCall());
-//		GuiSleep()(granularity);
+		GuiSleep(granularity);
 		SyncMousePos();
 		while(IsWaitingEvent()) {
 			LTIMING("XNextEvent");
@@ -455,13 +467,8 @@ void Ctrl::SyncExpose()
 
 void Ctrl::Create(Ctrl *owner, bool redirect, bool savebits)
 {
-	Call(callback3(this, &Ctrl::Create0, owner, redirect, savebits));
-}
-
-void Ctrl::Create0(Ctrl *owner, bool redirect, bool savebits)
-{
 	GuiLock __;
-	ASSERT(IsMainThread());
+	ASSERT_(IsMainThread(), "Only main thread can create windows");
 	LLOG("Create " << Name() << " " << GetRect());
 	ASSERT(!IsChild() && !IsOpen());
 	LLOG("Ungrab1");
@@ -478,8 +485,7 @@ void Ctrl::Create0(Ctrl *owner, bool redirect, bool savebits)
 	Window w = XCreateWindow(Xdisplay, RootWindow(Xdisplay, Xscreenno),
 	                         r.left, r.top, r.Width(), r.Height(),
 	                         0, CopyFromParent, InputOutput, CopyFromParent,
-	                         CWBitGravity|CWSaveUnder|CWOverrideRedirect|
-	                         (IsCompositedGui() ? CWBackPixel : CWBackPixmap),
+	                         CWBitGravity|CWSaveUnder|CWOverrideRedirect|CWBackPixmap,
 	                         &swa);
 	if(!w) XError("XCreateWindow failed !");
 	int i = Xwindow().Find(None);
@@ -524,7 +530,7 @@ void Ctrl::Create0(Ctrl *owner, bool redirect, bool savebits)
 	SyncIMPosition();
 }
 
-void Ctrl::WndDestroy0()
+void Ctrl::WndDestroy()
 {
 	GuiLock __;
 	LLOG("WndDestroy " << Name());
@@ -600,6 +606,9 @@ void Ctrl::StartPopupGrab()
 		   GrabModeAsync, GrabModeAsync, None, None, CurrentTime) == GrabSuccess) {
 				PopupGrab++;
 				popupWnd = GetTopWindow();
+#ifdef _DEBUG
+				__X11_Grabbing = true;
+#endif
 			}
 	}
 }
@@ -611,6 +620,9 @@ void Ctrl::EndPopupGrab()
 	if(--PopupGrab == 0) {
 		XUngrabPointer(Xdisplay, CurrentTime);
 		XFlush(Xdisplay);
+#ifdef _DEBUG
+		__X11_Grabbing = false;
+#endif
 	}
 }
 
@@ -671,7 +683,7 @@ Ctrl *Ctrl::GetOwner()
 	return q >= 0 ? Xwindow()[q].owner : NULL;
 }
 
-void Ctrl::WndShow0(bool b)
+void Ctrl::WndShow(bool b)
 {
 	GuiLock __;
 	LLOG("WndShow " << b);
@@ -689,7 +701,7 @@ void Ctrl::WndShow0(bool b)
 	}
 }
 
-void Ctrl::WndUpdate0()
+void Ctrl::WndUpdate()
 {
 	GuiLock __;
 	LTIMING("WndUpdate");
@@ -707,7 +719,7 @@ void Ctrl::WndUpdate0()
 	}
 }
 
-void Ctrl::WndUpdate0r(const Rect& r)
+void Ctrl::WndUpdate(const Rect& r)
 {
 	GuiLock __;
 	LTIMING("WndUpdate Rect");
@@ -723,11 +735,11 @@ void Ctrl::WndUpdate0r(const Rect& r)
 	xw.invalid = Subtract(xw.invalid, r, dummy);
 }
 
-void Ctrl::WndSetPos0(const Rect& r)
+void Ctrl::WndSetPos(const Rect& r)
 {
 	GuiLock __;
 	if(!top) return;
-	LLOG("WndSetPos " << Name() << r);
+	LLOG("WndSetPos0 " << Name() << r);
 	AddGlobalRepaint();
 	XMoveResizeWindow(Xdisplay, top->window, r.left, r.top, r.Width(), r.Height());
 	rect = r;
@@ -750,6 +762,9 @@ bool Ctrl::SetWndCapture()
 		GrabModeAsync, GrabModeAsync, None, None, CurrentTime
 	);
 	if(status) return false;
+#ifdef _DEBUG
+		__X11_Grabbing = true;
+#endif
 	LLOG("Capture set ok");
 	grabWindow = top->window;
 	return true;
@@ -769,6 +784,9 @@ void Ctrl::ReleaseGrab()
 		XUngrabPointer(Xdisplay, CurrentTime);
 		XFlush(Xdisplay);
 		grabWindow = None;
+#ifdef _DEBUG
+		__X11_Grabbing = false;
+#endif
 	}
 }
 
@@ -865,11 +883,10 @@ void Ctrl::KillFocus(Window window)
 		w.ctrl->KillFocusWnd();
 }
 
-void Ctrl::SetWndFocus0(bool *b)
+bool Ctrl::SetWndFocus()
 {
 	GuiLock __;
 	LLOG("SetWndFocus " << Name());
-	*b = false;
 	if(top && top->window != focusWindow && IsEnabled() && IsVisible()) {
 		LLOG("Setting focus... ");
 		LTIMING("XSetInfputFocus");
@@ -880,8 +897,9 @@ void Ctrl::SetWndFocus0(bool *b)
 			focusWindow = top->window;
 			SetFocusWnd();
 		}
-		*b = true;
+		return true;
 	}
+	return false;
 }
 
 bool Ctrl::HasWndFocus() const
@@ -985,15 +1003,15 @@ void Ctrl::AddGlobalRepaint()
 		}
 }
 
-void Ctrl::WndInvalidateRect0(const Rect& r)
+void Ctrl::WndInvalidateRect(const Rect& r)
 {
 	GuiLock __;
 	if(!top) return;
-	LLOG("WndInvalidateRect " << r);
+	LLOG("WndInvalidateRect0 " << r);
 	Invalidate(Xwindow().Get(top->window), r);
 }
 
-void Ctrl::SetWndForeground0()
+void Ctrl::SetWndForeground()
 {
 	GuiLock __;
 	LLOG("SetWndForeground " << Name());
@@ -1020,20 +1038,16 @@ bool Ctrl::IsWndForeground() const
 	return ~focusCtrlWnd == (q ? q : GetTopCtrl());
 }
 
-void Ctrl::WndEnable0(bool *b)
+void Ctrl::WndEnable(bool b)
 {
 	GuiLock __;
 	LLOG("WndEnable");
-	if(!top) {
-		*b = false;
-		return;
-	}
-	if(!*b) {
+	if(!top) return;
+	if(!b) {
 		ReleaseCapture();
 		if(HasWndFocus())
 			XSetInputFocus(Xdisplay, None, RevertToPointerRoot, CurrentTime);
 	}
-	*b = true;
 }
 
 // 01/12/2007 - mdelfede
@@ -1121,6 +1135,6 @@ ViewDraw::~ViewDraw()
 	LeaveGuiMutex();
 }
 
-END_UPP_NAMESPACE
+}
 
 #endif

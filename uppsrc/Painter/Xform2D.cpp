@@ -1,6 +1,6 @@
 #include "Painter.h"
 
-NAMESPACE_UPP
+namespace Upp {
 
 Pointf Xform2D::Transform(const Pointf& f) const
 {
@@ -51,7 +51,6 @@ Xform2D operator*(const Xform2D& a, const Xform2D& b)
 Xform2D Xform2D::Translation(double x, double y)
 {
 	Xform2D m;
-	m.x.x = m.y.y = 1;
 	m.t = Pointf(x, y);
 	return m;
 }
@@ -112,4 +111,4 @@ Xform2D Inverse(const Xform2D& m)
 	return r;
 }
 
-END_UPP_NAMESPACE
+}

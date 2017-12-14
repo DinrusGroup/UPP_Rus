@@ -1,11 +1,18 @@
 #include "Sql.h"
 
-NAMESPACE_UPP
+namespace Upp {
 
 SqlSet operator|(const SqlSet& s1, const SqlSet& s2) {
 	if(s1.IsEmpty()) return s2;
 	if(s2.IsEmpty()) return s1;
 	return SqlSet(s1(SqlSet::SET, ~SQLITE3) + " union " + s2(SqlSet::SET, ~SQLITE3), SqlSet::SETOP);
+}
+
+SqlSet operator+(const SqlSet& s1, const SqlSet& s2)
+{
+	if(s1.IsEmpty()) return s2;
+	if(s2.IsEmpty()) return s1;
+	return SqlSet(s1(SqlSet::SET, ~SQLITE3) + " union all " + s2(SqlSet::SET, ~SQLITE3), SqlSet::SETOP);
 }
 
 SqlSet operator&(const SqlSet& s1, const SqlSet& s2) {
@@ -17,7 +24,7 @@ SqlSet operator&(const SqlSet& s1, const SqlSet& s2) {
 SqlSet operator-(const SqlSet& s1, const SqlSet& s2) {
 	if(s1.IsEmpty() || s2.IsEmpty())
 		return s1;
-	return SqlSet(s1(SqlSet::SET) + SqlCase(MSSQL|PGSQL|SQLITE3, " except ")(" minus ") + s2(SqlSet::SET), SqlSet::SETOP);
+	return SqlSet(s1(SqlSet::SET) + SqlCode(MSSQL|PGSQL|SQLITE3, " except ")(" minus ") + s2(SqlSet::SET), SqlSet::SETOP);
 }
 
 String SqlSet::operator~() const {
@@ -40,7 +47,7 @@ String SqlSet::operator()(int at, byte cond) const {
 	if(at <= priority)
 		return text;
 	StringBuffer out;
-	out << SqlCase(cond, "(")() << text << SqlCase(cond, ")")();
+	out << SqlCode(cond, "(")() << text << SqlCode(cond, ")")();
 	return out;
 }
 
@@ -64,8 +71,22 @@ SqlSet::SqlSet(const SqlVal& p0) {
 	priority = SET;
 }
 
+SqlSet SqlSetFrom(const ValueArray& va, int pos, int count)
+{
+	SqlSet set;
+	for(int i = 0; i < count; i++)
+		set << va[pos + i];
+	return set;
+}
+
+SqlSet SqlSetFrom(const ValueArray& va)
+{
+	return SqlSetFrom(va, 0, va.GetCount());
+}
+
 static inline void sCat(SqlSet& s, SqlVal v) { s.Cat(v); }
 
+//$-
 #define E__Cat(I)       sCat(*this, p##I)
 
 #define E__SqlSetF(I) \
@@ -75,6 +96,7 @@ SqlSet::SqlSet(const SqlVal& p0, __List##I(E__SqlVal)) { \
 	priority = SET; \
 }
 __Expand(E__SqlSetF);
+//$+
 
 FieldOperator::FieldOperator() {}
 FieldOperator::~FieldOperator() {}
@@ -83,7 +105,7 @@ struct FieldSqlSet : FieldOperator {
 	SqlSet *set;
 
 	virtual void Field(const char *name, Ref) {
-		set->Cat(SqlCol(name));
+		set->Cat(SqlId(name));
 	}
 };
 
@@ -101,4 +123,4 @@ void FieldDumper::Field(const char *name, Ref f)
 	s << name << " = " << Value(f);
 }
 
-END_UPP_NAMESPACE
+}

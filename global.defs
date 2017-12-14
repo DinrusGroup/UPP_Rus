@@ -33,4 +33,20 @@
 #define __restrict
 #define __inline
 #define __typeof
+#define _GLIBCXX_VISIBILITY(...)
+#define _GLIBCXX_BEGIN_NAMESPACE_VERSION
+#define _GLIBCXX_END_NAMESPACE_VERSION
+#define _GLIBCXX_CONSTEXPR
+#define _GLIBCXX_HAS_NESTED_TYPE(...)
+#define __inline__
+#define _GLIBCXX_CONST
+#define _GLIBCXX_ABI_TAG_CXX11
+#define __attribute(...)
+#define __glibcxx_class_requires(...)
+#define __glibcxx_class_requires2(...)
+#define __glibcxx_class_requires3(...)
+#define __glibcxx_class_requires4(...)
+#define __glibcxx_class_requires5(...)
 #define NULL NULL
+#define DrawText DrawText
+#define __typeof__ decltype

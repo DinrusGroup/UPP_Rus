@@ -50,7 +50,7 @@ Stream& operator%(Stream& s, Ctrl::LogPos& pos)
 }
 
 template<>
-void Xmlize(XmlIO xml, Ctrl::LogPos& pos)
+void Xmlize(XmlIO& xml, Ctrl::LogPos& pos)
 {
 	static VectorMap<String, int> mapx, mapy;
 	static VectorMap<int, String> remapx, remapy;
@@ -111,6 +111,25 @@ void Xmlize(XmlIO xml, Ctrl::LogPos& pos)
 			}
 
 		}
+		pos.x.SetAlign(xal); pos.x.SetA(xa); pos.x.SetB(xb);
+		pos.y.SetAlign(yal); pos.y.SetA(ya); pos.y.SetB(yb);
+	}
+}
+
+template<> void Jsonize(JsonIO& jio, Ctrl::LogPos& pos)
+{
+	int xal,xa,xb, yal,ya,yb;
+	if(jio.IsStoring())
+	{
+		xal = pos.x.GetAlign(); xa = pos.x.GetA(); xb = pos.x.GetB();
+		yal = pos.y.GetAlign(); ya = pos.y.GetA(); yb = pos.y.GetB();
+	}
+	//jio("xpos", pos.x)("ypos", pos.y); //that's be nice
+	jio("xal", xal)("xa", xa)("xb", xb);
+	jio("yal", yal)("ya", ya)("yb", yb);
+	
+	if(jio.IsLoading())
+	{
 		pos.x.SetAlign(xal); pos.x.SetA(xa); pos.x.SetB(xb);
 		pos.y.SetAlign(yal); pos.y.SetA(ya); pos.y.SetB(yb);
 	}

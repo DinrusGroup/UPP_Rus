@@ -1,16 +1,27 @@
 #include "Core.h"
 
-NAMESPACE_UPP
+namespace Upp {
 
 //#BLITZ_APPROVE
 
 INITBLOCK {
-	RichValue<Uuid>::Register();
+	Value::Register<Uuid>("Uuid");
 }
 
 void Uuid::Serialize(Stream& s) {
 	int version = 0;
 	s / version % a % b %c % d;
+}
+
+void Uuid::Jsonize(JsonIO& jio)
+{
+	String h;
+	if(jio.IsStoring()) {
+		h = Format(*this);
+		jio.Set(h);
+	}
+	else
+		*this = ScanUuid((String)jio.Get());
 }
 
 Uuid Uuid::Create() {
@@ -62,6 +73,16 @@ Uuid ScanUuid(const char *s)
 	return id;
 }
 
+void Uuid::Xmlize(XmlIO& xio)
+{
+	String h;
+	if(xio.IsStoring())
+		h = Format(*this);
+	xio.Attr("value", h);
+	if(xio.IsLoading())
+		*this = ScanUuid(h);
+}
+
 String Uuid::ToString() const
 {
 	return Format(*this);
@@ -88,4 +109,4 @@ ValueGen& UuidValueGen()
 	return Single<UuidValueGenClass>();
 }
 
-END_UPP_NAMESPACE
+}

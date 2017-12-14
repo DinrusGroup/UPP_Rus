@@ -17,39 +17,7 @@ trl]&]
 [s2;%% &]
 [s2;%% 
 @@image:1212&1156
-ŠƒÂ€¹€€€‚Çÿ€€€€ø·œíÉÒÜ´²”€ó¥ÎÁ¨¸€‹¶Ü€ÆÇ€â€¬Òì€Ø°„Ö”‹Èƒ€¬ Å˜ªƒö™şÌ¤”ø±ô°Šôôô
-õ¬ç·äçûê¢ÕÊ­ëø–¾¯»»í¿ºÃ€ßàåäú÷ï¼‘ıÁÔÇäÑÊë—á«à‘ø­Á¢ğƒÅàÇŸ·è”ÄÑóüŠ¡ŸÙåğœ”‹æ­ÙÔèß
-ÃÖ¥ê¢ÒÃÖ¯¶¨¸¸Ø´ƒ…°ˆü”­Ê¿–”Íµ¨ê§¬Ü”ëæÀ¢î©µ»–şÿÃ¿„…â‡ğâÆÒäæ¬õ‰ÃÍÚ”¿£•ËÄÃò¹–©½—‡
-ü¶¶‡õèÇ¢’è—òÙ³¤€‹Ç¤ø×ÑÜå«½Ú°ß¢‹ªêØÔ­–û×–øÏ¦¹‹ÒæÊì»šŸ®·Šñ€‰È§ëäü¿å…£Ãó´ğƒºÅà‡‹ÀÏÊ
-¢–…·¤á÷àö‘øÁ¢ğ³¬şÅéÓ´æßÁÅ›§°¶½œàİ‚–Í½™ãÑñÌ¹ÅËÍğ¬®Ã‹î¸ÚÑÙ¬ãÿàØÜ¤”Ö–åŸ¹óŞ°¦ä¯£¬½
-¼ø¸–ÉÑŸ¢öá‘§ğ”–“ª£Û´·‡¬¤šæşéĞ®°¡ìäøñ‚£…Õ²üôÒ®¡áÿ¢ˆıë­Äş­Ç›®äë¸äÿ–‰åéßÍµÒ›Âº·
-‡éú¦«Õíï­îœ×»ÒÖ½Ö·®îÌñÜ°½ĞÖ¤Å¿£•ŠË”ÖŠÅÑå½ã©¬ç“³Èïï§¸­Ü¯ìòşÎâÏ×¢¡¥©Åé‚•óÙ±öÚäÉÀ’Ï
-´…»³è¨ºÊ«ìãÚ¤œå˜ô½ıÙ´©¨Ÿ²£êáéÊ«¶Õ¦º½ñó™ˆƒê‹êêé•ë¢ÜÓÄ‘£®Å‘İÚ¼´œ÷¸ô±¬ãë¾éú¸¢
-”¾Ç³Üˆò¤×Êéåæ£–ğÁ×à‘øéÄ†¢¬Û´Ø„şµ°ˆüàÑî¹¯Â×Ò†–‰·³åŠÍòÌêûåÁó‡ùÈ©š®Øá®ŸÃùÒ«‹ò¾Ìê•
-û»§íÍ²Šºçş›¤êœ¢®ˆÎøÒôàÑîøÛìÒ¬¼ÈÒš”ÓØ¤Ã£¼½õØÏ¢°¼·÷‹Ò—Ñ¹Å¢…©æØ¤ªŒ«›§…é‡Ñ…¤½×Ï”Ãª©º
-©¯¡é¶éÚÊ¯«°ÿ¶–úÉ‘ğïúÛí¹ûíœƒÊº‡‹Å•ë•›×ßÇ—´çõÒÍÍÅßä¤˜¡ØùäÆÕ®«ôû«×’¢¥şÔ¨¬ÍøÔÙ¯É•Ó
-» ¸üË¦ªä˜¸·ÿå¤ĞÚ×…Û½Ù”»×ôìÈõèÜšİâšÕÙ¸ÆªéöºÅõ–íÉñÚ´•¨Š‰Â¥º†Ë­Í±§•Å¢µÒÕİŸÍÕÙÓµè°
-ÜÜŞÂš¹’±™¹¸¹¹…Ğú¾‡°ô£×ÙÄ¤Õ‹Ââµñë‹ıê“ÕÉç½ëæ˜—¥‡îçö©œ ËÑñ²Ûä¼’ö§À‚©â‘ô‰‚–Ÿ¬‚¿Ø
-ô„ş°ˆüìşó·Ôà¥Â•í·ç÷‹–÷Í³²Äõ½–½æú½ç×ÚíªçïñÔ¹–ÙÚÚ—Õ¦è‘±ÙÍ±Åìß’‹¢»™ğ½Ø”³åÛÔ–ùÆ²¶ÚÛ
-§¢ô¢İá‘òØñ‹‹­òıËˆï©â¨âÃá¨‡åˆñŠÄ•©»’¨šªÅéÖŸ¨åå“Ú›ş ­şË ­¼üñæÒêÔúÉšÉ®ÕÎÉ¨‡ˆÜıñ
-ÄÁ­İª¹”âú–Åú§Ê´¹‹Ó¡öÜê×Ñ°æÙ¤Ö‘—¬¸÷°ÑÀÅéüÉ×ß¸‘óÇ¶Ò¸’ÅÊ¹°Ş·ÕÜŞ¶–éì›é¡²ÆÊœ”Ç¥–ÉóÛÔ
-ÎÌ²Øù¢–å™ò±ï¿á§ÃúÍÿËÍèüÑñ»Î¢¹“¾ì´¨î¬·Û´ü·¸Ê¨Æ¾•õùÏ±¶ÅÄéú–´†éŠƒŠçËÔ§ºåé”³Èìÿ°­
-ß¾ñ²æ–¥€ä‘Ò¼Æı¶³”ƒÕò›¥Ğ¸Úí‡¿¥Ö¿Šõ³±÷´¼²äá‚ü¯ûİ’İóÄ¼Š¶…‹™À–ŸÎ¬Áâ¯É¶–€Ÿ¬‚¿í­º
-Ä¥ñü´ÖÅùõªõäÌÖ£¡æÅ³¦÷½Ó”¥ûõ‹ôŞ½÷¬ÃìÈ¢£ŒµÍİ´öŒå™×±²÷ÃàÑâãçÙ»Â¢¿éÓº¢åÒ ¿ÍÍ™ÛÑùúä¨ú
-×ÛÒÇÊßÀõ—Æ´û·Äöó‹Äòñ¯ÚÑÄµ•·Òº–¹šÊâº³Î³‡âØÛ¤ù÷µ´â‰Ò¾¶ÅıâµÍ’­±Âè¾”š°¨ß­úøÑË›ˆÊå
-‹¬³œÔ–éşé×ÑÙ Üµ´ĞîÑ ş¹ÍØ¹¨¢Å•¬äºš–Ï‘ú™‰®üÄ‰ÆÉ‡³Ò»Í÷å„Ôú­îï†èÁİ¢áéùìêí’æ½Çï”Î¬
-¸Ú–åáö´ö»ı°Ë‹àÈà¶‘øÁ¢ğƒÅÍà‡‹À–€Ÿ¬‚¿Ø„şå°ˆüà‘øÁÖ¢ğƒÅà‡‹‰À–Ÿ¬‚Ğ¿Ø„ş°ˆüìà‘øÁ¢ğƒ
-šÅà‡‹À–Ÿ¬‚¿Ø„Êş°ˆüà‘ø­Á¢ğƒÅà‡“‹À–Ÿ¬ ‚¿Ø„ş°ˆÙüà‘øÁ¢ğµƒÅà‡‹À‚–Ÿ¬‚¿Ø”„ş°ˆüà‘
-ÛøÁ¢ğƒÅà¦‡‹À–ŸÀ¬‚¿Ø„ş°²ˆüà‘øÁ¢ëğƒÅà‡‹À„–Ÿ¬‚¿¨Ø„ş°ˆüà¶‘øÁ¢ğƒÅÍà‡‹À–€Ÿ¬‚¿Ø„ş
-å°ˆüà‘øÁÖ¢ğƒÅà‡‹‰À–Ÿ¬‚Ğ¿Ø„ş°ˆüìà‘øÁ¢ğƒšÅà‡‹À–¡Ÿ¬‚¿‘Å¹ã†ÁÌŠœÅ»ï¾óÖ»Ÿµ¥¹˜÷õ
-İ¦şŠõ‰â„œÓúëÆ…ÖÑÚ¡€èÑ¸÷Œ’‹¿Ü½¹óß½¼üåãŞÃÀµËı¨’Íé›í›¿¶ŠŠö†É¢Ñ³±ÎîçßèñîüÏÙ±¦½¾áŸ
-…Ò»·şî••ª‚ˆ–›£ìöç¾¹‘Å«¯í½™¾¼øñüì¿µóõûˆñ›ˆÄÿûŒéÊ¯ïŞşµÕˆ‹èš­ı”íÎ¢¶ñãÓó×Ã˜Õû¹ÄÔòü¸
-âÌıÎâÌì•ë×¿Èÿí˜Ş˜Ó”Ş»ó¹ÊÕ¤‹š®ı”­­êÑµ©‚ş±ş¯Ì¬ºÖáÉä­êŸÛšÓ•”¾¸÷µÕÔúˆ ØôÉÙß”±õ°•œ¢
-­²¨ÚÛÉä¬öê˜˜Ó”şšşÿÚ«È­èÿªÅ¢¿¾ŞºÆÔöğ²ŒçÈ¢´Â‘³Á¨ùââÌÓú—ğÁÍÖ¡¬è®¤ƒÍ¢«‡ˆ±ÚŞ‰£±èÊ
-‡‘·¨ıîé¼ÌÓúèá­Ö¥‘ÛĞÔƒ‹ÅğŸıõùŠ©‡µ°°²¨ÜÕÏÙä¬ê˜˜Óï”şñèî«¨ŒÀµèÒ˜ÁÒ¿ÏË’‹®õ²™ÿº£üÛá
-üÌÓúøÏû­´¢İĞôé£ì»•ûÅŸŸû©ÏŠ±Ÿğåô¿š¨­ÏÌéÊ©Ÿ¼şØªÄ…«–¾ÊÖ¹÷Óıå÷¿è‘İÕ»®Ö§ìÓú£×“¿ÚÅ…€
-Í¢Å‡ç£ã”Ñ¶ñ™îØ¾ïî£©õ‰øâÄÓúôé“¨ÖÑ¡€èÑ‰ÓÏôÛ¿Óÿöìé«¨ çê‘Ñ¶Ä§éÇ­¡®ÛÈ¢€ŠÊÂ‹ˆ¢ºÚ‹
-äŒ»áïÈ¨à€Ò
+(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)
 &]
 [s0;%% &]
 [s9;%% TreeCtrl hierarchy management is based on integer id numbers. 
@@ -170,9 +138,21 @@ nt]_[* Insert]([@(0.0.255) int]_[*@3 parentid], [@(0.0.255) int]_[*@3 i],
 [@(0.0.255) const]_[_^Image^ Image][@(0.0.255) `&]_[*@3 img], [_^Ctrl^ Ctrl][@(0.0.255) `&]_[*@3 c
 ], [@(0.0.255) int]_[*@3 cx]_`=_[@3 0], [@(0.0.255) int]_[*@3 cy]_`=_[@3 0], 
 [@(0.0.255) bool]_[*@3 wo]_`=_[@(0.0.255) false])&]
+[s5;:TreeCtrl`:`:Insert`(int`,int`,const Image`&`,Value`,const String`&`,bool`): [@(0.0.255) i
+nt]_[* Insert]([@(0.0.255) int]_[*@3 parentid], [@(0.0.255) int]_[*@3 i], 
+[@(0.0.255) const]_[_^Image^ Image][@(0.0.255) `&]_[*@3 img], [_^Value^ Value]_[*@3 key], 
+[@(0.0.255) const]_[_^String^ String][@(0.0.255) `&]_[*@3 value], [@(0.0.255) bool]_[*@3 with
+open]_`=_[@(0.0.255) false])&]
+[s5;:TreeCtrl`:`:Insert`(int`,int`,const Image`&`,Value`,const char`*`,bool`): [@(0.0.255) i
+nt]_[* Insert]([@(0.0.255) int]_[*@3 parentid], [@(0.0.255) int]_[*@3 i], 
+[@(0.0.255) const]_[_^Image^ Image][@(0.0.255) `&]_[*@3 img], [_^Value^ Value]_[*@3 key], 
+[@(0.0.255) const]_[@(0.0.255) char]_`*[*@3 value], [@(0.0.255) bool]_[*@3 withopen]_`=_[@(0.0.255) f
+alse])&]
 [s2; Inserts child item to parent specified by id. Distinct variants 
-set various attributes to TreeCtrl`::Node of insterted item.&]
-[s3; &]
+set various attributes to TreeCtrl`::Node of insterted item. Returns 
+id of new item. Note: Last two overloads are  to avoid overloading 
+ambiguity.&]
+[s3;%% &]
 [s4; &]
 [s5;:TreeCtrl`:`:Add`(int`,const TreeCtrl`:`:Node`&`): [@(0.0.255) int]_[* Add]([@(0.0.255) i
 nt]_[*@3 parentid], [@(0.0.255) const]_[_^TreeCtrl`:`:Node^ TreeCtrl`::Node][@(0.0.255) `&
@@ -189,9 +169,18 @@ _[@(0.0.255) false])&]
 dd]([@(0.0.255) int]_[*@3 parentid], [@(0.0.255) const]_[_^Image^ Image][@(0.0.255) `&]_[*@3 i
 mg], [_^Ctrl^ Ctrl][@(0.0.255) `&]_[*@3 ctrl], [@(0.0.255) int]_[*@3 cx]_`=_[@3 0], 
 [@(0.0.255) int]_[*@3 cy]_`=_[@3 0], [@(0.0.255) bool]_[*@3 withopen]_`=_[@(0.0.255) false])&]
+[s5;:TreeCtrl`:`:Add`(int`,const Image`&`,Value`,const String`&`,bool`): [@(0.0.255) in
+t]_[* Add]([@(0.0.255) int]_[*@3 parentid], [@(0.0.255) const]_[_^Image^ Image][@(0.0.255) `&
+]_[*@3 img], [_^Value^ Value]_[*@3 key], [@(0.0.255) const]_[_^String^ String][@(0.0.255) `&]_
+[*@3 value], [@(0.0.255) bool]_[*@3 withopen]_`=_[@(0.0.255) false])&]
+[s5;:TreeCtrl`:`:Add`(int`,const Image`&`,Value`,const char`*`,bool`): [@(0.0.255) int]_
+[* Add]([@(0.0.255) int]_[*@3 parentid], [@(0.0.255) const]_[_^Image^ Image][@(0.0.255) `&]_[*@3 i
+mg], [_^Value^ Value]_[*@3 key], [@(0.0.255) const]_[@(0.0.255) char]_`*[*@3 value], 
+[@(0.0.255) bool]_[*@3 withopen]_`=_[@(0.0.255) false])&]
 [s2; Inserts child item at the end of list of parent`'s child items. 
 Parent is specified by id. Distinct variants set various attributes 
-to TreeCtrl`::Node of insterted item.&]
+to TreeCtrl`::Node of insterted item. Returns id of new item. 
+Note: Last two overloads are  to avoid overloading ambiguity.&]
 [s3; &]
 [s4; &]
 [s5;:TreeCtrl`:`:Remove`(int`): [@(0.0.255) void]_[* Remove]([@(0.0.255) int]_[*@3 id])&]
@@ -300,6 +289,11 @@ t]_[*@3 id])_[@(0.0.255) const]&]
 [s2;%% Sets attributes.&]
 [s3; &]
 [s4; &]
+[s5;:Upp`:`:TreeCtrl`:`:IsValid`(int`)const: [@(0.0.255) bool]_[* IsValid]([@(0.0.255) int]_
+[*@3 id])_[@(0.0.255) const]&]
+[s2;%% Returns true if [%-*@3 id] represents a valid node id.&]
+[s3;%% &]
+[s4; &]
 [s5;:TreeCtrl`:`:IsOpen`(int`)const: [@(0.0.255) bool]_[* IsOpen]([@(0.0.255) int]_[*@3 id])_
 [@(0.0.255) const]&]
 [s2;%% Tests whether item is opened.&]
@@ -314,6 +308,16 @@ all child items visible.&]
 [s5;:TreeCtrl`:`:Close`(int`): [@(0.0.255) void]_[* Close]([@(0.0.255) int]_[*@3 id])&]
 [s2;%% Same as Open(id, false).&]
 [s3; &]
+[s4; &]
+[s5;:Upp`:`:TreeCtrl`:`:GetOpenIds`(`)const: [_^Upp`:`:Vector^ Vector]<[@(0.0.255) int]>_
+[* GetOpenIds]()_[@(0.0.255) const]&]
+[s2;%% Returns all open node ids.&]
+[s3; &]
+[s4; &]
+[s5;:Upp`:`:TreeCtrl`:`:OpenIds`(const Upp`:`:Vector`<int`>`&`): [@(0.0.255) void]_[* Ope
+nIds]([@(0.0.255) const]_[_^Upp`:`:Vector^ Vector]<[@(0.0.255) int]>`&_[*@3 ids])&]
+[s2;%% Opens all valid [%-*@3 ids].&]
+[s3;%% &]
 [s4; &]
 [s5;:TreeCtrl`:`:OpenDeep`(int`,bool`): [@(0.0.255) void]_[* OpenDeep]([@(0.0.255) int]_[*@3 i
 d], [@(0.0.255) bool]_[*@3 open]_`=_[@(0.0.255) true])&]
@@ -584,6 +588,20 @@ color as that used to paint regular values `- respects selection,
 cursor position etc.&]
 [s3;%% &]
 [s4; &]
+[s5;:Upp`:`:TreeCtrl`:`:RenderMultiRoot`(bool`): [_^Upp`:`:TreeCtrl^ TreeCtrl][@(0.0.255) `&
+]_[* RenderMultiRoot]([@(0.0.255) bool]_[*@3 a]_`=_[@(0.0.255) true])&]
+[s2;%% When active, no lines are drawn connecting zero level nodes 
+(so it looks like there are multiple roots).&]
+[s3;%% &]
+[s4; &]
+[s5;:Upp`:`:TreeCtrl`:`:EmptyNodeIcon`(const Upp`:`:Image`&`): [_^Upp`:`:TreeCtrl^ Tree
+Ctrl][@(0.0.255) `&]_[* EmptyNodeIcon]([@(0.0.255) const]_[_^Upp`:`:Image^ Image][@(0.0.255) `&
+]_[*@3 a])&]
+[s2;%% When RenderMultiRoot is active and there the node is zero 
+level and has not elements, [%-*@3 a] is drawn on the left side 
+to indicate it is empty.&]
+[s3;%% &]
+[s4; &]
 [s5;:TreeCtrl`:`:SetScrollBarStyle`(const ScrollBar`:`:Style`&`): [_^TreeCtrl^ TreeCtrl
 ][@(0.0.255) `&]_[* SetScrollBarStyle]([@(0.0.255) const]_[_^ScrollBar`:`:Style^ ScrollBa
 r`::Style][@(0.0.255) `&]_[*@3 s])&]
@@ -720,4 +738,4 @@ pen]([@(0.0.255) bool]_[*@3 b]_`=_[@(0.0.255) true])&]
 nSelect]([@(0.0.255) bool]_[*@3 b])&]
 [s2;%% Sets canselect flag.&]
 [s3; &]
-[s0; ]
+[s0; ]]

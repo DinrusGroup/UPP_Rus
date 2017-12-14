@@ -1,5 +1,7 @@
 description "TIFF image file format\3770,128,128";
 
+options(BUILDER_OPTION) NOWARNINGS;
+
 uses
 	plugin\jpg;
 
@@ -24,6 +26,7 @@ file
 	tifupp.cpp,
 	tifreg.icpp,
 	lib readonly separator,
+	lib\Version,
 	lib\Copyright,
 	lib\jerror.h,
 	lib\jpeg.patch1,
@@ -87,5 +90,6 @@ file
 	lib\tiffiop.h,
 	lib\tiffvers.h,
 	lib\uvcode.h,
-	end readonly separator;
+	end readonly separator,
+	Copying;
 

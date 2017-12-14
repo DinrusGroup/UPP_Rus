@@ -1,12 +1,12 @@
 [Desktop Entry]
 Encoding=UTF-8
-Name=RusIDE
-GenericName=RusIDE
+Name=TheIDE
+GenericName=TheIDE
 Comment=IDE for cross-platform C++ development 
 MimeType=application/x-upp;
-Exec=RusIDE
-Icon=RusIDE
+Exec=theide
+Icon=theide
 Terminal=false
 Type=Application
-Categories=Application;Development;IDE;C++;
+Categories=Development;IDE;
 StartupNotify=false

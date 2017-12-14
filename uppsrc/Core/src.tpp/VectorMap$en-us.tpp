@@ -55,6 +55,20 @@ operator is implicitly defined by composition.&]
 [s2; Default constructor. Constructs empty [* VectorMap].&]
 [s3; &]
 [s4;%- &]
+[s5;:Upp`:`:VectorMap`:`:VectorMap`(std`:`:initializer`_list`<std`:`:pair`<K`,T`>`>`):%- [* V
+ectorMap]([_^http`:`/`/en`.cppreference`.com`/w`/cpp`/utility`/initializer`_list^ s
+td`::initializer`_list]<[_^http`:`/`/en`.cppreference`.com`/w`/cpp`/utility`/pair^ s
+td`::pair]<[*@4 K], [*@4 T]>>_[*@3 init])&]
+[s2; C`+`+ 11 initialization.&]
+[s3; &]
+[s4;%- &]
+[s5;:Upp`:`:VectorMap`:`:operator`(`)`(const K`&`,const T`&`):%- [*_^Upp`:`:VectorMap^ V
+ectorMap][@(0.0.255) `&]_[* operator()]([@(0.0.255) const]_[*@4 K][@(0.0.255) `&]_[*@3 k], 
+[@(0.0.255) const]_[*@4 T][@(0.0.255) `&]_[*@3 v])&]
+[s2; Same as Add([%-*@3 k], [%-*@3 v]), returns `*this. Syntax sugar 
+for creating map.&]
+[s3; &]
+[s4;%- &]
 [s5;:VectorMap`:`:VectorMap`(const VectorMap`&`,int`):%- [* VectorMap]([@(0.0.255) const]_
 [* VectorMap][@(0.0.255) `&]_[*@3 s], [@(0.0.255) int])&]
 [s2; Optional deep copy constructor.&]
@@ -90,4 +104,4 @@ of elements.&]
 [s2; Drops last element of VectorMap and returns its value.&]
 [s7; [*/ Return value]-|Value of dropped element.&]
 [s3; &]
-[s0; ]
+[s0; ]]

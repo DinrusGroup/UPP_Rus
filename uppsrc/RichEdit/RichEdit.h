@@ -3,7 +3,7 @@
 
 #include <CtrlLib/CtrlLib.h>
 
-NAMESPACE_UPP
+namespace Upp {
 
 #define IMAGECLASS RichEditImg
 #define IMAGEFILE <RichEdit/RichEdit.iml>
@@ -49,12 +49,12 @@ private:
 	int           newtabalign;
 	
 public:
-	Callback      WhenLeftDouble;
-	Callback      WhenLeftDown;
-	Callback      WhenRightDown;
-	Callback      WhenBeginTrack;
-	Callback      WhenTrack;
-	Callback      WhenEndTrack;
+	Event<>       WhenLeftDouble;
+	Event<>       WhenLeftDown;
+	Event<>       WhenRightDown;
+	Event<>       WhenBeginTrack;
+	Event<>       WhenTrack;
+	Event<>       WhenEndTrack;
 
 	void          SetLayout(int x, int pgcx, Zoom zoom, double grid,
 	                        int numbers = INT_MAX, double numbermul = 1, int marks = INT_MAX,
@@ -92,6 +92,7 @@ public:
 	virtual Value Format(const Value& v) const;
 	virtual void  SetData(const Value& v);
 	virtual bool  Key(dword key, int repcnt);
+	virtual void  MouseWheel(Point p, int zdelta, dword keyflags);
 
 private:
 	SpinButtons spin;
@@ -115,10 +116,14 @@ public:
 
 struct FontHeight : public WithDropChoice<EditDouble> {
 	virtual bool Key(dword key, int);
+	
+	FontHeight()   { MinMax(1, 72); }
 };
 
 #define LAYOUTFILE <RichEdit/RichEdit.lay>
 #include <CtrlCore/lay.h>
+
+bool EditRichHeaderFooter(String& header_qtf, String& footer_qtf);
 
 class ParaFormatting : public WithParaLayout<StaticRect> {
 public:
@@ -131,6 +136,7 @@ private:
 	bool     keepindent;
 	Font     font;
 	bool     modified;
+	String   header_qtf, footer_qtf;
 
 	RichPara::NumberFormat GetNumbering();
 	bool                   IsNumbering();
@@ -140,12 +146,15 @@ private:
 	typedef ParaFormatting CLASSNAME;
 
 public:
-	void  Set(int unit, const RichText::FormatInfo& formatinfo);
+	void  Set(int unit, const RichText::FormatInfo& formatinfo, bool baselevel = false);
 	dword Get(RichText::FormatInfo& formatinfo);
 	void  SetFont(Font fnt)                          { font = fnt; }
 	bool  IsChanged() const                          { return IsModified() || modified; }
 	void  EnableNumbering();
 	void  SetupIndent();
+	void  EditHdrFtr();
+	void  NewHdrFtr();
+	void  SyncHdrFtr();
 
 	ParaFormatting();
 };
@@ -188,7 +197,7 @@ public:
 	StyleManager();
 };
 
-bool SpellWordRaw(const WString& wrd, int lang, Vector<String> *withdia = NULL);
+void SetupFaceList(DropList& face);
 
 class RichEdit : public Ctrl, private TextArrayOps {
 public:
@@ -268,6 +277,7 @@ private:
 	WithRichFindReplaceLayout<TopWindow> findreplace;
 
 	bool                     found, notfoundfw;
+	bool                     persistent_findreplace;
 
 	VectorMap<String, Value> vars;
 
@@ -283,6 +293,9 @@ private:
 	Vector<int>              ffs;
 	
 	int                      bullet_indent;
+	
+	PaintInfo                paint_info;
+	bool                     ignore_physical_size;
 
 	static int fh[];
 
@@ -438,6 +451,8 @@ private:
 	StyleKey   stylekey[20];
 	
 	Zoom       clipzoom;
+	
+	double     floating_zoom;
 
 	Rect       GetTextRect() const;
 	Size       GetZoomedPage() const;
@@ -460,6 +475,7 @@ private:
 	int        GetHotSpot(Point p) const;
 	Rect       GetObjectRect(int pos) const;
 	void       FixObjectRect();
+	bool       RemoveBullet(bool backspace);
 
 	void       SetObjectPos(int pos);
 	void       AdjustObjectSize();
@@ -497,7 +513,7 @@ private:
 	void       SetPaper();
 	void       SetLanguage();
 	void       Language();
-	void       SetupLanguage(pick_ Vector<int>& lng);
+	void       SetupLanguage(Vector<int>&& lng);
 
 	void       SetBullet(int bullet);
 
@@ -513,7 +529,6 @@ private:
 	void       ReplaceObject(const RichObject& obj);
 
 	static bool   IsW(int c);
-	static void   SetupFaceList(DropList& face);
 
 	void Insert(int pos, const RichText& text, bool typing = false);
 	void Remove(int pos, int len, bool forward = false);
@@ -592,8 +607,8 @@ private:
 	void     DoRefreshBar();
 	void     RefreshBar();
 
-	bool     Accept(PasteClip& d, RichText& clip);
-	void     ClipPaste(RichText& clip);
+	bool     Accept(PasteClip& d, RichText& clip, String& fmt);
+	void     ClipPaste(RichText& clip, const String& fmt);
 	bool     InSelection(int& c) const;
 	void     RefreshDropCaret();
 	void     ZoomClip(RichText& text) const;
@@ -602,9 +617,15 @@ private:
 	
 	void     StyleKeys();
 	void     ApplyStyleKey(int i);
+	
+	void     HeaderFooter();
+	bool     EditHeaderFooter(String& header_qtf, String& footer_qtf);
 
-	bool     BegSelTabFix();
+	bool     BegSelTabFix(int& count);
+	bool     BegSelTabFix()                        { int dummy; return BegSelTabFix(dummy); }
 	void     BegSelTabFixEnd(bool fix);
+
+	Size     GetPhysicalSize(const RichObject& obj);
 
 	struct DisplayDefault : public Display {
 		virtual void Paint(Draw& w, const Rect& r, const Value& q,
@@ -612,14 +633,15 @@ private:
 	};
 
 	void UserAction();
-	Callback User(Callback cb);
+	Event<>  User(Event<>  cb);
 
-	static bool   SpellWord(const wchar *wrd, int len, int lang);
 	static void   SpellerAdd(const WString& w, int lang);
 	static int    CompareStyle(const Value& a, const Value& b);
 
 	friend class StyleKeysDlg;
 	friend class StyleManager;
+
+	using Ctrl::Accept;
 
 protected:
 	enum {
@@ -629,6 +651,7 @@ protected:
 	};
 
 public:
+	virtual void  PasteFilter(RichText& txt, const String& fmt);
 	virtual void  Filter(RichText& txt);
 
 	static double DotToPt(int dot);
@@ -636,11 +659,12 @@ public:
 	static Bits   SpellParagraph(const RichPara& p);
 	static void   FixedLang(int lang)              { fixedlang = lang; }
 
-	Callback                     WhenRefreshBar;
-	Callback                     WhenStartEvaluating;
-	Callback2<String&, WString&> WhenHyperlink;
-	Callback1<String&>           WhenLabel;
-	Callback1<Bar&>              WhenBar;
+	Event<>                  WhenRefreshBar;
+	Event<>                  WhenStartEvaluating;
+	Event<String&, WString&> WhenHyperlink;
+	Event<String&>           WhenLabel;
+	Event<String&>           WhenIndexEntry;
+	Event<Bar&>              WhenBar;
 
 	void   StdBar(Bar& menu);
 
@@ -681,16 +705,15 @@ public:
 	void   Cut();
 	void   Paste();
 	void   InsertObject(int type);
-	void   LoadImage();
 
 	void   Styles();
 
 	bool   Print();
 	void   DoPrint()                             { Print(); }
 
-	void   StyleTool(Bar& bar, int width = 120);
-	void   FaceTool(Bar& bar, int width = 130);
-	void   HeightTool(Bar& bar, int width = 50);
+	void   StyleTool(Bar& bar, int width = Zx(120));
+	void   FaceTool(Bar& bar, int width = Zx(130));
+	void   HeightTool(Bar& bar, int width = Zx(50));
 	void   BoldTool(Bar& bar, dword key = K_CTRL_B);
 	void   ItalicTool(Bar& bar, dword key = K_CTRL_I);
 	void   UnderlineTool(Bar& bar, dword key = K_CTRL_U);
@@ -700,10 +723,10 @@ public:
 	void   SubscriptTool(Bar& bar, dword key = 0);
 	void   InkTool(Bar& bar);
 	void   PaperTool(Bar& bar);
-	void   LanguageTool(Bar& bar, int width = HZoom(60));
-	void   HyperlinkTool(Bar& bar, int width = 180, dword key = 0, const char *tip = NULL);
+	void   LanguageTool(Bar& bar, int width = Zx(60));
+	void   HyperlinkTool(Bar& bar, int width = Zx(180), dword key = 0, const char *tip = NULL);
 	void   SpellCheckTool(Bar& bar);
-	void   IndexEntryTool(Bar& bar, int width = 80, dword key = 0, const char *tip = NULL);
+	void   IndexEntryTool(Bar& bar, int width = Zx(80), dword key = 0, const char *tip = NULL);
 
 	void   LeftTool(Bar& bar, dword key = K_CTRL_L);
 	void   RightTool(Bar& bar, dword key = K_CTRL_R);
@@ -715,7 +738,7 @@ public:
 	void   BoxWhiteBulletTool(Bar& bar, dword key = 0);
 	void   TextBulletTool(Bar& bar, dword key = 0);
 	void   ParaFormatTool(Bar& bar, dword key = 0);
-	void   LabelTool(Bar& bar, int width = 80, dword key = 0, const char *tip = NULL);
+	void   LabelTool(Bar& bar, int width = Zx(80), dword key = 0, const char *tip = NULL);
 	void   ToParaTool(Bar& bar, dword key = K_CTRL_K);
 
 	void   UndoTool(Bar& bar, dword key = K_CTRL_Z);
@@ -745,44 +768,55 @@ public:
 
 	void   InsertImageTool(Bar& bar);
 	void   StyleKeysTool(Bar& bar);
+	
+	void   HeaderFooterTool(Bar& bar);
 
 	void   DefaultBar(Bar& bar, bool extended = true);
 
-	void            EvaluateFields()               { WhenStartEvaluating(); text.EvaluateFields(vars); }
+	void            SetVar(const String& id, const Value& v) { vars.GetAdd(id) = v; }
+	Value           GetVar(const String& id) const           { return vars.Get(id, Value()); }
+	void            EvaluateFields();
 
-	void            GotoLabel(const String& lbl);
+	bool            GotoLabel(const String& lbl);
 	void            BeginPara();
 	void            NextPara();
 	void            PrevPara();
 
 	void            Clear();
-	void            Pick(pick_ RichText& t);
-	void            SetQTF(const char *qtf)               { Pick(ParseQTF(qtf, 0, context)); }
-	const RichText& Get() const                           { return text; }
-	String          GetQTF(byte cs = CHARSET_UTF8) const  { return AsQTF(text, cs); }
+	void            Pick(RichText pick_ t);
+	void            SetQTF(const char *qtf)                { Pick(ParseQTF(qtf, 0, context)); }
+	const RichText& Get() const                            { return text; }
+	String          GetQTF(byte cs = CHARSET_UTF8) const   { return AsQTF(text, cs); }
 	void            ApplyStylesheet(const RichText& r);
-	void            SetPage(const Size& sz)               { pagesz = sz; Finish(); }
-	Size            GetPage()                             { return pagesz; }
+	void            SetPage(const Size& sz)                { pagesz = sz; Finish(); }
+	Size            GetPage()                              { return pagesz; }
 
-	RichEdit&       NoRuler()                             { RemoveFrame(ruler); return *this; }
-	RichEdit&       SingleLine(bool b = true)             { singleline = b; return *this; }
+	RichEdit&       NoRuler()                              { RemoveFrame(ruler); return *this; }
+	RichEdit&       SingleLine(bool b = true)              { singleline = b; return *this; }
 	RichEdit&       FontFaces(const Vector<int>& face);
-	RichEdit&       ViewBorder(int cx)                    { viewborder = cx; Refresh(); return *this; }
-	RichEdit&       ShowCodes(Color c)                    { showcodes = c; Refresh(); return *this; }
-	RichEdit&       Unit(int u)                           { unit = u; Refresh(); return *this; }
-	RichEdit&       SpellCheck(bool b)                    { spellcheck = b; Refresh(); return *this; }
-	RichEdit&       SetZoom(int z)                        { zoom = z; Refresh(); return *this; }
-	RichEdit&       SetContext(void *ctx)                 { context = ctx; Refresh(); return *this; }
-	void           *GetContext() const                    { return context; }
-	RichEdit&       ClipZoom(Zoom z)                      { clipzoom = z; return *this; }
-	RichEdit&       ClipZoom(int m, int d)                { clipzoom = Zoom(m, d); return *this; }
-	Zoom            GetClipZoom() const                   { return clipzoom; }
-	RichEdit&       BulletIndent(int i)                   { bullet_indent = i; return *this; }
+	RichEdit&       ViewBorder(int cx)                     { viewborder = cx; Refresh(); return *this; }
+	RichEdit&       ShowCodes(Color c)                     { showcodes = c; Refresh(); return *this; }
+	RichEdit&       Unit(int u)                            { unit = u; Refresh(); return *this; }
+	RichEdit&       SpellCheck(bool b)                     { spellcheck = b; Refresh(); return *this; }
+	RichEdit&       SetZoom(int z)                         { zoom = z; Refresh(); return *this; }
+	RichEdit&       SetContext(void *ctx)                  { context = ctx; Refresh(); return *this; }
+	void           *GetContext() const                     { return context; }
+	RichEdit&       ClipZoom(Zoom z)                       { clipzoom = z; return *this; }
+	RichEdit&       ClipZoom(int m, int d)                 { clipzoom = Zoom(m, d); return *this; }
+	Zoom            GetClipZoom() const                    { return clipzoom; }
+	RichEdit&       BulletIndent(int i)                    { bullet_indent = i; return *this; }
+	RichEdit&       PersistentFindReplace(bool b = true)   { persistent_findreplace = b; return *this; }
+	RichEdit&       Floating(double zoomlevel_ = 1);
+	RichEdit&       NoFloating(double zoomlevel_ = 1)      { return Floating(Null); }
+	RichEdit&       SetPaintInfo(const PaintInfo pi)       { paint_info = pi; return *this; }
+	RichEdit&       IgnorePhysicalObjectSize(bool b = true){ ignore_physical_size = b; return *this; }
 
 	struct UndoInfo {
 		int              undoserial;
 		BiArray<UndoRec> undo;
 		Array<UndoRec>   redo;
+		
+		void Clear()     { undo.Clear(); redo.Clear(); undoserial = 0; }
 	};
 
 	struct PosInfo {
@@ -795,7 +829,7 @@ public:
 	};
 
 	UndoInfo PickUndoInfo();
-	void     SetPickUndoInfo(pick_ UndoInfo& f);
+	void     SetPickUndoInfo(UndoInfo pick_ f);
 
 	PosInfo  GetPosInfo() const;
 	void     SetPosInfo(const PosInfo& pos);
@@ -824,6 +858,8 @@ public:
 	RichEditWithToolBar();
 };
 
-END_UPP_NAMESPACE
+void AppendClipboard(RichText&& txt);
+
+}
 
 #endif

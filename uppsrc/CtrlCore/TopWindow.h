@@ -17,13 +17,16 @@ public:
 	virtual String   GetDesc() const;
 	virtual void     ChildGotFocus();
 
+public:
+	struct TopStyle : ChStyle<TopStyle> {
+		Value background;
+	};
+
 protected:
 	enum {
 		TIMEID_DEFSYNCTITLE = Ctrl::TIMEID_COUNT,
 		TIMEID_COUNT,
 	};
-
-	static  Rect      windowFrameMargin;
 
 private:
 	struct Abreak : Pte<Abreak> {
@@ -52,13 +55,11 @@ private:
 
 	Rect        overlapped;
 
-	void        SyncTitle0();
 	void        SyncSizeHints();
 	void        SyncTitle();
-	void        SyncCaption0();
 	void        SyncCaption();
 
-	void        SetupRect();
+	void        SetupRect(Ctrl *owner);
 	
 	void        FixIcons();
 
@@ -74,8 +75,11 @@ private:
 	bool        tool:1;
 	bool        frameless:1;
 	bool        urgent:1;
+	bool        close_rejects:1;
 	byte        state;
 	Image       icon, largeicon;
+
+	const TopStyle *st;
 	
 	void        GuiPlatformConstruct();
 	void        GuiPlatformDestruct();
@@ -89,7 +93,7 @@ private:
 public:
 	virtual     void ShutdownWindow();
 
-	Callback    WhenClose;
+	Event<>     WhenClose;
 
 	void        Backup();
 	void        Restore();
@@ -154,16 +158,20 @@ public:
 	bool       IsTopMost() const;
 	TopWindow& FullScreen(bool b = true);
 	bool       IsFullScreen() const                   { return fullscreen; }
-	TopWindow& FrameLess(bool b = true)               { frameless = b; return *this; }
+	TopWindow& FrameLess(bool b = true);
 	bool       IsFrameLess() const                    { return frameless; }
 	TopWindow& Urgent(bool b = true);
 	bool       IsUrgent() const                       { return urgent; }
 	TopWindow& NoAccessKeysDistribution()             { dokeys = false; return *this; }
 	TopWindow& NoCloseBox(bool b = true)              { noclosebox = b; return *this; }
+	TopWindow& CloseBoxRejects(bool b = true)         { close_rejects = b; return *this; }
 
 	TopWindow& Icon(const Image& m);
 	TopWindow& LargeIcon(const Image& m);
 	TopWindow& Icon(const Image& smallicon, const Image& largeicon);
+
+	static const TopStyle& StyleDefault();
+	TopWindow&  SetStyle(const TopStyle& s);
 	
 	Image      GetIcon() const                        { return icon; }
 	Image      GetLargeIcon() const                   { return largeicon; }

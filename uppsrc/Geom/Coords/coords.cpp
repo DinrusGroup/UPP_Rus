@@ -1,7 +1,6 @@
 #include "GeomCoords.h"
-#pragma hdrstop
 
-NAMESPACE_UPP
+namespace Upp {
 
 GisCoords::Arg GisCoords::Arg::Edit(double& v, String ident, String name, String help_topic, double min, double max, bool not_null)
 {
@@ -88,12 +87,12 @@ GisCoords::Arg GisCoords::Arg::DropList(String& v, String ident, String name, St
 
 struct GeomBoolRef : public RefManager
 {
-	virtual int        GetType()                         { return UNKNOWN_V; }
-	virtual Value      GetValue(const void *x)           { return *(const bool *)x ? 1 : 0; }
-	virtual void       SetValue(void *x, const Value& v) { *(bool *)x = !UPP::IsNull(v) && (double)v; }
-	virtual void       SetNull(void *x)                  { *(bool *)x = false; }
+	virtual int        GetType()                               { return UNKNOWN_V; }
+	virtual Value      GetValue(const void *x)                 { return *(const bool *)x ? 1 : 0; }
+	virtual void       SetValue(void *x, const Value& v)       { *(bool *)x = !UPP::IsNull(v) && (double)v; }
+	virtual void       SetNull(void *x)                        { *(bool *)x = false; }
 
-	static RefManager *Manager()                         { static GeomBoolRef m; return &m; }
+	static RefManager *Manager()                               { static GeomBoolRef m; return &m; }
 };
 
 inline Ref GeomBoolAsRef(bool& b) { return Ref(&b, GeomBoolRef::Manager()); }
@@ -191,7 +190,7 @@ double GisCoords::Data::ProjectDeviation(Pointf lonlat1, Pointf lonlat2, int bra
 
 double GisCoords::Data::ProjectRatio(Pointf lonlat, int branch) const
 {
-	Pointf proj = Project(lonlat, branch);
+	/*Pointf proj = */Project(lonlat, branch);
 	static const double DELTA = 1e-3;
 	Sizef east = Project(lonlat + Sizef(DELTA, 0), branch);
 	Sizef north = Project(lonlat + Sizef(0, DELTA), branch);
@@ -490,4 +489,4 @@ bool GisTransform::Equals(const GisTransform& t) const
 	return Source() == t.Source() && Target() == t.Target();
 }
 
-END_UPP_NAMESPACE
+}

@@ -53,7 +53,7 @@ struct App : TopWindow {
 		Sizeable().Zoomable();
 		BackPaint();
 		SetTimeCallback(-1000, callback(this, &App::Timer));
-		Title("Часы");
+		Title("Clock");
 	}
 };
 

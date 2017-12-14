@@ -1,4 +1,4 @@
-topic "Functions4U. BSDiff Reference";
+topic "BSDiff";
 [ $$0,0#00000000000000000000000000000000:Default]
 [H6;0 $$1,0#05600065144404261032431302351956:begin]
 [i448;a25;kKO9;2 $$2,0#37138531426314131252341829483370:codeitem]
@@ -52,4 +52,4 @@ BSGetLastError()]&]
 [s1;%- &]
 [s2;:BsGetLastError`(`):%- [_^String^ String]_[* BsGetLastError]()&]
 [s3; Returns the last BSDiff/BSPatch error message.&]
-[s0; ]
+[s0; ]]

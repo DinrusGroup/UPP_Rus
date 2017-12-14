@@ -10,8 +10,8 @@ topic "Serialization utilities";
 [i448;b42;O9;2 $$8,8#61672508125594000341940100500538:tparam]
 [b42;2 $$9,9#13035079074754324216151401829390:normal]
 [{_}%EN-US 
-[s0; [*@3;4 Serialization utilities]&]
-[s0;3%- &]
+[ {{10000@(113.42.0) [s0; [*@2;4 Serialization utilities]]}}&]
+[s0;*@3;4 &]
 [ {{10000t/25b/25@1 [s0;%- [* Function List]]}}&]
 [s0;0%- &]
 [s5;:Pack16`(Stream`&`,int`&`):%- [_^Stream^ Stream][@(0.0.255) `&]_[* Pack16]([_^Stream^ Str
@@ -165,45 +165,58 @@ serialization of all such data with single stream.&]
 [s0;0%- &]
 [s5;:RegisterGlobalConfig`(const char`*`):%- [@(0.0.255) void]_[* RegisterGlobalConfig]([@(0.0.255) c
 onst]_[@(0.0.255) char]_`*[*@3 name])&]
-[s2; Registers name as global configuration key.&]
-[s7; [%-*C@3 name]-|Key.&]
+[s7; Registers name as global configuration key.&]
 [s3; &]
 [s4;%- &]
-[s5;:RegisterGlobalConfig`(const char`*`,Callback`):%- [@(0.0.255) void]_[* RegisterGloba
-lConfig]([@(0.0.255) const]_[@(0.0.255) char]_`*[*@3 name], [_^Callback^ Callback]_[*@3 Whe
-nFlush])&]
-[s2; Registers name as global configuration key, with flush callback.&]
-[s7; [%-*C@3 name]-|Key.&]
-[s7; [%-*C@3 WhenFlush]-|This callback is called before storing of all 
-configuration keys is performed by SerializeGlobalConfigs `- 
-this is useful when StoreToGlobal has to be explicitly triggered 
-before storing configuration.&]
+[s5;:Upp`:`:RegisterGlobalSerialize`(const char`*`,Upp`:`:Event`<Upp`:`:Stream`&`>`):%- [@(0.0.255) v
+oid]_[* RegisterGlobalSerialize]([@(0.0.255) const]_[@(0.0.255) char]_`*[*@3 name], 
+[_^Upp`:`:Event^ Event]<Stream[@(0.0.255) `&]>_[*@3 WhenSerialize])&]
+[s2; Registers name as global configuration key. [%-*@3 WhenSerialize] 
+is directly used to serialize data, unlike other variants of 
+global config key, where data are stored / retrieved using LoadFromGlobal 
+/ StoreToGlobal.&]
+[s3; &]
+[s4;%- &]
+[s5;:Upp`:`:RegisterGlobalConfig`(const char`*`,Upp`:`:Event`<`>`):%- [@(0.0.255) void]_
+[* RegisterGlobalConfig]([@(0.0.255) const]_[@(0.0.255) char]_`*[*@3 name], 
+[_^Upp`:`:Event^ Event]<>_[*@3 WhenFlush])&]
+[s2; Registers name as global configuration key. [%-*C@3 WhenFlush] 
+ is called before storing of all configuration keys is performed 
+by SerializeGlobalConfigs `- this is useful when StoreToGlobal 
+has to be explicitly triggered before storing configuration.&]
 [s3; &]
 [s4;%- &]
 [s5;:LoadFromGlobal`(T`&`,const char`*`):%- [@(0.0.255) template]_<[@(0.0.255) class]_[*@4 T
 ][@(0.0.255) >]_[@(0.0.255) bool]_[* LoadFromGlobal]([*@4 T][@(0.0.255) `&]_[*@3 x], 
 [@(0.0.255) const]_[@(0.0.255) char]_`*[*@3 name])&]
-[s2; Loads [%-*@3 x] from global configuration key, using smart backup 
-methods provided by [^topic`:`/`/Core`/src`/SerializationUtils`$en`-us`#`:`:Load`(Callback1`<Stream`&`>`,Stream`&`)^ L
-oad].&]
-[s7; [*C@4 T]-|Type of serialized object.&]
-[s7; [%-*C@3 x]-|Reference to serialized object.&]
-[s7; [%-*C@3 name]-|Configuration key.&]
-[s7; [*/ Return value]-|true indicates success.&]
+[s2; Loads [%-*@3 x] from global configuration key [%-*@3 name], using 
+Serialize method of T.&]
 [s3; &]
 [s4;%- &]
 [s5;:StoreToGlobal`(T`&`,const char`*`):%- [@(0.0.255) template]_<[@(0.0.255) class]_[*@4 T
 ][@(0.0.255) >]_[@(0.0.255) void]_[* StoreToGlobal]([*@4 T][@(0.0.255) `&]_[*@3 x], 
 [@(0.0.255) const]_[@(0.0.255) char]_`*[*@3 name])&]
-[s2; Stores [@3 x] to global configuration key.&]
-[s7; [*C@4 T]-|Type of serialized object.&]
-[s7; [%-*C@3 x]-|Reference to serialized object.&]
-[s7; [%-*C@3 name]-|Configuration key.&]
+[s2; Stores [@3 x] to global configuration key [%-*@3 name], using Serialize 
+method of T.&]
+[s3; &]
+[s4;%- &]
+[s5;:Upp`:`:LoadFromGlobal`(Upp`:`:Event`<Upp`:`:Stream`&`>`,const char`*`):%- [@(0.0.255) b
+ool]_[* LoadFromGlobal]([_^Upp`:`:Event^ Event]<Stream[@(0.0.255) `&]>_[*@3 serialize], 
+[@(0.0.255) const]_[@(0.0.255) char]_`*[*@3 name])&]
+[s2; Loads [%-*@3 x] from global configuration key [%-*@3 name], using 
+[%-*@3 serialize] as serialization function.&]
+[s3; &]
+[s4;%- &]
+[s5;:Upp`:`:StoreToGlobal`(Upp`:`:Event`<Upp`:`:Stream`&`>`,const char`*`):%- [@(0.0.255) v
+oid]_[* StoreToGlobal]([_^Upp`:`:Event^ Event]<Stream[@(0.0.255) `&]>_[*@3 x], 
+[@(0.0.255) const]_[@(0.0.255) char]_`*[*@3 name])&]
+[s2; Stores [@3 x] to global configuration key [%-*@3 name], using [%-*@3 serialize] 
+as serialization function.&]
 [s3; &]
 [s4;%- &]
 [s5;:SerializeGlobalConfigs`(Stream`&`):%- [@(0.0.255) void]_[* SerializeGlobalConfigs]([_^Stream^ S
 tream][@(0.0.255) `&]_[*@3 s])&]
-[s2; Serializes all global configuration data from/to single stream.&]
-[s7; [%-*C@3 s]-|Stream.&]
+[s2; Serializes all registered global configuration data from/to 
+single stream.&]
 [s3; &]
-[s0; ]
+[s0; ]]

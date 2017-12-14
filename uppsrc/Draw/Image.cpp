@@ -1,6 +1,6 @@
 #include "Draw.h"
 
-NAMESPACE_UPP
+namespace Upp {
 
 #define LTIMING(x) // RTIMING(x)
 
@@ -42,22 +42,42 @@ void ImageBuffer::Create(int cx, int cy)
 	while(s < e) {
 		s->a = a;
 		a = ~a;
-		s->r = 255;
+		s->r = a ? 255 : 0;
 		s->g = s->b = 0;
 		s++;
 	}
 #endif
 	kind = IMAGE_UNKNOWN;
+	InitAttrs();
+}
+
+void ImageBuffer::InitAttrs()
+{
 	spot2 = hotspot = Point(0, 0);
 	dots = Size(0, 0);
+	resolution = IMAGE_RESOLUTION_NONE;
+}
+
+void ImageBuffer::CopyAttrs(const ImageBuffer& img)
+{
+	SetHotSpot(img.GetHotSpot());
+	Set2ndSpot(img.Get2ndSpot());
+	SetDots(img.GetDots());
+	SetResolution(img.GetResolution());
+}
+
+void ImageBuffer::CopyAttrs(const Image& img)
+{
+	if(img.data)
+		CopyAttrs(img.data->buffer);
+	else
+		InitAttrs();
 }
 
 void ImageBuffer::DeepCopy(const ImageBuffer& img)
 {
 	Create(img.GetSize());
-	SetHotSpot(img.GetHotSpot());
-	Set2ndSpot(img.Get2ndSpot());
-	SetDots(img.GetDots());
+	CopyAttrs(img);
 	memcpy(pixels, img.pixels, GetLength() * sizeof(RGBA));
 }
 
@@ -67,10 +87,8 @@ void ImageBuffer::Set(Image& img)
 		if(img.data->refcount == 1) {
 			size = img.GetSize();
 			kind = IMAGE_UNKNOWN;
-			hotspot = img.GetHotSpot();
-			spot2 = img.Get2ndSpot();
-			dots = img.GetDots();
-			pixels = img.data->buffer.pixels;
+			CopyAttrs(img);
+			pixels = pick(img.data->buffer.pixels);
 			img.Clear();
 		}
 		else {
@@ -105,10 +123,8 @@ ImageBuffer::ImageBuffer(ImageBuffer& b)
 {
 	kind = b.kind;
 	size = b.size;
-	dots = b.dots;
-	pixels = b.pixels;
-	hotspot = b.hotspot;
-	spot2 = b.spot2;
+	pixels = pick(b.pixels);
+	CopyAttrs(b);
 }
 
 void ImageBuffer::SetDPI(Size dpi) 
@@ -120,49 +136,6 @@ void ImageBuffer::SetDPI(Size dpi)
 Size ImageBuffer::GetDPI() 
 {
 	return Size(dots.cx ? int(600.*size.cx/dots.cx) : 0, dots.cy ? int(600.*size.cy/dots.cy) : 0);
-}
-
-void  (Image::Data::*Image::Data::sSysInit)();
-void  (Image::Data::*Image::Data::sSysRelease)();
-int   (Image::Data::*Image::Data::sGetResCount)() const;
-void  (Image::Data::*Image::Data::sPaint)(SystemDraw& w, int x, int y, const Rect& src, Color c);
-
-void Image::Data::InitSystemImage(
-	void  (Image::Data::*fSysInit)(),
-	void  (Image::Data::*fSysRelease)(),
-	int   (Image::Data::*fGetResCount)() const,
-	void  (Image::Data::*fPaint)(SystemDraw& w, int x, int y, const Rect& src, Color c)
-)
-{
-	Image::Data::sSysInit = fSysInit;
-	Image::Data::sSysRelease = fSysRelease;
-	Image::Data::sGetResCount = fGetResCount;
-	Image::Data::sPaint = fPaint;
-}
-
-void Image::Data::SysInit()
-{
-	if(sSysInit)
-		(this->*sSysInit)();
-}
-
-void Image::Data::SysRelease()
-{
-	if(sSysRelease)
-		(this->*sSysRelease)();
-}
-
-int Image::Data::GetResCount() const
-{
-	if(sGetResCount)
-		return (this->*sGetResCount)();
-	return 0;
-}
-
-void Image::Data::Paint(SystemDraw& w, int x, int y, const Rect& src, Color c)
-{
-	if(sPaint)
-		(this->*sPaint)(w, x, y, src, c);
 }
 
 void Image::Set(ImageBuffer& b)
@@ -199,32 +172,6 @@ Image& Image::operator=(const Image& img)
 	return *this;
 }
 
-const RGBA* Image::operator~() const
-{
-	return data ? ~data->buffer : NULL;
-}
-
-Image::operator const RGBA*() const
-{
-	return data ? ~data->buffer : NULL;
-}
-
-const RGBA* Image::operator[](int i) const
-{
-	ASSERT(data);
-	return data->buffer[i];
-}
-
-Size Image::GetSize() const
-{
-	return data ? data->buffer.GetSize() : Size(0, 0);
-}
-
-int Image::GetLength() const
-{
-	return data ? data->buffer.GetLength() : 0;
-}
-
 Point Image::GetHotSpot() const
 {
 	return data ? data->buffer.GetHotSpot() : Point(0, 0);
@@ -240,11 +187,16 @@ Size Image::GetDots() const
 	return data ? data->buffer.GetDots() : Size(0, 0);
 }
 
-Size Image::GetDPI() 
+Size Image::GetDPI() const
 {
 	Size size = GetSize();
 	Size dots = GetDots();
 	return data ?  Size(int(600.*size.cx/dots.cx), int(600.*size.cy/dots.cy)): Size(0, 0);
+}
+
+int Image::GetResolution() const
+{
+	return data ? data->buffer.GetResolution() : IMAGE_RESOLUTION_NONE;
 }
 
 int Image::GetKindNoScan() const
@@ -267,12 +219,6 @@ int Image::GetKind() const
 	return data ? data->GetKind() : IMAGE_EMPTY;
 }
 
-void Image::PaintImage(SystemDraw& w, int x, int y, const Rect& src, Color c) const
-{
-	if(data)
-		data->Paint(w, x, y, src, c);
-}
-
 void Image::Serialize(Stream& s)
 {
 	int version = 0;
@@ -281,12 +227,35 @@ void Image::Serialize(Stream& s)
 	Point p = GetHotSpot();
 	Size dots = GetDots();
 	s % sz % p % dots;
-	int len = sz.cx * sz.cy;
+	int64 len = (int64)sz.cx * (int64)sz.cy * (int64)sizeof(RGBA);
 	if(s.IsLoading())
 		if(len) {
-			ImageBuffer b(sz);
-			if(!s.GetAll(~b, len * sizeof(RGBA)))
-				s.SetError();
+//			if(s.GetPos() + len > s.GetSize()) {
+//				s.SetError();
+//				return;
+//			}
+			// TODO: Add invalid stream protection
+			ImageBuffer b;
+			if(len < 6 * 1024 * 1024) {
+				b.Create(sz);
+				if(!s.GetAll(~b, (int)len)) {
+					s.LoadError();
+					Clear();
+					return;
+				}
+			}
+			else {
+				Huge h;
+				if(!s.GetAll(h, (size_t)len)) {
+					s.LoadError();
+					Clear();
+					return;
+				}
+				b.Create(sz);
+				h.Get(~b);
+			}
+			
+			
 			b.SetDots(dots);
 			b.SetHotSpot(p);
 			*this = b;
@@ -294,11 +263,10 @@ void Image::Serialize(Stream& s)
 		else
 			Clear();
 	else
-		s.Put(~*this, len * sizeof(RGBA));
+		s.Put64(~*this, len);
 }
-
 INITBLOCK {
-	RichValue<Image>::Register();
+	Value::Register<Image>("Image");
 }
 
 bool Image::operator==(const Image& img) const
@@ -334,8 +302,7 @@ Image::Image(Image (*fn)())
 Image::Image(const Value& src)
 {
 	data = NULL;
-	if(!IsNull(src))
-		*this = RawValue<Image>::Extract(src);
+	*this = src.Get<Image>();
 }
 
 Image::Image(ImageBuffer& b)
@@ -350,7 +317,7 @@ Image::~Image()
 }
 
 Image::Image(const Init& init)
-{
+{ // Legacy (before cca 2008) iml support
 	ASSERT(init.info[0] >= 1);
 	Size sz;
 	sz.cx = Peek32le(init.info + 1);
@@ -372,38 +339,28 @@ String Image::ToString() const
 	return String("Image ").Cat() << GetSize();
 }
 
-Link<Image::Data>     Image::Data::ResData[1];
-int                   Image::Data::ResCount;
-
 Image::Data::Data(ImageBuffer& b)
 :	buffer(b)
 {
 	paintcount = 0;
 	paintonly = false;
 	refcount = 1;
+	aux_data = 0;
 	INTERLOCKED {
 		static int64 gserial;
 		serial = ++gserial;
 	}
-	SysInit();
 }
 
-Image::Data::~Data()
+void Image::SetAuxData(uint64 adata)
 {
-	DrawLock __;
-	SysRelease();
-	Unlink();
+	if(data)
+		data->aux_data = adata;
 }
 
-void Image::Data::PaintOnlyShrink()
+uint64 Image::GetAuxData() const
 {
-	if(paintonly) {
-		LTIMING("PaintOnlyShrink");
-		DrawLock __;
-		DropPixels___(buffer);
-		ResCount -= GetResCount();
-		Unlink();
-	}
+	return data ? data->aux_data : 0;
 }
 
 static void sMultiply(ImageBuffer& b, int (*op)(RGBA *t, const RGBA *s, int len))
@@ -428,9 +385,8 @@ static Image sMultiply(const Image& img, int (*op)(RGBA *t, const RGBA *s, int l
 	if(k == IMAGE_OPAQUE || k == IMAGE_EMPTY)
 		return img;
 	ImageBuffer ib(img.GetSize());
-	ib.SetHotSpot(img.GetHotSpot());
-	ib.Set2ndSpot(img.Get2ndSpot());
-	ib.SetKind(Premultiply(~ib, ~img, ib.GetLength()));
+	ib.CopyAttrs(img);
+	ib.SetKind((*op)(~ib, ~img, ib.GetLength()));
 	return ib;
 }
 
@@ -444,181 +400,12 @@ Image Unmultiply(const Image& img)
 	return sMultiply(img, Unmultiply);
 }
 
-void SetPaintOnly___(Image& m)
-{
-	if(m.data && m.data->refcount == 1)
-		m.data->paintonly = true;
-}
-
-void Iml::Init(int n)
-{
-	for(int i = 0; i < n; i++)
-		map.Add(name[i]);
-}
-
-void Iml::Reset()
-{
-	int n = map.GetCount();
-	map.Clear();
-	Init(n);
-}
-
-void Iml::Set(int i, const Image& img)
-{
-	map[i].image = img;
-	map[i].loaded = true;
-}
-
-Image Iml::Get(int i)
-{
-	IImage& m = map[i];
-	if(!m.loaded) {
-		DrawLock __;
-		if(data.GetCount()) {
-			int ii = 0;
-			for(;;) {
-				const Data& d = data[ii];
-				if(i < d.count) {
-					static const char   *cached_data;
-					static Vector<Image> cached;
-					if(cached_data != d.data) {
-						cached_data = d.data;
-						cached = UnpackImlData(String(d.data, d.len));
-						if(premultiply)
-							for(int i = 0; i < cached.GetCount(); i++)
-								cached[i] = Premultiply(cached[i]);
-					}
-					m.image = cached[i];
-					break;
-				}
-				i -= d.count;
-				ii++;
-			}
-		}
-		else
-			m.image = Premultiply(Image(img_init[i]));
-		m.loaded = true;
-	}
-	return m.image;
-}
-
-#ifdef _DEBUG
-int  Iml::GetBinSize() const
-{
-	int size = 0;
-	for(int i = 0; i < map.GetCount(); i++) {
-		const Image::Init& init = img_init[i];
-		size += (int)strlen(name[i]) + 1 + 24;
-		for(int q = 0; q < init.scan_count; q++)
-			size += (int)strlen(init.scans[q]);
-	}
-	return size;
-}
-#endif
-
-Iml::Iml(const Image::Init *img_init, const char **name, int n)
-:	img_init(img_init),
-	name(name)
-{
-#ifdef flagCHECKINIT
-	RLOG("Constructing iml " << *name);
-#endif
-	premultiply = true;
-	Init(n);
-}
-
-void Iml::AddData(const byte *_data, int len, int count)
-{
-	Data& d = data.Add();
-	d.data = (const char *)_data;
-	d.len = len;
-	d.count = count;
-	data.Shrink();
-}
-
-static StaticCriticalSection sImgMapLock;
-
-static VectorMap<String, Iml *>& sImgMap()
-{
-	static VectorMap<String, Iml *> x;
-	return x;
-}
-
-void Register(const char *imageclass, Iml& list)
-{
-#ifdef flagCHECKINIT
-	RLOG("Registering iml " << imageclass);
-#endif
-	INTERLOCKED_(sImgMapLock)
-		sImgMap().GetAdd(imageclass) = &list;
-}
-
-int GetImlCount()
-{
-	int q;
-	INTERLOCKED_(sImgMapLock)
-		q = sImgMap().GetCount();
-	return q;
-}
-
-Iml& GetIml(int i)
-{
-	return *sImgMap()[i];
-}
-
-String GetImlName(int i)
-{
-	DrawLock __;
-	return sImgMap().GetKey(i);
-}
-
-int FindIml(const char *name)
-{
-	DrawLock __;
-	return sImgMap().Find(name);
-}
-
-Image GetImlImage(const char *name)
-{
-	Image m;
-	const char *w = strchr(name, ':');
-	if(w) {
-		DrawLock __;
-		int q = FindIml(String(name, w));
-		if(q >= 0) {
-			Iml& iml = *sImgMap()[q];
-			while(*w == ':')
-				w++;
-			q = iml.Find(w);
-			if(q >= 0)
-				m = iml.Get(q);
-		}
-	}
-	return m;
-}
-
-void SetImlImage(const char *name, const Image& m)
-{
-	const char *w = strchr(name, ':');
-	if(w) {
-		DrawLock __;
-		int q = FindIml(String(name, w));
-		if(q >= 0) {
-			Iml& iml = *sImgMap()[q];
-			while(*w == ':')
-				w++;
-			q = iml.Find(w);
-			if(q >= 0)
-				iml.Set(q, m);
-		}
-	}
-}
-
 String StoreImageAsString(const Image& img)
 {
 	if(img.GetKind() == IMAGE_EMPTY)
 		return Null;
 	int type = img.GetKind() == IMAGE_OPAQUE ? 3 : 4;
+	type |= decode(img.GetResolution(), IMAGE_RESOLUTION_STANDARD, 0x40, IMAGE_RESOLUTION_UHD, 0x80, 0);
 	StringStream ss;
 	ss.Put(type);
 	Size sz = img.GetSize();
@@ -660,6 +447,8 @@ Image  LoadImageFromString(const String& src)
 		return Null;
 	StringStream ss(src);
 	int type = ss.Get();
+	int resolution = decode(type & 0xc0, 0x40, IMAGE_RESOLUTION_STANDARD, 0x80, IMAGE_RESOLUTION_UHD, 0);
+	type &= 0x3f;
 	Size sz;
 	sz.cx = ss.Get16le();
 	sz.cy = ss.Get16le();
@@ -683,6 +472,7 @@ Image  LoadImageFromString(const String& src)
 	ImageBuffer ib(sz);
 	ib.SetHotSpot(p);
 	ib.SetDots(dots);
+	ib.SetResolution(resolution);
 	RGBA *t = ib;
 	const RGBA *e = t + ib.GetLength();
 	const byte *s = data;
@@ -732,4 +522,4 @@ Size GetImageStringDots(const String& src)
 	return sz;
 }
 
-END_UPP_NAMESPACE
+}

@@ -1,4 +1,4 @@
-NAMESPACE_UPP
+namespace Upp {
 
 class PlotterTool;
 
@@ -253,8 +253,8 @@ public:
 		void          Flush();
 		void          AddFirst(Point pt);
 		void          AddNext(Point pt)  { if(vertices.Top() != pt) { vertices.Add(pt); counts.Top()++; } }
-		void          AddNext(const VectPr<PointC& list)0
-		voidl       P AddThiCk(void 0*ln)(Oulput& out, Point a, Point b), Point start, const Vector<Point>& list);
+		void          AddNext(const Vector<Point>& list);
+		void          AddThick(void (*ln)(Output& out, Point a, Point b), Point start, const Vector<Point>& list);
 		Point        *AddSeg(int segments, int counts);
 		Point        *AddSeg(int count);
 
@@ -394,4 +394,4 @@ protected:
 	const PathStyleMap *path_map;
 };
 
-END_UPP_NAMESPACE
+}

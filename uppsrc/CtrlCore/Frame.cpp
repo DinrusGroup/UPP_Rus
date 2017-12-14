@@ -1,6 +1,6 @@
 #include "CtrlCore.h"
 
-NAMESPACE_UPP
+namespace Upp {
 
 #ifdef flagSO
 CtrlFrame::CtrlFrame() {}
@@ -16,7 +16,7 @@ void NullFrameClass::FrameLayout(Rect& r) {}
 void NullFrameClass::FramePaint(Draw& draw, const Rect& r) {}
 void NullFrameClass::FrameAddSize(Size& sz) {}
 
-CtrlFrame& GLOBAL_V(NullFrameClass, NullFrame);
+CtrlFrame& NullFrame() { return Single<NullFrameClass>(); }
 
 #ifdef flagSO
 BorderFrame::BorderFrame(const ColorF *border) : border(border) {}
@@ -44,13 +44,13 @@ void BorderFrame::FramePaint(Draw& draw, const Rect& r)
 		DrawBorder(draw, r.left, r.top, r.Width(), r.Height(), border);
 }
 
-CtrlFrame& GLOBAL_VP(BorderFrame, InsetFrame, (InsetBorder()));
-CtrlFrame& GLOBAL_VP(BorderFrame, ThinInsetFrame, (ThinInsetBorder()));
-CtrlFrame& GLOBAL_VP(BorderFrame, ButtonFrame, (ButtonBorder()));
-CtrlFrame& GLOBAL_VP(BorderFrame, BlackFrame, (BlackBorder()));
-CtrlFrame& GLOBAL_VP(BorderFrame, WhiteFrame, (WhiteBorder()));
-CtrlFrame& GLOBAL_VP(BorderFrame, OutsetFrame, (OutsetBorder()));
-CtrlFrame& GLOBAL_VP(BorderFrame, ThinOutsetFrame, (ThinOutsetBorder()));
+CtrlFrame& InsetFrame() { static BorderFrame h(InsetBorder()); return h; }
+CtrlFrame& ThinInsetFrame() { static BorderFrame h(ThinInsetBorder()); return h; }
+CtrlFrame& ButtonFrame() { static BorderFrame h(ButtonBorder()); return h; }
+CtrlFrame& BlackFrame() { static BorderFrame h(BlackBorder()); return h; }
+CtrlFrame& WhiteFrame() { static BorderFrame h(WhiteBorder()); return h; }
+CtrlFrame& OutsetFrame() { static BorderFrame h(OutsetBorder()); return h; }
+CtrlFrame& ThinOutsetFrame() { static BorderFrame h(ThinOutsetBorder()); return h; }
 
 CH_COLOR(FieldFrameColor, Blend(SColorHighlight, SColorShadow));
 
@@ -122,7 +122,7 @@ CtrlFrame& TopSeparatorFrame()    { return Single<TopSeparatorFrameCls>(); }
 CtrlFrame& RightSeparatorFrame()  { return Single<RightSeparatorFrameCls>(); }
 CtrlFrame& LeftSeparatorFrame()   { return Single<LeftSeparatorFrameCls>(); }
 
-CH_INT(FrameButtonWidth, 17);
+CH_INT(FrameButtonWidth, DPI(17));
 CH_INT(ScrollBarArrowSize, FrameButtonWidth());
 
 void LayoutFrameLeft(Rect& r, Ctrl *ctrl, int cx)
@@ -161,4 +161,4 @@ void LayoutFrameBottom(Rect& r, Ctrl *ctrl, int cy)
 	}
 }
 
-END_UPP_NAMESPACE
+}

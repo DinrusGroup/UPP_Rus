@@ -18,17 +18,7 @@ topic "WithDropChoice";
 [s0;%% &]
 [s2;%% 
 @@image:1350&331
-‚ƒØ€µ€€€ƒËÿ€€€€ø¯œíœ±ÎÛÀÆ˜€óÊ¼ÇßÍ¡Ğ¡ë«ÆŠ††® ²å¨ĞåÁÂ¬¨ÊˆŠÁÂ­¢Â€ˆÕÕ©±µı„È¥…¶£û
-ŒÃ”×½»§ç½ÇöÎèûôç¶±“ ıÜåú ¦ÿù©ˆ­ˆÃŸ¾ü‹ØÓ²ÆÃ€’¡´Ã¨‚Ÿ¯›‹ïÎì”³Ãº½„âÀÎûÿ¢ì”³Ãº„â
-ßºü«ß¶Ú°÷Ø›²¥ï‰ÿª‡ÔÕíı²çÑ²Ãøşù¦ŠèÿèüˆÔ¿©ëìòÖÆŒÂæ‹¾àîú»¼™øèñ³àèÛ¿²á‡ÊääßÕ¦ñ¤
-¼é½éòø“š´ŸÜÇêêÜÿÜˆ’ÜÀÁ®üşä’÷‡úö‡ˆ„Œ×™¯ÉÈú´¢¬œÒ—²—üœ˜…§ì–Ì°Ş¶¯§áüÿ¨³‰ú¾à¨úÓÁ
-Î¥¸ïğÇä”Åß°Âÿßª­‡Ã¤—ºº³ºù¬´Ò×é·ëİ¸Ñ„ÊñÉÖçËÌË°š©ë“ëù÷Å‰Ğ¿¦¸áïÇ¯¬¿”¤…†åºì¥¤ÅªáìĞ
-ø¨ÿÏâ¸ë°ûá£Âñ¥Üõèù¶Ò¡Ü”‡Ÿ·ª’ÙÔ¡âÉêÖü€ÊÇØáÌ“è–âéÒ¡ºàØ•÷“ÓÿËÁø µœÓŒ–È±˜ÊºÄ
-Ş—”ä¼“ı¿Óü£Şğìƒß¡²Ó«›ÌÃâ˜ÊÉîï·ôùø°õúå£…¤èÙáü·Š×Ï¸‹è£¤·Ó¶Úèî®ËŠºİ¯íß¡¾øŒ±ˆ¶Êò
-‹‹õÉÑÆÅû™ ³Œ‡ñƒşôˆÙ”äæç¬æ×–—ÚÛ›Ğ²µ³¯ãÔ”Ûäê¯¿ùıÊêçıŠçÆ­ÓŒ— ¦éÙÙ¡â¡Ò¡ºŒàÒ‡é¿Á†
-¡º„— Ã ğº„— Ãöğ±Ö¸“ÎŠ‡ñÜ€ÊÁ…èÜ€²Á…Ø§€‹Ô°‚‹Ğ¡¸¤ÀÒ‡€¥£÷¿¨èìïí¶é×Ö›‹‹õù
-Á¹Ù¹Ÿ±÷õéûÓ”ıÎûğîà«¹¹®§­ø¬¯É´ˆ¹«—ß¯§˜øÇ²ŠÔÊ‰ÒêëûøÃÆÎÄÜÕï´ßÖì…Çò¥Á©Ô†Ì¹±ˆãÿÏá¯ñ
-‚çæº
+(A9gANQAAAMv/AAAAAHic7ZyxTttAGIDzSjxH36EP0KFrK8YGhi6gMmUoZUFCLJ0oyogKQUItIkIIVVUpDjE1hEilhbaj+0MU1707J2fHds7o+/QNtrGTIH3c5SCmf/mpj4iIQ5++fItYssYOQ4ASoUMogg+frxvvzmyUM0M6hGKQwM77f2yUM0M6hGKQuvyr3zbad1gbMqXvCaqH1NXt/bLRssN4fvmmaP9o/AhUDqnr7PLWxgwd5gsdPmDuO7wZ+Ojxs2hbPzJhh8pkHd9VJvGkaT3p8viTGh8Q3Efq6lzciJLcwMGufmSS94f69oiEjFcZL0l6NCKsHFKXF/wcGIWnbA/MsF62Lyf8fygzDon6YKiPkPrTQSW47/BHZJTfMMJ/Xyqtw6SXOjozOqw0Utfpt+u4UYTK8UnWy8zLMBqp6+v5d0WJUD844e8PR68slI2khYblOiUkxaph7NAof0+B4rjrsHthIx1Ccdx16Hk20iEUB5+3gSqS1CFiyeod1gBKx9jhzJMWYmnSIbrg2A6V95NTf8H4ILUcD9MWSLGYSjpEF5TkvJN9v9MO/KNecGzfoTJTKxtM4phKSW5vt3l4sHX65aOkaNlhfDcKz7iLaKMkt7baaG6uS4pdr23fob54MQ6PiDZKcosLdUlRRkWZoDOMh/GDdIjZlOTm52ZXlpda2xsyNTMv41SU5Oovnr95/WrnfYoOZ8atU4yXICZp2SFiodIhumBSh+k/QQaQHToEF6BDcAE6BBegQ3CBsR3WuJMdiofxEFyADsEF6BBcgA7BBVingAswHoIL0CG4QFKHACWjd6jonezv7TbXVhuLC/X5uVk5HzF39ftTFP1O+/Bgq7m5LqetLC9JtIi5q9+vpxj4RzJUygnSamt7Q0ZOxNzV719W7AXH8iWpVAZMOQ2xCOP/z+EvcWfmOg==)
 &]
 [s0;%% &]
 [s9;%% This template class adds a list of choices, with drop down 
@@ -56,6 +46,17 @@ list and this value was assigned to the base widget.&]
 [s5;:WithDropChoice`:`:AddList`(const Value`&`): [@(0.0.255) void]_[* AddList]([@(0.0.255) c
 onst]_[_^Value^ Value][@(0.0.255) `&]_[*@3 data])&]
 [s2;%% Adds [%-*@3 data] to the drop`-down list.&]
+[s3;%% &]
+[s4; &]
+[s5;:Upp`:`:WithDropChoice`:`:Set`(int`,const Upp`:`:Value`&`): [@(0.0.255) void]_[* Set](
+[@(0.0.255) int]_[*@3 i], [@(0.0.255) const]_[_^Upp`:`:Value^ Value][@(0.0.255) `&]_[*@3 data
+])&]
+[s2;%% Sets entry [%-*@3 i] in drop`-down list to [%-*@3 data] .&]
+[s3;%% &]
+[s4; &]
+[s5;:Upp`:`:WithDropChoice`:`:Remove`(int`): [@(0.0.255) void]_[* Remove]([@(0.0.255) int]_
+[*@3 i])&]
+[s2;%% Removes entry [%-*@3 i] in drop`-down list.&]
 [s3;%% &]
 [s4; &]
 [s5;:WithDropChoice`:`:SerializeList`(Stream`&`): [@(0.0.255) void]_[* SerializeList]([_^Stream^ S
@@ -125,10 +126,31 @@ hoice][@(0.0.255) `&]_[* SetDisplay]([@(0.0.255) const]_[_^Display^ Display][@(0
 [s2;%% Same as SetDisplay(d).SetLineCy(lcy).&]
 [s3;%% &]
 [s4; &]
+[s5;:WithDropChoice`:`:SetConvert`(const Convert`&`): [_^WithDropChoice^ WithDropChoice
+][@(0.0.255) `&]_[* SetConvert]([@(0.0.255) const]_[_^Convert^ Convert][@(0.0.255) `&]_[*@3 d
+])&]
+[s2;%% Sets the Convert to be used with drop`-down list item [%-*@3 i].&]
+[s3;%% &]
+[s4; &]
 [s5;:WithDropChoice`:`:AlwaysDrop`(bool`): [_^WithDropChoice^ WithDropChoice][@(0.0.255) `&
 ]_[* AlwaysDrop]([@(0.0.255) bool]_[*@3 b]_`=_[@(0.0.255) true])&]
 [s2;%% If active, drop button is visible even if the list is empty 
 (client code can fill it using WhenDrop callback).&]
+[s3; &]
+[s4; &]
+[s5;:WithDropChoice`:`:RdOnlyDrop`(bool`): [_^WithDropChoice^ WithDropChoice][@(0.0.255) `&
+]_[* RdOnlyDrop]([@(0.0.255) bool]_[*@3 b]_`=_[@(0.0.255) true])&]
+[s2;%% If active, allows changing value even by drop even if ReadOnly.&]
+[s3;%% &]
+[s4; &]
+[s5;:WithDropChoice`:`:WithWheel`(bool`): [_^WithDropChoice^ WithDropChoice][@(0.0.255) `&
+]_[* WithWheel]([@(0.0.255) bool]_[*@3 b]_`=_[@(0.0.255) true])&]
+[s2;%% Widget reacts to mousewheel. This is active by default.&]
+[s3;%% &]
+[s4; &]
+[s5;:WithDropChoice`:`:NoWithWheel`(`): [_^WithDropChoice^ WithDropChoice][@(0.0.255) `&]_
+[* NoWithWheel]()&]
+[s2;%% Same as WithWheel(false).&]
 [s3; &]
 [s4; &]
 [s5;:WithDropChoice`:`:DropWidth`(int`): [_^WithDropChoice^ WithDropChoice][@(0.0.255) `&
@@ -140,6 +162,17 @@ hoice][@(0.0.255) `&]_[* SetDisplay]([@(0.0.255) const]_[_^Display^ Display][@(0
 ]_[* DropWidthZ]([@(0.0.255) int]_[*@3 w])&]
 [s2;%% Set the width of the drop down list to a value obtained by 
 zooming [%-*@3 w] in accordance with font scaling.&]
+[s3;%% &]
+[s4; &]
+[s5;:WithDropChoice`:`:UpDownKeys`(bool`): [_^WithDropChoice^ WithDropChoice][@(0.0.255) `&
+]_[* UpDownKeys]([@(0.0.255) bool]_[*@3 b]_`=_[@(0.0.255) true])&]
+[s2;%% If active, Up and Down keys cycle through the history. Default 
+is active..&]
+[s3;%% &]
+[s4; &]
+[s5;:WithDropChoice`:`:NoUpDownKeys`(`): [_^WithDropChoice^ WithDropChoice][@(0.0.255) `&
+]_[* NoUpDownKeys]()&]
+[s2;%% Same as UpDownKeys(false).&]
 [s3;%% &]
 [s4; &]
 [s5;:WithDropChoice`:`:GetCount`(`)const: [@(0.0.255) int]_[* GetCount]()_[@(0.0.255) const
@@ -165,4 +198,4 @@ iButton`::Style][@(0.0.255) `&]_[*@3 s])&]
 [s2;%% Sets the frame style to [%-_^MultiButton`:`:Style^ MultiButton`::Style] 
 [%-*@3 s].&]
 [s3;%% &]
-[s0; ]
+[s0; ]]

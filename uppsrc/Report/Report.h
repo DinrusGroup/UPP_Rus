@@ -4,7 +4,7 @@
 #include <CtrlLib/CtrlLib.h>
 #include <RichText/RichText.h>
 
-NAMESPACE_UPP
+namespace Upp {
 
 #define  LAYOUTFILE <Report/Report.lay>
 #include <CtrlCore/lay.h>
@@ -12,15 +12,17 @@ NAMESPACE_UPP
 class Report : public DrawingDraw, public PageDraw {
 public:
 	virtual Draw& Page(int i);
+	virtual Size  GetPageSize() const    { return DrawingDraw::GetPageSize(); } // avoid CLANG warning
+	virtual void  StartPage()            { DrawingDraw::StartPage(); } // avoid CLANG warning
 
 private:
-	Array<Drawing>  page;
-	int             pagei;
-	int             y;
-	String          header, footer;
-	int             headercy, headerspc, footercy, footerspc;
-	Point           mg;
-	One<PrinterJob> printerjob;
+	Array<Drawing>      page;
+	int                 pagei;
+	int                 y;
+	String              header, footer;
+	int                 headercy, headerspc, footercy, footerspc;
+	Point               mg;
+	One<PrinterJob>     printerjob;
 
 	void    Flush();
 	String  FormatHF(const char *s, int pageno);
@@ -28,8 +30,11 @@ private:
 	void    PaintHF(Draw& w, int y, const char *qtf, int i);
 	void    StartPage(int i);
 	void    RestartPage();
+
+	Callback              WhenPage;
 	
 public:
+
 	int                   GetCount()                  { Flush(); return page.GetCount(); }
 	Drawing               GetPage(int i)              { Flush(); return page[i]; }
 	Drawing               operator[](int i)           { return GetPage(i); }
@@ -44,6 +49,7 @@ public:
 	int                   GetY() const                { return y; }
 
 	void                  NewPage()                   { Page(pagei + 1); }
+	void                  RemoveLastPage()            { if(page.GetCount()) page.Drop(); pagei = -1; }
 
 	void                  Put(const RichText& txt, void *context = NULL);
 	void                  Put(const char *qtf);
@@ -61,8 +67,10 @@ public:
 	Report&               SetPageSize(int cx, int cy) { return SetPageSize(Size(cx, cy)); }
 	Report&               Landscape();
 	Report&               Margins(int top, int left)  { mg.y = top; mg.x = left; return *this; }
+	Report&               Margins(int m)              { return Margins(m, m); }
 	Report&               Header(const char *qtf, int spc = 150);
 	Report&               Footer(const char *qtf, int spc = 150);
+	Report&               OnPage(Callback whenpage);
 	Report&               NoHeader()                  { return Header(NULL, 0); }
 	Report&               NoFooter()                  { return Footer(NULL, 0); }
 
@@ -109,6 +117,7 @@ public:
 	ReportView& Numbers(bool nums)    { numbers = nums; Refresh(); return *this; }
 
 	void      Set(Report& report);
+	Report   *Get()                   { return report; }
 	int       GetFirst() const        { return sb / pagesize.cy * pvn; }
 
 	void      ScrollInto(int toppage, int top, int bottompage, int bottom);
@@ -123,6 +132,7 @@ class ReportWindow : public WithReportWindowLayout<TopWindow> {
 	void Numbers() { pg.Numbers(numbers); }
 	void GoPage()  { sw <<= ReportView::PG1; Pages(); }
 	void Pdf();
+	void ShowPage();
 
 	Array<Button>         button;
 	Report               *report;
@@ -141,13 +151,14 @@ public:
 	ReportWindow();
 };
 
-String Pdf(Report& report, bool pdfa = false);
-void   Print(Report& r, PrinterJob& pd, bool center = true);
+String Pdf(Report& report, bool pdfa = false, const PdfSignatureInfo *sign = NULL);
+void   Print(Report& r, PrinterJob& pd);
 bool   DefaultPrint(Report& r, int i, const char *_name = t_("Report"));
 bool   Print(Report& r, int i, const char *name = t_("Report"));
 bool   Perform(Report& r, const char *name = t_("Report"));
 bool   QtfReport(const String& qtf, const char *name = "", bool pagenumbers = false);
+bool   QtfReport(Size pagesize, const String& qtf, const char *name = "", bool pagenumbers = false);
 
-END_UPP_NAMESPACE
+}
 
 #endif

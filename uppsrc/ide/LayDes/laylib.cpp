@@ -168,24 +168,24 @@ Font FontEsc(EscValue v)
 void SIC_StdFont(EscEscape& e)
 {
 	if(e.GetCount() == 1)
-		e = EscFont(StdFont()(e.Int(0)));
+		e = EscFont(StdFont()(Zy(e.Int(0))));
 	else
 		e = EscFont(StdFont());
 }
 
 void SIC_Arial(EscEscape& e)
 {
-	e = EscFont(Arial(e.Int(0)));
+	e = EscFont(Arial(Zy(e.Int(0))));
 }
 
 void SIC_Roman(EscEscape& e)
 {
-	e = EscFont(Roman(e.Int(0)));
+	e = EscFont(Roman(Zy(e.Int(0))));
 }
 
 void SIC_Courier(EscEscape& e)
 {
-	e = EscFont(Courier(e.Int(0)));
+	e = EscFont(Courier(Zy(e.Int(0))));
 }
 
 void SIC_GetImageSize(EscEscape& e)
@@ -197,7 +197,7 @@ void SIC_GetImageSize(EscEscape& e)
 void SIC_GetTextSize(EscEscape& e)
 {
 	if(e.GetCount() < 1 || e.GetCount() > 2)
-		e.ThrowError("неверное число аргументов при вызове 'GetTextSize'");
+		e.ThrowError("wrong number of arguments in call to 'GetTextSize'");
 	e.CheckArray(0);
 	WString text = e[0];
 	Font font = StdFont();
@@ -209,7 +209,7 @@ void SIC_GetTextSize(EscEscape& e)
 void SIC_GetSmartTextSize(EscEscape& e)
 {
 	if(e.GetCount() < 1 || e.GetCount() > 2)
-		e.ThrowError("неверное число аргументов при вызове 'GetTextSize'");
+		e.ThrowError("wrong number of arguments in call to 'GetTextSize'");
 	e.CheckArray(0);
 	String text = ToUtf8((WString)(e[0]));
 	ExtractAccessKey(text, text);
@@ -316,7 +316,7 @@ void EscDraw::DrawRect(EscEscape& e)
 	if(e.GetCount() == 5)
 		w.DrawRect(e.Int(0), e.Int(1), e.Int(2), e.Int(3), ColorEsc(e[4]));
 	else
-		e.ThrowError("неверное число аргументов при вызове 'DrawRect'");
+		e.ThrowError("wrong number of arguments in call to 'DrawRect'");
 }
 
 void EscDraw::DrawLine(EscEscape& e)
@@ -327,13 +327,13 @@ void EscDraw::DrawLine(EscEscape& e)
 	if(e.GetCount() == 6)
 		w.DrawLine(e.Int(0), e.Int(1), e.Int(2), e.Int(3), e.Int(4), ColorEsc(e[5]));
 	else
-		e.ThrowError("неверное число аргументов при вызове 'DrawLine'");
+		e.ThrowError("wrong number of arguments in call to 'DrawLine'");
 }
 
 void EscDraw::DrawText(EscEscape& e)
 {
 	if(e.GetCount() < 3 || e.GetCount() > 6)
-		e.ThrowError("неверное число аргументов при вызове 'DrawText'");
+		e.ThrowError("wrong number of arguments in call to 'DrawText'");
 	int x = e.Int(0);
 	int y = e.Int(1);
 	Font font = StdFont();
@@ -363,14 +363,11 @@ void EscDraw::DrawText(EscEscape& e)
 
 void EscDraw::DrawSmartText(EscEscape& e)
 {
-	if(e.GetCount() < 3 || e.GetCount() > 6)
-		e.ThrowError("неверное число аргументов при вызове 'DrawSmartText'");
+	if(e.GetCount() < 3 || e.GetCount() > 7)
+		e.ThrowError("wrong number of arguments in call to 'DrawSmartText'");
 	int x = e.Int(0);
 	int y = e.Int(1);
 	int ii = 2;
-	int cx = INT_MAX;
-	if(e[ii].IsInt())
-		cx = e.Int(ii++);
 	String text;
 	if(ii < e.GetCount() && e[ii].IsArray())
 		text = ToUtf8((WString)e[ii++]);
@@ -387,13 +384,16 @@ void EscDraw::DrawSmartText(EscEscape& e)
 	Color color = SColorText;
 	if(ii < e.GetCount())
 		color = ColorEsc(e[ii++]);
-	::DrawSmartText(w, x, y, INT_MAX, text, font, color, accesskey);
+	int cx = INT_MAX;
+	if(ii < e.GetCount())
+		cx = e.Int(ii++);
+	::DrawSmartText(w, x, y, cx, text, font, color, accesskey);
 }
 
 void EscDraw::DrawQtf(EscEscape& e)
 {
 	if(e.GetCount() < 5 || e.GetCount() > 6)
-		e.ThrowError("неверное число аргументов при вызове 'DrawQtf'");
+		e.ThrowError("wrong number of arguments in call to 'DrawQtf'");
 //	int zoom = e.Int(0);
 	int x = e.Int(1);
 	int y = e.Int(2);
@@ -407,7 +407,7 @@ void EscDraw::DrawQtf(EscEscape& e)
 void EscDraw::GetTextSize(EscEscape& e)
 {
 	if(e.GetCount() < 1 || e.GetCount() > 2)
-		e.ThrowError("неверное число аргументов при вызове 'GetTextSize'");
+		e.ThrowError("wrong number of arguments in call to 'GetTextSize'");
 	e.CheckArray(0);
 	WString text = e[0];
 	Font font = StdFont();
@@ -434,14 +434,14 @@ void EscDraw::DrawImage(EscEscape& e)
 	if(cnt == 5)
 		w.DrawImage(e.Int(0), e.Int(1), e.Int(2), e.Int(3), GetUscImage((String)e[4]));
 	else
-		e.ThrowError("неверное число аргументов при вызове 'DrawImage'");
+		e.ThrowError("wrong number of arguments in call to 'DrawImage'");
 }
 
 void EscDraw::DrawImageColor(EscEscape& e)
 {
 	int cnt = e.GetCount();
 	if(cnt != 4 && cnt != 5 && cnt != 7)
-		e.ThrowError("неверное число аргументов при вызове 'DrawImageColor'");
+		e.ThrowError("wrong number of arguments in call to 'DrawImageColor'");
 
 	Image img = Colorize(GetUscImage((String)e[cnt - 3]), ColorEsc(e[cnt - 2]), e.Int(cnt - 1));
 

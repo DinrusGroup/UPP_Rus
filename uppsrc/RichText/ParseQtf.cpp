@@ -1,6 +1,6 @@
 #include "RichText.h"
 
-NAMESPACE_UPP
+namespace Upp {
 
 Color (*QTFColor[])() = {
 	Black, LtGray, White, Red, Green, Blue, LtRed, WhiteGray, LtCyan, Yellow
@@ -69,6 +69,7 @@ class RichQtfParser {
 	int    GetNumber();
 	int    ReadNumber();
 	String GetText(int delim);
+	String GetText2(int delim1, int delim2);
 	Color  GetColor();
 	void   Number2(int& a, int& b);
 
@@ -156,6 +157,25 @@ String RichQtfParser::GetText(int delim) {
 	}
 }
 
+String RichQtfParser::GetText2(int delim1, int delim2) {
+	String s;
+	for(;;) {
+		if(*term == '\0') return s;
+		if(*term == '`') {
+			term++;
+			if(*term == '\0') return s;
+			s.Cat(*term++);
+		}
+		else
+		if(term[0] == delim1 && term[1] == delim2) {
+			term += 2;
+			return s;
+		}
+		else
+			s.Cat(*term++);
+	}
+}
+
 int RichQtfParser::ReadNumber()
 {
 	if(!IsDigit(*term))
@@ -222,9 +242,9 @@ void RichQtfParser::EndPart()
 	if(istable) {
 		if(paragraph.GetCount() == 0 && text.GetCount() == 0)
 			if(table.GetCount())
-				table.Top().text.CatPick(tablepart);
+				table.Top().text.CatPick(pick(tablepart));
 			else
-				target.CatPick(tablepart);
+				target.CatPick(pick(tablepart));
 		else {
 			paragraph.part.Clear();
 			text.Clear();
@@ -232,15 +252,14 @@ void RichQtfParser::EndPart()
 	}
 	else {
 		Flush();
-		bool b = paragraph.format.newpage;
-		if(breakpage)
-			paragraph.format.newpage = true;
 		if(table.GetCount())
 			table.Top().text.Cat(paragraph, target.GetStyles());
-		else
+		else {
+			if(breakpage)
+				paragraph.format.newpage = true;
 			target.Cat(paragraph);
-		paragraph.part.Clear();;
-		paragraph.format.newpage = b;
+		}
+		paragraph.part.Clear();
 		SetFormat();
 		breakpage = false;
 	}
@@ -276,24 +295,34 @@ void RichQtfParser::ReadObject()
 		int yd = 0;
 		if(Key('/'))
 			yd = GetNumber();
-		StringBuffer data;
 		while(*term && (byte)*term < 32)
 			term++;
+		String odata;
 		if(Key('`'))
 			while(*term) {
 				if(*term == '`') {
 					term++;
 					if(*term == '`')
-						data.Cat('`');
+						odata.Cat('`');
 					else
 						break;
 				}
 				else
 				if((byte)*term >= 32)
-					data.Cat(*term);
+					odata.Cat(*term);
 				term++;
 			}
 		else
+		if(Key('(')) {
+			const char *b = term;
+			while(*term && *term != ')')
+				term++;
+			odata = Base64Decode(b, term);
+			if(*term == ')')
+				term++;
+		}
+		else {
+			StringBuffer data;
 			for(;;) {
 				while(*term < 32 && *term > 0) term++;
 				if((byte)*term >= ' ' && (byte)*term <= 127 || *term == '\0') break;
@@ -305,7 +334,9 @@ void RichQtfParser::ReadObject()
 					seven >>= 1;
 				}
 			}
-		obj.Read(type, data, sz, context);
+			odata = data;
+		}
+		obj.Read(type, odata, sz, context);
 		obj.KeepRatio(keepratio);
 		obj.SetYDelta(yd);
 	}
@@ -358,6 +389,7 @@ void RichQtfParser::S(int& x, int a)
 void RichQtfParser::TableFormat(bool bw)
 {
 	RichTable& tab = Table();
+	RichTable::Format tabformat = tab.GetFormat();
 	Tab& t = table.Top();
 	int a, b;
 	for(;;) {
@@ -369,19 +401,21 @@ void RichQtfParser::TableFormat(bool bw)
 			Error("Unexpected end of text in cell format");
 		else
 		switch(*term++) {
-		case ' ': return;
+		case ' ':
+			tab.SetFormat(tabformat);
+			return;
 		case ';': break;
-		case '<': tab.format.lm = ReadNumber(); break;
-		case '>': tab.format.rm = ReadNumber(); break;
-		case 'B': tab.format.before = ReadNumber(); break;
-		case 'A': tab.format.after = ReadNumber(); break;
-		case 'f': tab.format.frame = ReadNumber(); break;
+		case '<': tabformat.lm = ReadNumber(); break;
+		case '>': tabformat.rm = ReadNumber(); break;
+		case 'B': tabformat.before = ReadNumber(); break;
+		case 'A': tabformat.after = ReadNumber(); break;
+		case 'f': tabformat.frame = ReadNumber(); break;
 		case '_':
-		case 'F': tab.format.framecolor = GetColor(); break;
-		case 'g': tab.format.grid = ReadNumber(); break;
-		case 'G': tab.format.gridcolor = GetColor(); break;
-		case 'h': tab.format.header = GetNumber(); break;
-		case '~': tab.format.frame = tab.format.grid = 0; break;
+		case 'F': tabformat.framecolor = GetColor(); break;
+		case 'g': tabformat.grid = ReadNumber(); break;
+		case 'G': tabformat.gridcolor = GetColor(); break;
+		case 'h': tabformat.header = GetNumber(); break;
+		case '~': tabformat.frame = tabformat.grid = 0; break;
 		case '^': t.format.align = ALIGN_TOP; break;
 		case '=': t.format.align = ALIGN_CENTER; break;
 		case 'v': t.format.align = ALIGN_BOTTOM; break;
@@ -393,8 +427,15 @@ void RichQtfParser::TableFormat(bool bw)
 		case '@': t.format.color = GetColor(); break;
 		case 'R': t.format.bordercolor = GetColor(); break;
 		case '!': t.format = RichCell::Format(); break;
-		case 'k': t.format.keep = true;
-		case 'K': tab.format.keep = true;
+		case 'o': t.format.round = true; break;
+		case 'k': t.format.keep = true; break;
+		case 'K': tabformat.keep = true; break;
+		case 'P': tabformat.newpage = true; break;
+		case 'T':
+			tabformat.newhdrftr = true;
+			tabformat.header_qtf = GetText2('^', '^');
+			tabformat.footer_qtf = GetText2('^', '^');
+			break;
 		case 'a':
 			Number2(a, b);
 			if(a >= 0)
@@ -402,6 +443,11 @@ void RichQtfParser::TableFormat(bool bw)
 			if(b >= 0)
 				t.format.margin.left = t.format.margin.right = t.format.margin.top = t.format.margin.bottom = b;
 			break; //!!cell all lines
+		case '*':
+			tabformat.frame = tabformat.grid =
+			t.format.border.left = t.format.border.right = t.format.border.top = t.format.border.bottom =
+			t.format.margin.left = t.format.margin.right = t.format.margin.top = t.format.margin.bottom = 0;
+			break;
 		case '-': t.hspan = GetNumber(); break;
 		case '+':
 		case '|': t.vspan = GetNumber(); break;
@@ -426,7 +472,7 @@ void RichQtfParser::FinishCell()
 		i = b.cell / t.GetColumns();
 		j = b.cell % t.GetColumns();
 	}
-	t.SetPick(i, j, b.text);
+	t.SetPick(i, j, pick(b.text));
 	b.text.Clear();
 	t.SetFormat(i, j, b.format);
 	t.SetSpan(i, j, b.vspan, b.hspan);
@@ -438,12 +484,15 @@ void RichQtfParser::FinishCell()
 		b.hspan = oldtab;
 	}
 	b.format.keep = false;
+	b.format.round = false;
 }
 
 void RichQtfParser::FinishTable()
 {
 	FinishCell();
-	tablepart = Table();
+	while(table.Top().cell % Table().GetColumns())
+		FinishCell();
+	tablepart = pick(Table());
 	istable = true;
 	table.Drop();
 }
@@ -471,7 +520,7 @@ void RichQtfParser::FinishOldTable()
 	if(h.GetCount() == 0)
 		Error("table");
 	Sort(h);
-	pos = h;
+	pos = pick(h);
 	pos.Add(10000);
 	RichTable tab;
 	tab.SetFormat(t.GetFormat());
@@ -495,9 +544,9 @@ void RichQtfParser::FinishOldTable()
 	}
 	table.Drop();
 	if(table.GetCount())
-		table.Top().text.CatPick(tab);
+		table.Top().text.CatPick(pick(tab));
 	else
-		target.CatPick(tab);
+		target.CatPick(pick(tab));
 	oldtab = false;
 }
 
@@ -517,6 +566,21 @@ void RichQtfParser::Cat(int chr)
 }
 
 extern bool s_nodeqtf[128];
+
+int GetRichTextScreenStdFontHeight()
+{
+	static int gh = 67;
+	ONCELOCK {
+		for(int i = 0; i < 1000; i++) {
+			int h = GetRichTextStdScreenZoom() * i;
+			if(h > 0 && StdFont(h).GetCy() == StdFont().GetCy()) {
+				gh = i;
+				break;
+			}
+		}
+	}
+	return gh;
+}
 
 void RichQtfParser::Parse(const char *qtf, int _accesskey)
 {
@@ -629,6 +693,10 @@ void RichQtfParser::Parse(const char *qtf, int _accesskey)
 						}
 						break;
 					}
+				case 'g':
+					format.Face(Font::STDFONT);
+					format.Height(GetRichTextScreenStdFontHeight());
+					break;
 				default:
 					if(c >= '0' && c <= '9') {
 						format.Height(QTFFontHeight[c - '0']);
@@ -650,6 +718,7 @@ void RichQtfParser::Parse(const char *qtf, int _accesskey)
 					case 'K': format.keepnext = !format.keepnext; break;
 					case 'H': format.ruler = GetNumber(); break;
 					case 'h': format.rulerink = GetColor(); break;
+					case 'L': format.rulerstyle = GetNumber(); break;
 					case 'Q': format.orphan = !format.orphan; break;
 					case 'n': format.before_number = GetText(';'); break;
 					case 'm': format.after_number = GetText(';'); break;
@@ -713,7 +782,14 @@ void RichQtfParser::Parse(const char *qtf, int _accesskey)
 						}
 						break;
 					case 't':
-						if(IsDigit(*term)) //temporary fix... :(
+						if(*term == 'P') {
+							term++;
+							format.newhdrftr = true;
+							format.header_qtf = GetText2('^', '^');
+							format.footer_qtf = GetText2('^', '^');
+						}
+						else
+						if(IsDigit(*term))
 							format.tabsize = ReadNumber();
 						break;
 					case '~': {
@@ -766,7 +842,15 @@ void RichQtfParser::Parse(const char *qtf, int _accesskey)
 			Table().AddColumn(r);
 			while(Key(':'))
 				Table().AddColumn(ReadNumber());
+			if(breakpage) {
+				RichTable& tab = Table();
+				RichTable::Format tabformat = tab.GetFormat();
+				tabformat.newpage = true;
+				tab.SetFormat(tabformat);
+				breakpage = false;
+			}
 			TableFormat();
+			SetFormat();
 		}
 		else
 		if(Key2('}')) {
@@ -823,6 +907,12 @@ void RichQtfParser::Parse(const char *qtf, int _accesskey)
 				term++;
 			SetFormat();
 		}
+		else
+		if(Key2('^', 'H'))
+			target.SetHeaderQtf(GetText2('^', '^'));
+		else
+		if(Key2('^', 'F'))
+			target.SetFooterQtf(GetText2('^', '^'));
 		else
 		if(Key2('{', ':')) {
 			Flush();
@@ -963,6 +1053,19 @@ void RichQtfParser::Parse(const char *qtf, int _accesskey)
 	FlushStyles();
 }
 
+bool ParseQTF(RichText& txt, const char *qtf, int accesskey, void *context)
+{
+	RichQtfParser p(context);
+	try {
+		p.Parse(qtf, accesskey);
+	}
+	catch(RichQtfParser::Exc) {
+		return false;
+	}
+	txt = pick(p.target);
+	return true;
+}
+
 RichText ParseQTF(const char *qtf, int accesskey, void *context)
 {
 	RichQtfParser p(context);
@@ -970,7 +1073,7 @@ RichText ParseQTF(const char *qtf, int accesskey, void *context)
 		p.Parse(qtf, accesskey);
 	}
 	catch(RichQtfParser::Exc) {}
-	return p.target;
+	return pick(p.target);
 }
 
 String QtfRichObject::ToString() const
@@ -982,4 +1085,4 @@ QtfRichObject::QtfRichObject(const RichObject& o)
 	: obj(o)
 {}
 
-END_UPP_NAMESPACE
+}

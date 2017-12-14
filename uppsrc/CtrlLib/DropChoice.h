@@ -14,7 +14,6 @@ protected:
 		
 		virtual void Deactivate() { table->PopupDeactivate(); }
 		virtual void CancelMode() { table->PopupCancelMode(); }
-		
 	};
 
 	int          droplines;
@@ -29,8 +28,8 @@ public:
 	void         PopUp(Ctrl *owner, int width);
 	void         PopUp(Ctrl *owner);
 
-	Callback     WhenCancel;
-	Callback     WhenSelect;
+	Event<>      WhenCancel;
+	Event<>      WhenSelect;
 
 	PopUpTable&  SetDropLines(int _droplines)          { droplines = _droplines; return *this; }
 
@@ -60,6 +59,7 @@ private:
 	bool               dropfocus;
 	bool               notnull;
 	bool               alwaysdrop;
+	bool               usewheel;
 
 	void          Select();
 	void          Cancel();
@@ -72,9 +72,9 @@ private:
 public:
 	typedef MultiButton::Style Style;
 
-	Callback      WhenDrop;
+	Event<>       WhenDrop;
 
-	DropList&     Add(const Value& key, const Value& value);
+	DropList&     Add(const Value& key, const Value& value, bool enable = true);
 	DropList&     Add(const Value& value)         { return Add(value, value); }
 	void          Remove(int i);
 	void          ClearList();
@@ -114,9 +114,11 @@ public:
 	PopUpTable&   ListObject()                          { return list; }
 
 	DropList&     SetDropLines(int d)                   { list.SetDropLines(d); return *this; }
+	DropList&     SetValueConvert(const Convert& cv);
 	DropList&     SetConvert(const Convert& cv);
 	DropList&     SetDisplay(int i, const Display& d);
 	DropList&     SetDisplay(const Display& d);
+	DropList&     SetLineCy(int i, int lcy)             { list.SetLineCy(i, lcy); return *this; }
 	DropList&     SetLineCy(int lcy)                    { list.SetLineCy(lcy); return *this; }
 	DropList&     SetDisplay(const Display& d, int lcy);
 	DropList&     ValueDisplay(const Display& d);
@@ -128,6 +130,8 @@ public:
 	DropList&     NotNull(bool b = true)                { notnull = b; return *this; }
 	DropList&     DropWidth(int w)                      { dropwidth = w; return *this; }
 	DropList&     DropWidthZ(int w)                     { dropwidth = HorzLayoutZoom(w); return *this; }
+	DropList&     Wheel(bool b = true)                  { usewheel = b; return *this; }
+	DropList&     NoWheel()                             { return Wheel(false); }
 
 	DropList&     SetScrollBarStyle(const ScrollBar::Style& s) { list.SetScrollBarStyle(s); return *this; }
 
@@ -135,9 +139,17 @@ public:
 	virtual ~DropList();
 };
 
-void Add(DropList& list, const VectorMap<Value, Value>& values);
-void Add(MapConvert& convert, const VectorMap<Value, Value>& values);
-void Add(DropList& list, const MapConvert& convert);
+void Append(DropList& list, const VectorMap<Value, Value>& values);
+void Append(DropList& list, const VectorMap<int, String>& values);
+void Append(MapConvert& convert, const VectorMap<Value, Value>& values);
+void Append(MapConvert& convert, const VectorMap<int, String>& values);
+void Append(DropList& list, const MapConvert& convert);
+
+void operator*=(DropList& list, const VectorMap<Value, Value>& values);
+void operator*=(DropList& list, const VectorMap<int, String>& values);
+void operator*=(MapConvert& convert, const VectorMap<Value, Value>& values);
+void operator*=(MapConvert& convert, const VectorMap<int, String>& values);
+void operator*=(DropList& list, const MapConvert& convert);
 
 class DropChoice : public MultiButtonFrame {
 public:
@@ -149,6 +161,8 @@ protected:
 	bool               appending;
 	bool               dropfocus;
 	bool               always_drop;
+	bool               updownkeys;
+	bool               rodrop;
 
 	void        Select();
 	void        Drop();
@@ -159,13 +173,16 @@ protected:
 	typedef DropChoice CLASSNAME;
 
 public:
-	Callback    WhenDrop;
-	Callback    WhenSelect;
+	Event<>     WhenDrop;
+	Event<>     WhenSelect;
 
 	bool        DoKey(dword key);
+	void        DoWheel(int zdelta);
 
 	void        Clear();
 	void        Add(const Value& data);
+	void        Set(int i, const Value& data)         { list.Set(i, 0, data); }
+	void        Remove(int i);
 	void        SerializeList(Stream& s);
 	
 	int         GetCount() const                      { return list.GetCount(); }
@@ -187,11 +204,12 @@ public:
 	DropChoice& SetDropLines(int n)                   { list.SetDropLines(n); return *this; }
 	DropChoice& Appending()                           { appending = true; return *this; }
 	DropChoice& AlwaysDrop(bool e = true);
+	DropChoice& RdOnlyDrop(bool e = true)             { rodrop = e; return *this; }
 	DropChoice& NoDropFocus()                         { dropfocus = false; return *this; }
 
 	DropChoice& DropWidth(int w)                      { dropwidth = w; return *this; }
 	DropChoice& DropWidthZ(int w)                     { dropwidth = HorzLayoutZoom(w); return *this; }
-
+	DropChoice& UpDownKeys(bool b = true)             { updownkeys = b; return *this; }
 
 	DropChoice& SetScrollBarStyle(const ScrollBar::Style& s) { list.SetScrollBarStyle(s); return *this; }
 
@@ -206,6 +224,7 @@ public:
 	virtual bool   Key(dword key, int repcnt);
 	virtual void   MouseEnter(Point p, dword keyflags);
 	virtual void   MouseLeave();
+	virtual void   MouseWheel(Point p, int zdelta, dword keyflags);
 	virtual void   GotFocus();
 	virtual void   LostFocus();
 
@@ -213,16 +232,19 @@ public:
 protected:
 	DropChoice      select;
 	String          appends;
+	bool            withwheel;
 
 	void            DoWhenSelect();
 	void            DoWhenDrop()                          { WhenDrop(); }
 
 public:
-	Callback        WhenDrop;
-	Callback        WhenSelect;
+	Event<>         WhenDrop;
+	Event<>         WhenSelect;
 
 	void            ClearList()                           { select.Clear(); }
 	void            AddList(const Value& data)            { select.Add(data); }
+	void            Set(int i, const Value& data)         { select.Set(i, data); }
+	void            Remove(int i)                         { select.Remove(i); }
 	void            SerializeList(Stream& s)              { select.SerializeList(s); }
 
 	int             GetCount() const                      { return select.GetCount(); }
@@ -238,7 +260,7 @@ public:
 	const MultiButton::Style& StyleDefault()              { return select.StyleFrame(); }
 	WithDropChoice& SetStyle(const MultiButton::Style& s) { select.SetStyle(s); return *this; }
 
-	WithDropChoice& Dropping(bool b = true)               { select.Show(b); return *this; }
+	WithDropChoice& Dropping(bool b = true)               { select.MainButton().Show(b); return *this; }
 	WithDropChoice& NoDropping()                          { return Dropping(false); }
 	WithDropChoice& NoDropFocus()                         { select.NoDropFocus(); return *this; }
 	WithDropChoice& Appending(const String& s = ", ")     { appends = s; select.Appending(); return *this; }
@@ -249,9 +271,13 @@ public:
 	WithDropChoice& SetDisplay(const Display& d, int lcy) { select.SetDisplay(d, lcy); return *this; }
 	WithDropChoice& SetConvert(const Convert& d)          { select.SetConvert(d); return *this; }
 	WithDropChoice& AlwaysDrop(bool b = true)             { select.AlwaysDrop(b); return *this; }
-
+	WithDropChoice& RdOnlyDrop(bool b = true)             { select.RdOnlyDrop(b); return *this; }
+	WithDropChoice& WithWheel(bool b = true)              { withwheel = b; return *this; }
+	WithDropChoice& NoWithWheel()                         { return WithWheel(false); }
 	WithDropChoice& DropWidth(int w)                      { select.DropWidth(w); return *this; }
 	WithDropChoice& DropWidthZ(int w)                     { select.DropWidthZ(w); return *this; }
+	WithDropChoice& UpDownKeys(bool b = true)             { select.UpDownKeys(b); return *this; }
+	WithDropChoice& NoUpDownKeys()                        { return UpDownKeys(false); }
 
 	WithDropChoice();
 };
@@ -262,12 +288,20 @@ WithDropChoice<T>::WithDropChoice() {
 	select.WhenDrop = callback(this, &WithDropChoice::DoWhenDrop);
 	select.WhenSelect = callback(this, &WithDropChoice::DoWhenSelect);
 	appends = String::GetVoid();
+	withwheel = true;
 	SetStyle(StyleDefault());
 }
 
 template <class T>
 bool WithDropChoice<T>::Key(dword key, int repcnt) {
 	return select.DoKey(key) || T::Key(key, repcnt);
+}
+
+template <class T>
+void WithDropChoice<T>::MouseWheel(Point p, int zdelta, dword keyflags)
+{
+	if(withwheel)
+		select.DoWheel(zdelta);
 }
 
 template <class T>

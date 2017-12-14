@@ -1,11 +1,11 @@
 #include "CtrlCore.h"
 
-NAMESPACE_UPP
+namespace Upp {
 
-#define LLOG(x)  // DLOG(x)
+#define LLOG(x)   // DLOG(x)
 
 #define IMAGECLASS CtrlCoreImg
-#define IMAGEFILE <CtrlCore/Ctrl.iml>
+#define IMAGEFILE <CtrlCore/CtrlCore.iml>
 #include <Draw/iml_source.h>
 
 static bool StdDisplayErrorFn(const Value& e)
@@ -15,11 +15,7 @@ static bool StdDisplayErrorFn(const Value& e)
 		return false;
 	String s = GetErrorText(e);
 #ifdef PLATFORM_WIN32
-#ifdef PLATFORM_WINCE
-	MessageBox(NULL, ToSystemCharset(s), ToSystemCharset(GetExeTitle()), MB_OK | MB_ICONQUESTION);
-#else
 	MessageBox(NULL, s, GetExeTitle(), MB_OK | MB_ICONQUESTION);
-#endif
 #else
 	fputs(String().Cat() << GetExeTitle() << ": " << s << '\n', stderr);
 #endif
@@ -51,6 +47,8 @@ int  Ctrl::OverPaint() const                        { return 0; }
 
 void Ctrl::Activate()                               {}
 void Ctrl::Deactivate()                             {}
+void Ctrl::DeactivateBy(Ctrl *)                     {}
+
 void Ctrl::CancelMode()                             {}
 void Ctrl::MouseEnter(Point p, dword keyflags)      {}
 void Ctrl::LeftDown(Point p, dword keyflags)        {}
@@ -61,7 +59,6 @@ void Ctrl::MouseMove(Point p, dword keyflags)       {}
 void Ctrl::LeftUp(Point, dword keyflags)            {}
 void Ctrl::RightUp(Point p, dword keyflags)         {}
 void Ctrl::MouseLeave()                             {}
-void Ctrl::MouseWheel(Point p, int zd, dword kf)    {}
 void Ctrl::LeftDrag(Point p, dword keyflags)        {}
 void Ctrl::LeftHold(Point p, dword keyflags)        {}
 void Ctrl::RightDrag(Point p, dword keyflags)       {}
@@ -187,9 +184,9 @@ void Ctrl::StateDeep(int reason)
 	GuiLock __;
 	if(destroying)
 		return;
-	State(reason);
 	for(Ctrl *q = GetFirstChild(); q; q = q->GetNext())
 		q->StateDeep(reason);
+	State(reason);
 }
 
 void Ctrl::StateH(int reason)
@@ -233,6 +230,28 @@ void   Ctrl::Serialize(Stream& s)
 		SetData(x);
 	for(Ctrl *q = GetFirstChild(); q; q = q->GetNext())
 		q->Serialize(s);
+}
+
+void Ctrl::Jsonize(JsonIO& jio)
+{
+	GuiLock __;
+	Value x;
+	if(jio.IsStoring())
+		x = GetData();
+	x.Jsonize(jio);
+	if(jio.IsLoading())
+		SetData(x);
+}
+
+void Ctrl::Xmlize(XmlIO& xio)
+{
+	GuiLock __;
+	Value x;
+	if(xio.IsStoring())
+		x = GetData();
+	x.Xmlize(xio);
+	if(xio.IsLoading())
+		SetData(x);
 }
 
 void Ctrl::Updated() {}
@@ -399,7 +418,7 @@ String Ctrl::GetInfoPart(int i) const
 
 String Ctrl::GetTip() const
 {
-	return GetInfoPart(0);;
+	return GetInfoPart(0);
 }
 
 String Ctrl::GetHelpLine() const
@@ -439,8 +458,10 @@ void Ctrl::Update() {
 	Updated();
 }
 
-void Ctrl::Action() {
-	WhenAction();
+void Ctrl::Action()
+{
+	Event<> h = WhenAction; // we make copy of action just in case widget is destroyed during the call
+	h();
 }
 
 void Ctrl::UpdateAction() {
@@ -512,7 +533,7 @@ void Ctrl::Dump(Stream& s) const {
 	LG("Rect:   " << GetRect());
 	LG("View:   " << GetView());
 	for(int i = 0; i < frame.GetCount(); i++)
-		LG("Frame " << i << ": " << typeid(*frame[i].frame).name() << " - " << frame[i].view);
+		LG("Frame " << i << ": " << typeid(decltype(*frame[i].frame)).name() << " - " << frame[i].view);
 	LG("Data: " << GetData().ToString());
 	if(firstchild) {
 		LG("Children");
@@ -547,7 +568,10 @@ bool Ctrl::IsOcxChild()
 }
 
 Ctrl::Ctrl() {
-	GuiLock __;
+	InstallPanicBox();
+	ASSERT_(IsMainRunning(), "GUI widgets cannot be global variables");
+	ASSERT_(ThreadHasGuiLock(), "GUI widgets cannot be initialized in non-main thread without GuiLock");
+	GuiLock __; // Beware: Even if we have ThreadHasGuiLock ASSERT, we still can be the main thread!
 	LLOG("Ctrl::Ctrl");
 	GuiPlatformConstruct();
 	destroying = false;
@@ -561,7 +585,9 @@ Ctrl::Ctrl() {
 	inframe = false;
 	ignoremouse = transparent = false;
 	caretcx = caretcy = caretx = carety = 0;
-	SetRect(Rect(0, 0, 0, 0));
+	pos.x = PosLeft(0, 0);
+	pos.y = PosTop(0, 0);
+	rect = Rect(0, 0, 0, 0);
 	inloop = popup = isopen = false;
 	modify = false;
 	unicode = false;
@@ -577,6 +603,8 @@ void Ctrl::DoRemove() {
 	GuiLock __;
 	if(!IsOpen()) return;
 	ReleaseCapture();
+	if(HasChildDeep(captureCtrl))
+		captureCtrl->ReleaseCapture();
 	CancelModeDeep();
 	if(HasChildDeep(mouseCtrl) || mouseCtrl == this)
 		mouseCtrl = NULL;
@@ -634,7 +662,7 @@ void Ctrl::Close()
 	if(parent) return;
 	StateH(CLOSE);
 	bool vis = visible;
-	UsrLogT(3, "CLOSE " + Desc(this));
+	USRLOG("   CLOSE " + Desc(this));
 	WndDestroy();
 	visible = vis;
 	popup = false;
@@ -652,9 +680,9 @@ Ctrl::~Ctrl() {
 	KillTimeCallbacks(this, (byte *) this + sizeof(Ctrl));
 }
 
-GLOBAL_VAR(Vector<Ctrl::MouseHook>, Ctrl::mousehook);
-GLOBAL_VAR(Vector<Ctrl::KeyHook>,   Ctrl::keyhook);
-GLOBAL_VAR(Vector<Ctrl::StateHook>, Ctrl::statehook);
+Vector<Ctrl::MouseHook>& Ctrl::mousehook() { static Vector<Ctrl::MouseHook> h; return h; }
+Vector<Ctrl::KeyHook>&   Ctrl::keyhook() { static Vector<Ctrl::KeyHook> h; return h; }
+Vector<Ctrl::StateHook>& Ctrl::statehook() { static Vector<Ctrl::StateHook> h; return h; }
 
 void Ctrl::InstallMouseHook(MouseHook hook)
 {
@@ -695,7 +723,7 @@ void Ctrl::DeinstallStateHook(StateHook hook)
 	if(q >= 0) statehook().Remove(q);
 }
 
-static char sZoomText[] = "OK Отмена Выход Повторить";
+static char sZoomText[] = "OK Cancel Exit Retry";
 
 const char *Ctrl::GetZoomText()
 {
@@ -703,12 +731,15 @@ const char *Ctrl::GetZoomText()
 	return sZoomText;
 }
 
+Size Ctrl::Bsize;
 Size Ctrl::Dsize;
 Size Ctrl::Csize;
+bool Ctrl::IsNoLayoutZoom;
 
 void InitRichTextZoom()
 {
-	SetRichTextStdScreenZoom(Ctrl::HorzLayoutZoom(96), 600);
+	Size h = 96 * Ctrl::Bsize / Ctrl::Dsize;
+	SetRichTextStdScreenZoom(min(h.cx, h.cy), 600);
 	Ctrl::ReSkin();
 }
 
@@ -718,6 +749,7 @@ void Ctrl::Csizeinit()
 	if(Csize.cx == 0 || Dsize.cx == 0) {
 		if(Csize.cx == 0)
 			Csize = GetTextSize(sZoomText, StdFont());
+		Bsize = Csize;
 		if(Dsize.cx == 0)
 			Dsize = Size(99, 13);
 		Csize.cx = max(Csize.cx, Dsize.cx);
@@ -731,12 +763,14 @@ void Ctrl::SetZoomSize(Size sz, Size bsz)
 	GuiLock __;
 	Csize = sz;
 	Dsize = bsz;
+	IsNoLayoutZoom = false;
 	ReSkin();
 }
 
 void Ctrl::NoLayoutZoom()
 {
 	GuiLock __;
+	IsNoLayoutZoom = true;
 	Csize = Dsize = Size(1, 1);
 	ReSkin();
 }
@@ -775,6 +809,19 @@ Size Ctrl::LayoutZoom(Size sz)
 Font FontZ(int face, int height)
 {
 	return Font(face, Ctrl::VertLayoutZoom(height));
+}
+
+bool ApplicationUHDEnabled = true;
+
+void Ctrl::SetUHDEnabled(bool set)
+{
+	ApplicationUHDEnabled = set;
+	ReSkin();
+}
+
+bool Ctrl::IsUHDEnabled()
+{
+	return ApplicationUHDEnabled;
 }
 
 Font StdFontZ(int height)   { return FontZ(Font::STDFONT, height); }
@@ -914,7 +961,7 @@ void Ctrl::ReSkin()
 		(*s_chdefault)();
 	if(skin)
 		(*skin)();
-	Csize.cx = Dsize.cx = 0;
+	Csize.cx = Dsize.cx = IsNoLayoutZoom;
 	Csizeinit();
 	ChFinish();
 	Vector<Ctrl *> ctrl = GetTopCtrls();
@@ -923,13 +970,6 @@ void Ctrl::ReSkin()
 		ctrl[i]->RefreshFrame();
 	}
 	lock--;
-}
-
-void Ctrl::Xmlize(XmlIO xml)
-{
-	Value v = GetData();
-	UPP::Xmlize(xml, v);
-	SetData(v);
 }
 
 CH_INT(GUI_GlobalStyle, GUISTYLE_CLASSIC);
@@ -941,5 +981,66 @@ CH_INT(GUI_AltAccessKeys, 1);
 CH_INT(GUI_AKD_Conservative, 0);
 CH_INT(GUI_DragDistance, 4);
 CH_INT(GUI_DblClickTime, 500);
+CH_INT(GUI_WheelScrollLines, 3);
 
-END_UPP_NAMESPACE
+String Ctrl::Name0() const {
+	GuiLock __;
+	String s = CppDemangle(typeid(*this).name());
+	const Ctrl *q = this;
+	String path;
+	while(q) {
+		String id = q->GetLayoutId();
+		if(id.GetCount())
+			path = '.' + q->GetLayoutId() + path;
+		q = q->parent;
+	}
+	s << ' ' << path;
+#ifdef CPU_64
+	s << " : 0x" + FormatIntHex(this);
+#else
+	s << " : " + Format("0x%x", (int) this);
+#endif
+	if(IsChild())
+		s << " (parent " << CppDemangle(typeid(*parent).name()) << ")";
+	return s;
+}
+
+String Ctrl::Name(Ctrl *ctrl)
+{
+	return Upp::Name(ctrl);
+}
+
+void   Ctrl::EndLoop()
+{
+	GuiLock __;
+	inloop = false;
+	SysEndLoop();
+}
+
+void   Ctrl::EndLoop(int code)
+{
+	GuiLock __;
+	ASSERT(!parent);
+	exitcode = code;
+	EndLoop();
+}
+
+bool   Ctrl::InLoop() const
+{
+	GuiLock __;
+	return inloop;
+}
+
+bool   Ctrl::InCurrentLoop() const
+{
+	GuiLock __;
+	return GetLoopCtrl() == this;
+}
+
+int    Ctrl::GetExitCode() const
+{
+	GuiLock __;
+	return exitcode;
+}
+
+}

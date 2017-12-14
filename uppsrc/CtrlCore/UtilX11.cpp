@@ -2,7 +2,7 @@
 
 #ifdef GUI_X11
 
-NAMESPACE_UPP
+namespace Upp {
 
 Vector<Rect> RectRgn(const Rect& r)
 {
@@ -94,6 +94,10 @@ void DrawDragRect(Ctrl& q, const Rect& rect1, const Rect& rect2, const Rect& cli
 	DrawDragRect(w, rect1, rect2, clip, n, color, sGetAniPat(pattern, animation));
 }
 
-END_UPP_NAMESPACE
+void FinishDragRect(Ctrl& q)
+{
+}
+
+}
 
 #endif

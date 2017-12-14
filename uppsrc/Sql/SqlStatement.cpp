@@ -1,6 +1,6 @@
 #include "Sql.h"
 
-NAMESPACE_UPP
+namespace Upp {
 
 String SqlStatement::Get(int dialect) const {
 	ASSERT(dialect == ORACLE || dialect == SQLITE3 || dialect == MY_SQL || dialect == MSSQL ||
@@ -18,13 +18,13 @@ String SqlStatement::Get() const
 SqlSelect& SqlSelect::SetOp(const SqlSelect& s2, const char *op)
 {
 	String q;
-	q << SqlCase(SQLITE3, "")("((")
+	q << SqlCode(SQLITE3, "")("((")
 	  << text
-	  << SqlCase(SQLITE3, "")(")")
+	  << SqlCode(SQLITE3, "")(")")
 	  << op
-	  << SqlCase(SQLITE3, "")("(")
+	  << SqlCode(SQLITE3, "")("(")
 	  << s2.text
-	  << SqlCase(SQLITE3, "")("))")
+	  << SqlCode(SQLITE3, "")("))")
 	;
 	text = q;
 	return *this;
@@ -34,12 +34,17 @@ SqlSelect& SqlSelect::operator|=(const SqlSelect& s2) {
 	return SetOp(s2, " union ");
 }
 
+SqlSelect& SqlSelect::operator+=(const SqlSelect& s2)
+{
+	return SetOp(s2, " union all ");
+}
+
 SqlSelect& SqlSelect::operator&=(const SqlSelect& s2) {
 	return SetOp(s2, " intersect ");
 }
 
 SqlSelect& SqlSelect::operator-=(const SqlSelect& s2) {
-	return SetOp(s2, SqlCase(MSSQL|PGSQL|SQLITE3," except ")(" minus "));
+	return SetOp(s2, SqlCode(MSSQL|PGSQL|SQLITE3," except ")(" minus "));
 }
 
 SqlSelect operator|(const SqlSelect& s1, const SqlSelect& s2) {
@@ -60,15 +65,16 @@ SqlSelect operator-(const SqlSelect& s1, const SqlSelect& s2) {
 	return s;
 }
 
+SqlSelect operator+(const SqlSelect& s1, const SqlSelect& s2)
+{
+	SqlSelect s = s1;
+	s += s2;
+	return s;
+}
+
 SqlSelect& SqlSelect::Where(const SqlBool& exp) {
 	if(!exp.IsTrue() && !exp.IsEmpty())
 		text << " where " << ~exp;
-	return *this;
-}
-
-SqlSelect& SqlSelect::On(const SqlBool& exp) {
-	if(!exp.IsTrue() && !exp.IsEmpty())
-		text << " on " << ~exp;
 	return *this;
 }
 
@@ -99,17 +105,20 @@ SqlSelect& SqlSelect::OrderBy(const SqlSet& set) {
 }
 
 SqlSelect& SqlSelect::ForUpdate() {
-	text << " for update";
-	return *this;
+	text << SqlCode(SQLITE3, "")(" for update");
+ 	return *this;
 }
-
+ 
 SqlSelect& SqlSelect::NoWait() {
 	text << " nowait";
 	return *this;
 }
 
 SqlSelect& SqlSelect::Limit(int limit) {
-	text << " limit " << limit;
+	ASSERT(text.StartsWith("select "));
+	String s = AsString(limit);
+	text.Insert(6, SqlCode(MSSQL, " top " + s)());
+	text << SqlCode(MSSQL, "")(" limit " + s);
 	return *this;
 }
 
@@ -138,47 +147,115 @@ SqlSelect& SqlSelect::Hint(const char *hint)
 }
 
 SqlSelect& SqlSelect::Get() {
-	text = "select " + text + SqlCase(ORACLE, "from DUAL")("");
+	text = "select " + text + SqlCode(ORACLE, " from DUAL")("");
+	valid = true;
 	return *this;
 }
 
 SqlSelect& SqlSelect::From(const SqlSet& table) {
-	text = "select " + text + " from " + table(SqlSet::SETOP + 1);
+	if(table.IsEmpty())
+		return Get();
+	String ts = table(SqlSet::SETOP + 1);
+	text = "select " + text + " from " + ts;
+	valid = true;
+	tables << ',' << Filter(ts, CharFilterNotWhitespace);
+	on = false;
 	return *this;
 }
 
-SqlSelect& SqlSelect::From(SqlId table) {
-	text = "select " + text + " from " + ~table;
+SqlSelect& SqlSelect::From(const SqlId& table) {
+	const String& t1 = table.ToString();
+	text = String().Cat() << "select " << text << " from \t" << t1 << '\t';
+	valid = true;
+	tables << ',' << t1;
+	on = false;
 	return *this;
 }
 
-SqlSelect& SqlSelect::From(SqlId table1, SqlId table2) {
-	text = "select " + text + " from " + ~table1 + ", " + ~table2;
+SqlSelect& SqlSelect::From(const SqlId& table1, const SqlId& table2) {
+	const String& t1 = table1.ToString();
+	const String& t2 = table2.ToString();
+	text = String().Cat() << "select " << text << " from \t" << t1 << "\t, \t" << t2 << '\t';
+	valid = true;
+	tables << ',' << t1 << ',' << t2;
+	on = false;
 	return *this;
 }
 
-SqlSelect& SqlSelect::From(SqlId table1, SqlId table2, SqlId table3) {
-	text = "select " + text + " from " + ~table1 + ", " + ~table2 + ", " + ~table3;
+SqlSelect& SqlSelect::From(const SqlId& table1, const SqlId& table2, const SqlId& table3) {
+	const String& t1 = table1.ToString();
+	const String& t2 = table2.ToString();
+	const String& t3 = table3.ToString();
+	text = String().Cat() << "select " << text << " from \t" << t1 << "\t, \t" << t2 << "\t, \t" << t3 << '\t';
+	valid = true;
+	tables << ',' << t1 << ',' << t2 << ',' << t3;
+	on = false;
 	return *this;
 }
 
 SqlSelect& SqlSelect::InnerJoin0(const String& table) {
-	text << " inner join " << ~table;
+	text << " inner join " << table;
+	tables << ',' << table;
+	on = false;
 	return *this;
 }
 
 SqlSelect& SqlSelect::LeftJoin0(const String& table) {
-	text << " left outer join " << ~table;
+	text << " left outer join " << table;
+	tables << ',' << table;
+	on = false;
 	return *this;
 }
 
 SqlSelect& SqlSelect::RightJoin0(const String& table) {
-	text << " right outer join " << ~table;
+	text << " right outer join " << table;
+	tables << ',' << table;
+	on = false;
 	return *this;
 }
 
 SqlSelect& SqlSelect::FullJoin0(const String& table) {
-	text << " full outer join " << ~table;
+	text << " full outer join " << table;
+	tables << ',' << table;
+	on = false;
+	return *this;
+}
+
+SqlSelect& SqlSelect::InnerJoinRef(const SqlId& table)
+{
+	InnerJoin(table);
+	On(FindSchJoin(tables));
+	on = true;
+	return *this;
+}
+
+SqlSelect& SqlSelect::LeftJoinRef(const SqlId& table)
+{
+	LeftJoin(table);
+	On(FindSchJoin(tables));
+	on = true;
+	return *this;
+}
+
+SqlSelect& SqlSelect::RightJoinRef(const SqlId& table)
+{
+	RightJoin(table);
+	On(FindSchJoin(tables));
+	on = true;
+	return *this;
+}
+
+SqlSelect& SqlSelect::FullJoinRef(const SqlId& table)
+{
+	FullJoin(table);
+	On(FindSchJoin(tables));
+	on = true;
+	return *this;
+}
+
+SqlSelect& SqlSelect::On(const SqlBool& exp) {
+	if(!exp.IsTrue() && !exp.IsEmpty())
+		text << (on ? " and " : " on ") << ~exp;
 	return *this;
 }
 
@@ -187,23 +264,28 @@ SqlVal SqlSelect::AsValue() const
 	return SqlVal(String("(").Cat() << text << ")", SqlVal::LOW);
 }
 
-SqlSelect SqlSelect::AsTable(SqlId tab) const
+SqlSet SqlSelect::AsTable(const SqlId& tab) const
 {
-	SqlSelect h;
-	h.text = String("(").Cat() << text << ") as " << ~tab;
-	return h;
+	StringBuffer t;
+	t << SqlCode(MSSQL|PGSQL, "")("(")
+	  << "(" << text << ")" << SqlCode(ORACLE,"")(" as") << " \t" << tab.ToString() << '\t'
+	  << SqlCode(MSSQL|PGSQL, "")(")");
+	return SqlSet(String(t), SqlSet::HIGH);
 }
 
 SqlSelect::SqlSelect(Fields f)
 {
+	valid = on = false;
 	SqlSet set(f);
 	text = ~set;
 }
 
+//$-
 #define E__SCat(I)       set.Cat(p##I)
 
 #define E__QSqlSelectF(I) \
 SqlSelect::SqlSelect(__List##I(E__SqlVal)) { \
+	valid = on = false; \
 	SqlSet set; \
 	__List##I(E__SCat); \
 	text = ~set; \
@@ -217,7 +299,81 @@ SqlSelect Select(__List##I(E__SqlVal)) { \
 	return Select(set); \
 }
 __Expand(E__QSelectF);
+//$+
 
+// -------------------------------
+
+SqlWith& SqlWith::With(SqlId table)
+{
+	text << (text.GetCount() ? ", " : "with ") << table.Quoted();
+	args = false;
+	return *this;
+}
+
+SqlWith& SqlWith::WithRecursive(SqlId table)
+{
+	text << (text.GetCount() ? ", " : "with ")
+	     << SqlCode(MSSQL, "")("recursive ")
+	     << table.Quoted();
+	args = false;
+	return *this;
+}
+
+SqlWith& SqlWith::Arg(SqlId arg)
+{
+	text << (args ? ", " : "(") << arg.Quoted();
+	args = true;
+	return *this;
+}
+
+SqlWith& SqlWith::As(const SqlSelect& select)
+{
+	if(args)
+		text << ')';
+	text << " as (" + SqlStatement(select).GetText() + ")";
+	args = false;
+	return *this;
+}
+
+SqlSelect SqlWith::operator()(const SqlSelect& select)
+{
+	SqlSet set;
+	set.SetRaw(text + " " + SqlStatement(select).GetText());
+	return set;
+}
+
+SqlStatement SqlWith::operator()(const SqlInsert& insert)
+{
+	return SqlStatement(text + " " + SqlStatement(insert).GetText());
+}
+
+SqlStatement SqlWith::operator()(const SqlUpdate& update)
+{
+	return SqlStatement(text + " " + SqlStatement(update).GetText());
+}
+
+SqlStatement SqlWith::operator()(const SqlDelete& deletes)
+{
+	return SqlStatement(text + " " + SqlStatement(deletes).GetText());
+}
+
+// -------------------------------
+
+SqlStatement SqlCreateTable::As(const SqlSelect& select)
+{
+	String text = "create ";
+	if(!permanent)
+		text << SqlCode(ORACLE, "global temporary ")("temporary ");
+	text << "table " << table.Quoted();
+	if(!permanent){
+		if(transaction)
+			text << SqlCode(ORACLE, " on commit delete rows")("");
+		else
+			text << SqlCode(ORACLE, " on commit preserve rows")("");
+	}
+	text << " as (" + SqlStatement(select).GetText() + ")";
+	return SqlStatement(text);
+}
 
 // -------------------------------
 
@@ -230,7 +386,78 @@ SqlDelete& SqlDelete::Where(const SqlBool& b) {
 	return *this;
 }
 
-void SqlInsert::Column(SqlId column, SqlVal val) {
+// -------------------------------
+#ifdef NEWINSERTUPDATE
+
+void SqlInsert::Column(const SqlId& column, SqlVal val) {
+	set1.Cat(column);
+	set2.Cat(val);
+	if(keycolumn.IsNull()) keycolumn = column;
+	if(keyvalue.IsEmpty()) keyvalue =val;
+	sel.Set(set2);
+}
+
+SqlInsert::operator SqlStatement() const {
+	String s = "insert into " + table.Quoted();
+	if(!set1.IsEmpty()) {
+		s << set1();
+		if(sel.IsValid())
+			s << ' ' << SqlStatement(sel).GetText();
+		else
+		if(!set2.IsEmpty())
+			s << " values " << set2();
+	}
+	return SqlStatement(s);
+}
+
+struct InsertFieldOperator : public FieldOperator {
+	SqlInsert *insert;
+	bool       nokey;
+
+	virtual void Field(const char *name, Ref f)	{
+		if(!nokey)
+			insert->Column(name, (Value)f);
+		nokey = false;
+	}
+	
+	InsertFieldOperator() { nokey = false; }
+};
+
+SqlInsert::SqlInsert(Fields f, bool nokey) {
+	InsertFieldOperator ifo;
+	ifo.insert = this;
+	ifo.nokey = nokey;
+	f(ifo);
+	table = ifo.table;
+}
+
+SqlInsert& SqlInsert::operator()(Fields f, bool nokey)
+{
+	InsertFieldOperator ifo;
+	ifo.insert = this;
+	ifo.nokey = nokey;
+	f(ifo);
+	return *this;
+}
+
+SqlInsert& SqlInsert::Where(const SqlBool& w)
+{
+	if(!sel.IsValid())
+		From();
+	sel.Where(w);
+	return *this;
+}
+
+SqlInsert& SqlInsert::operator()(const ValueMap& data)
+{
+	for(int i = 0; i < data.GetCount(); i++)
+		operator()((String)data.GetKey(i), data.GetValue(i));
+	return *this;
+}
+
+#else
+
+void SqlInsert::Column(const SqlId& column, SqlVal val) {
 	set1.Cat(column);
 	set2.Cat(val);
 	if(keycolumn.IsNull()) keycolumn = column;
@@ -238,20 +465,27 @@ void SqlInsert::Column(SqlId column, SqlVal val) {
 }
 
 SqlInsert::operator SqlStatement() const {
-	String s = "insert into " + ~table;
+	String s = "insert into " + table.Quoted();
 	if(!set1.IsEmpty()) {
 		s << set1();
-		if(from.IsEmpty()) {
+		if(from.IsEmpty() && where.IsEmpty() && groupby.IsEmpty()) {
 			if(!set2.IsEmpty())
 				s << " values " << set2();
 		}
-		else
-			s << ' ' + SqlStatement(Select(set2).From(from).Where(where)).GetText();
+		else {
+			SqlSelect sel;
+			sel = Select(set2).From(from).Where(where);
+			if(!groupby.IsEmpty())
+				sel.GroupBy(groupby);
+			if(!having.IsEmpty())
+				sel.Having(having);
+			s << ' ' + SqlStatement(sel).GetText();
+		}
 	}
 	return SqlStatement(s);
 }
 
-SqlInsert& SqlInsert::From(SqlId from) {
+SqlInsert& SqlInsert::From(const SqlId& from) {
 	return From(SqlSet(from));
 }
 
@@ -285,6 +519,85 @@ SqlInsert& SqlInsert::operator()(Fields f, bool nokey)
 	return *this;
 }
 
+SqlInsert& SqlInsert::operator()(const ValueMap& data)
+{
+	for(int i = 0; i < data.GetCount(); i++)
+		operator()((String)data.GetKey(i), data.GetValue(i));
+	return *this;
+}
+
+#endif
+
+/////////////////////////////////
+
+#ifdef NEWINSERTUPDATE
+
+struct UpdateFieldOperator : public FieldOperator {
+	SqlUpdate *update;
+
+	virtual void Field(const char *name, Ref f)	{
+		update->Column(name, (Value)f);
+	}
+};
+
+SqlUpdate::SqlUpdate(Fields f) {
+	UpdateFieldOperator ufo;
+	ufo.update = this;
+	f(ufo);
+	table = ufo.table;
+	sel.Set(SqlSet(SqlId("X")));
+}
+
+SqlUpdate::SqlUpdate(const SqlId& table)
+:	table(table)
+{
+	sel.Set(SqlSet(SqlId("X")));
+}
+
+SqlUpdate& SqlUpdate::operator()(Fields f) {
+	UpdateFieldOperator ufo;
+	ufo.update = this;
+	f(ufo);
+	return *this;
+}
+
+SqlUpdate& SqlUpdate::operator()(const ValueMap& data)
+{
+	for(int i = 0; i < data.GetCount(); i++)
+		operator()((String)data.GetKey(i), data.GetValue(i));
+	return *this;
+}
+
+SqlUpdate& SqlUpdate::Where(SqlBool w)
+{
+	if(sel.IsValid())
+		sel.Where(w);
+	else
+		where = w;
+	return *this;
+}
+
+SqlUpdate::operator SqlStatement() const {
+	StringBuffer stmt;
+	stmt << "update " << table.Quoted() << " set " << ~set;
+	if(sel.IsValid())
+		stmt << SqlStatement(sel).GetText().Mid(9 + 2 * SqlId::IsUseQuotes());
+	else
+	if(!where.IsEmpty())
+		stmt << " where " << ~where;
+	return SqlStatement(stmt);
+}
+
+void SqlUpdate::Column(const SqlId& column, SqlVal val) {
+	set.Cat(SqlVal(SqlVal(column), " = ", val, SqlS::COMP));
+}
+
+void SqlUpdate::Column(const SqlSet& cols, const SqlSet& val)
+{
+	set.Cat(SqlVal(SqlS(cols(), SqlS::HIGH), " = ", SqlS(val(), SqlS::HIGH), SqlS::COMP));
+}
+
+#else
 struct UpdateFieldOperator : public FieldOperator {
 	SqlUpdate *update;
 
@@ -307,17 +620,22 @@ SqlUpdate& SqlUpdate::operator()(Fields f) {
 	return *this;
 }
 
-// ------------------------------------
+SqlUpdate& SqlUpdate::operator()(const ValueMap& data)
+{
+	for(int i = 0; i < data.GetCount(); i++)
+		operator()((String)data.GetKey(i), data.GetValue(i));
+	return *this;
+}
 
 SqlUpdate::operator SqlStatement() const {
 	StringBuffer stmt;
-	stmt << "update " << ~table << " set " << ~set;
+	stmt << "update " << table.Quoted() << " set " << ~set;
 	if(!where.IsEmpty())
 		stmt << " where " << ~where;
 	return SqlStatement(stmt);
 }
 
-void SqlUpdate::Column(SqlId column, SqlVal val) {
+void SqlUpdate::Column(const SqlId& column, SqlVal val) {
 	set.Cat(SqlVal(SqlVal(column), " = ", val, SqlS::COMP));
 }
 
@@ -325,7 +643,7 @@ void SqlUpdate::Column(const SqlSet& cols, const SqlSet& val)
 {
 	set.Cat(SqlVal(SqlS(cols(), SqlS::HIGH), " = ", SqlS(val(), SqlS::HIGH), SqlS::COMP));
 }
-
+#endif
 // ------------------------------------
 // deprecated
 
@@ -362,94 +680,6 @@ Value SqlStatement::Fetch() const {
 	return Fetch(SQL);
 }
 
-bool SqlPerformScript(SqlSession& session, Stream& script,
-                      Gate2<int, int> progress_canceled, bool stoponerror)
-{
-	String stmt;
-	int level = 0;
-	bool ok = true;
-	while(!script.IsEof()) {
-		int c = script.Term();
-		if(IsAlpha(c)) {
-			String id;
-			while(IsAlpha(script.Term())) {
-				c = script.Get();
-				stmt.Cat(c);
-				id.Cat(ToUpper(c));
-			}
-			if(id == "BEGIN")
-				level++;
-			if(id == "END")
-				level--;
-		}
-		else
-		if(c == '\'') {
-			stmt.Cat(c);
-			script.Get();
-			for(;;) {
-				c = script.Get();
-				if(c < 0) {
-					ok = false;
-					if(stoponerror)
-						return false;
-					break;
-				}
-				stmt.Cat(c);
-				if(c == '\'')
-					break;
-			}
-		}
-		else
-		if(c == ';' && level == 0) {
-			Sql sql(session);
-			session.ClearError();
-			int q = 0;
-			while(stmt[q] == '\r' || stmt[q] == '\n')
-				q++;
-			stmt = stmt.Mid(q);
-			if(!sql.Execute(stmt)) {
-				ok = false;
-				if(stoponerror)
-					break;
-			}
-			stmt.Clear();
-			script.Get();
-		}
-		else {
-			if(c == '(')
-				level++;
-			if(c == ')')
-				level--;
-			if(c != '\r') {
-				if(session.GetDialect() == ORACLE && c == '\n')
-					stmt.Cat('\r');
-				stmt.Cat(c);
-			}
-			script.Get();
-		}
-	}
-	return ok;
-}
-
-bool SqlPerformScript(Stream& script,
-                      Gate2<int, int> progress_canceled, bool stoponerror)
-{
-	return SqlPerformScript(SQL.GetSession(), script, progress_canceled, stoponerror);
-}
-
-bool SqlPerformScript(SqlSession& session, const String& script,
-                      Gate2<int, int> progress_canceled, bool stoponerror)
-{
-	StringStream ss(script);
-	return SqlPerformScript(session, ss, progress_canceled, stoponerror);
-}
-
-bool SqlPerformScript(const String& script,
-                      Gate2<int, int> progress_canceled, bool stoponerror)
-{
-	return SqlPerformScript(SQL.GetSession(), script, progress_canceled, stoponerror);
-}
-
 #endif
 
-END_UPP_NAMESPACE
+}

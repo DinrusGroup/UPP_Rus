@@ -2,7 +2,7 @@
 
 #define LLOG(x) // DLOG(x)
 
-NAMESPACE_UPP
+namespace Upp {
 
 void BufferPainter::ClearPath()
 {
@@ -11,6 +11,8 @@ void BufferPainter::ClearPath()
 	current = move = Null;
 	ccontrol = qcontrol = Pointf(0, 0);
 	ischar = false;
+	path_min = Pointf(DBL_MAX, DBL_MAX);
+	path_max = -path_min;
 }
 
 Pointf BufferPainter::PathPoint(const Pointf& p, bool rel)
@@ -20,15 +22,11 @@ Pointf BufferPainter::PathPoint(const Pointf& p, bool rel)
 	r.y = IsNull(p.y) ? current.y : rel ? p.y + current.y : p.y;
 	if(IsNull(current)) {
 		ClearPath();
-		pathrect.left = pathrect.right = r.x;
-		pathrect.top = pathrect.bottom = r.y;
 		pathattr = attr;
 	}
-	else {
-		pathrect.left = min(pathrect.left, r.x);
-		pathrect.top = min(pathrect.top, r.y);
-		pathrect.right = max(pathrect.right, r.x);
-		pathrect.bottom = max(pathrect.bottom, r.y);
+	if(dopreclip) {
+		path_min = min(r, path_min);
+		path_max = max(r, path_max);
 	}
 	return r;
 }
@@ -42,7 +40,7 @@ void *BufferPainter::PathAddRaw(int type, int size)
 {
 	int q = path.data.GetCount();
 	path.type.Add(type);
-	path.data.SetCount(q + size);
+	path.data.SetCountR(q + size);
 	return &path.data[q];
 }
 
@@ -144,4 +142,4 @@ void BufferPainter::CharacterOp(const Pointf& p, int ch, Font fnt)
 #endif
 }
 
-END_UPP_NAMESPACE
+}

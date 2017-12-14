@@ -52,11 +52,11 @@ void LayDes::SaveEditPos()
 	p.undo.SetCount(layout.GetCount());
 	p.redo.SetCount(layout.GetCount());
 	for(int i = 0; i < layout.GetCount(); i++) {
-		p.undo[i] = layout[i].undo;
-		p.redo[i] = layout[i].redo;
+		p.undo[i] = pick(layout[i].undo);
+		p.redo[i] = pick(layout[i].redo);
 	}
-	p.layouti = layoutlist.GetCursor();
-	p.cursor = cursor;
+	p.layouti = list.GetKey();
+	p.cursor = pick(cursor);
 }
 
 void LayDes::RestoreEditPos()
@@ -69,26 +69,36 @@ void LayDes::RestoreEditPos()
 	if(p.filetime != filetime) return;
 	if(layout.GetCount() == p.undo.GetCount()) {
 		for(int i = 0; i < layout.GetCount(); i++) {
-			layout[i].undo = p.undo[i];
-			layout[i].redo = p.redo[i];
+			layout[i].undo = pick(p.undo[i]);
+			layout[i].redo = pick(p.redo[i]);
 		}
 	}
-	if(p.layouti >= 0 && p.layouti < layoutlist.GetCount()) {
-		layoutlist.SetCursor(p.layouti);
+	if(p.layouti >= 0 && p.layouti < layout.GetCount()) {
+		GoTo(p.layouti);
 		LayoutCursor();
 	}
-	cursor = p.cursor;
+	cursor = pick(p.cursor);
 	SyncItems();
 }
 
-void LayDes::FindLayout(const String& name)
+void LayDes::FindLayout(const String& name, const String& item_name)
 {
-	layoutlist.FindSetCursor(name);
+	for(int i = 0; i < layout.GetCount(); i++)
+		if(layout[i].name == name) {
+			GoTo(i);
+			if(!IsNull(item_name)) {
+				int q = item.Find(item_name, 1);
+				if(q >= 0)
+					SelectOne(q, 0);
+			}
+		}
 }
 
 bool LayDes::Load(const char *file, byte _charset)
 {
 	charset = _charset;
+	if(charset == CHARSET_UTF8_BOM)
+		charset = CHARSET_UTF8;
 	layout.Clear();
 	filename = file;
 	FileIn in(file);
@@ -120,9 +130,10 @@ bool LayDes::Load(const char *file, byte _charset)
 		newfile = true;
 		filetime = Null;
 	}
+	search <<= Null;
 	SyncLayoutList();
-	if(layout.GetCount()) {
-		layoutlist.SetCursor(0);
+	if(list.GetCount()) {
+		list.SetCursor(0);
 		LayoutCursor();
 	}
 	RestoreEditPos();
@@ -138,7 +149,7 @@ void LayDes::Save()
 	String r;
 	for(int i = 0; i < layout.GetCount(); i++) {
 		layout[i].SetCharset(charset);
-		r << layout[i].Save() << "\r\n";
+		r << layout[i].Save(0) << "\r\n";
 	}
 	layfile = r;
 	if(!SaveChangedFileFinish(filename, r))

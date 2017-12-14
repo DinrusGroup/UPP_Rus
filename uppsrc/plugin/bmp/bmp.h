@@ -3,7 +3,9 @@
 
 #include <Draw/Draw.h>
 
-NAMESPACE_UPP
+namespace Upp {
+	
+INITIALIZE(BMPRaster);
 
 class BMPRaster : public StreamRaster {
 	Size             size;
@@ -63,6 +65,6 @@ enum {
 Vector<Image> ReadIcon(String data);
 String        WriteIcon(const Vector<Image>& icons, int flags = WI_COLOR);
 
-END_UPP_NAMESPACE
+}
 
 #endif

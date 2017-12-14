@@ -76,6 +76,12 @@ struct RichPara {
 	enum TabSpecial {
 		TAB_RIGHTPOS = 0x8000000
 	};
+	
+	enum RulerStyle {
+		RULER_SOLID,
+		RULER_DOT,
+		RULER_DASH,
+	};
 
 	struct CharFormat : public Font {
 		int     language;
@@ -111,16 +117,18 @@ struct RichPara {
 	};
 
 	struct Format : NumberFormat, CharFormat {
+		Uuid        styleid;
+		String      label;
+		WithDeepCopy< Vector<Tab> > tab;
 		int         align;
 		int         ruler, before, lm, indent, rm, after;
 		Color       rulerink;
+		int         rulerstyle;
 		int         tabsize;
 		int         bullet;
 		int         linespacing;
-		bool        newpage, keep, keepnext, orphan;
-		WithDeepCopy< Vector<Tab> > tab;
-		String      label;
-		Uuid        styleid;
+		bool        newpage, keep, keepnext, orphan, newhdrftr;
+		String      header_qtf, footer_qtf;
 
 		void        SortTabs();
 
@@ -205,7 +213,9 @@ struct RichPara {
 		const Line&          operator[](int i) const { return line[i]; }
 		void                 Justify(const Format& format);
 		int                  BodyHeight() const;
-		
+
+		rval_default(Lines);
+	
 		Lines();
 		~Lines();
 
@@ -218,8 +228,9 @@ struct RichPara {
 		friend struct RichPara;
 	};
 
-	static const VectorMap<Id, FieldType *>& fieldtype();
-	static void  Register(Id id, FieldType& ft) init_;
+	static const VectorMap<Id, FieldType *>& fieldtype() { return fieldtype0(); }
+	static void  Register(Id id, FieldType& ft);
+	template <class T> static void Register(Id id)       { static T x; Register(id, x); }
 
 	int64       cacheid;
 	bool        incache;
@@ -228,6 +239,8 @@ struct RichPara {
 
 	static void Charformat(Stream& out, const CharFormat& o, const CharFormat& n,
 	                       const CharFormat& s);
+
+	static void DrawRuler(Draw& w, int x, int y, int cx, int cy, Color ink, int style);
 
 	void        Cat(const WString& s, const CharFormat& f);
 	void        Cat(const char *s, const CharFormat& f);
@@ -252,15 +265,11 @@ struct RichPara {
 	void        GetRichPos(RichPos& rp, int pos) const;
 
 	Lines       FormatLines(int cx) const;
-	void        Paint(PageDraw& pw, const Rect& page, PageY py, const PaintInfo& pi,
-	                  const Number& n, const Bits& spellerrors,
-	                  int nbefore, int nline) const;
-	RichCaret   GetCaret(int pos, const Rect& page, PageY py, int nbefore, int nline) const;
-	int         GetPos(int x, PageY y, const Rect& page, PageY py, int nbefore, int nline) const;
-	void        GatherLabels(Vector<RichValPos>& info, const Rect& page, PageY py,
-	                         int pos, int nbefore, int nline) const;
-	void        GatherIndexes(Vector<RichValPos>& info, const Rect& page, PageY py,
-	                          int pos, int nbefore, int nline) const;
+	void        Paint(PageDraw& pw, RichContext rc, const PaintInfo& pi, const Number& n, const Bits& spellerror, bool baselevel) const;
+	RichCaret   GetCaret(int pos, RichContext rc) const;
+	int         GetPos(int x, PageY y, RichContext rc) const;
+	void        GatherLabels(Vector<RichValPos>& info, RichContext rc, int pos) const;
+	void        GatherIndexes(Vector<RichValPos>& info, RichContext rc, int pos) const;
 	int         GetVertMove(int pos, int gx, const Rect& page, int dir) const;
 
 	WString     GetText() const;
@@ -278,15 +287,17 @@ struct RichPara {
 	void        ApplyZoom(Zoom z);
 	
 	void        CacheId(int64 id);
-	
+
+	rval_default(RichPara);
+
 	RichPara();
 	~RichPara();
 
 private:
 	Tab         GetNextTab(int pos, int cx) const;
 	void        Smh(Lines& lines, HeightInfo *th, int cx) const;
-	Lines       Begin(const Rect& page, PageY& py, int nbefore, int nline) const;
-	bool        BreaksPage(PageY py, const Lines& pl, int i, const Rect& page) const;
+	Lines       Begin(RichContext& rc) const;
+	bool        BreaksPage(const RichContext& rc, const Lines& pl, int i) const;
 	void        PackParts(Stream& out, const CharFormat& chrstyle,
 	                      const Array<Part>& part, CharFormat& cf,
 	                      Array<RichObject>& obj) const;
@@ -297,20 +308,16 @@ private:
                       int lineascent, Zoom z, bool highlight);
 	int         PosInLine(int x, const Rect& page, const Lines& pl, int lni) const;
 
+	static StaticMutex      cache_lock;
 	static Array<RichPara>& Cache();
+
+	static VectorMap<Id, FieldType *>& fieldtype0();
 
 	struct StorePart;
 };
 
 inline bool operator==(const RichPara::Tab& a, const RichPara::Tab& b) {
 	return a.pos == b.pos && a.align == b.align && a.fillchar == b.fillchar;
-}
-
-bool operator==(const Vector<RichPara::Tab>& a, const Vector<RichPara::Tab>& b);
-
-inline
-bool operator!=(const Vector<RichPara::Tab>& a, const Vector<RichPara::Tab>& b) {
-	return !(a == b);
 }
 
 bool NumberingDiffers(const RichPara::Format& fmt1, const RichPara::Format& fmt2);

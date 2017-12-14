@@ -3,9 +3,9 @@
 
 //#include <ide/Common/Common.h>
 #include <CtrlLib/CtrlLib.h>
+#include <plugin/pcre/Pcre.h>
 
-
-NAMESPACE_UPP
+namespace Upp {
 
 #define  LAYOUTFILE <CodeEditor/CodeEditor.lay>
 #include <CtrlCore/lay.h>
@@ -15,7 +15,8 @@ NAMESPACE_UPP
 #define IMAGEFILE   <CodeEditor/CodeEditor.iml>
 #include <Draw/iml_header.h>
 
-void FindWildcardMenu(Callback1<int> cb, Point p, bool tablf, Ctrl *owner = NULL);
+
+void FindWildcardMenu(Callback1<const char *> cb, Point p, bool tablf, Ctrl *owner, bool regexp);
 
 struct LineInfoRecord {
 	int    lineno;
@@ -53,6 +54,7 @@ public:
 	virtual void LeftDown(Point p, dword flags);
 	virtual void LeftDouble(Point p, dword flags);
 	virtual void RightDown(Point p, dword flags);
+	virtual void MouseWheel(Point p, int zdelta, dword keyflags);
 
 private:
 	struct LnInfo : Moveable<LnInfo> {
@@ -70,7 +72,6 @@ private:
 	Vector<LnInfo>   li;
 	LineInfoRem      li_removed;
 
-	int              sy;
 	CodeEditor       *editor;
 	int              ptrline[2];
 	Image            ptrimg[2];
@@ -84,19 +85,20 @@ private:
 
 	String& PointBreak(int& y);
 	void    sPaintImage(Draw& w, int y, int fy, const Image& img);
-	void    SyncWidth();
 
 public:
-	Callback1<int> WhenBreakpoint;
-	Callback       WhenAnnotationMove;
-	Callback       WhenAnnotationClick;
-	Callback       WhenAnnotationRightClick;
+	Event<int> WhenBreakpoint;
+	Event<>        WhenAnnotationMove;
+	Event<>        WhenAnnotationClick;
+	Event<>        WhenAnnotationRightClick;
 
 	void InsertLines(int i, int count);
 	void RemoveLines(int i, int count);
 	void ClearLines();
 
 	void Scroll()                          { Refresh(); }
+
+	void SyncSize();
 
 	void Renumber(int linecount);
 	void ClearBreakpoints();
@@ -114,8 +116,9 @@ public:
 	LineInfo GetLineInfo() const;
 	void     SetLineInfo(const LineInfo& li, int total);
 	LineInfoRem & GetLineInfoRem()                   { return li_removed; }
-	void     SetLineInfoRem(pick_ LineInfoRem& li)   { li_removed = li; }
+	void     SetLineInfoRem(LineInfoRem pick_ li)    { li_removed = pick(li); }
 	
+	void     ClearAnnotations();
 	void     SetAnnotation(int line, const Image& img, const String& ann);
 	String   GetAnnotation(int line) const;
 
@@ -153,38 +156,46 @@ inline bool islbrkt(int c)           { return c == '{' || c == '[' || c == '('; 
 inline bool isrbrkt(int c)           { return c == '}' || c == ']' || c == ')'; }
 inline bool isbrkt(int c)            { return islbrkt(c) || isrbrkt(c); }
 
-struct FindReplaceDlg : WithIDEFindReplaceLayout<TopWindow> {
+struct FindReplaceDlg : FrameBottom< WithIDEFindReplaceLayout<TopWindow> > {
 	WString itext;
 	bool    replacing;
 
-	Size    GetAdjustedSize();
 	virtual bool Key(dword key, int count);
 	void Setup(bool doreplace);
-};
+	void Sync();
+	bool IsIncremental() const              { return incremental.IsEnabled() && incremental; }
 	
-class CodeEditor : public LineEdit {
+	typedef FindReplaceDlg CLASSNAME;
+
+	FindReplaceDlg();
+};
+
+#include "Syntax.h"
+#include "CSyntax.h"
+#include "DiffSyntax.h"
+#include "TagSyntax.h"
+#include "LogSyntax.h"
+#include "PythonSyntax.h"
+
+class CodeEditor : public LineEdit,
+public HighlightSetup
+{
 	friend class EditorBar;
 
 public:
 	virtual bool  Key(dword code, int count);
 	virtual void  LeftDown(Point p, dword keyflags);
 	virtual void  LeftDouble(Point p, dword keyflags);
+	virtual void  LeftTriple(Point p, dword keyflags);
+	virtual void  LeftRepeat(Point p, dword keyflags);
 	virtual void  MouseMove(Point p, dword keyflags);
 	virtual Image CursorImage(Point p, dword keyflags);
 	virtual void  Serialize(Stream& s);
 	virtual void  MouseLeave();
-
-	void         CheckEdited(bool e = true) { check_edited = e; }
-	bool         GetCheckEdited()           { return check_edited; }
-
-	enum {
-		HIGHLIGHT_NONE = -1, HIGHLIGHT_CPP = 0, HIGHLIGHT_USC, HIGHLIGHT_JAVA, HIGHLIGHT_T,
-		HIGHLIGHT_CALC, HIGHLIGHT_LAY, HIGHLIGHT_SCH, HIGHLIGHT_SQL,
-		HIGHLIGHT_COUNT
-	};
+	virtual void  MouseWheel(Point p, int zdelta, dword keyFlags);
 
 protected:
-	virtual void HighlightLine(int line, Vector<Highlight>& h, int pos);
+	virtual void HighlightLine(int line, Vector<LineEdit::Highlight>& h, int pos);
 	virtual void PreInsert(int pos, const WString& s);
 	virtual void PostInsert(int pos, const WString& s);
 	virtual void PreRemove(int pos, int size);
@@ -198,96 +209,41 @@ protected:
 
 	virtual void NewScrollPos();
 
+	virtual String  GetPasteText();
+
 	EditorBar   bar;
 	Vector<int> line2;
 
-	static Index<String> keyword[HIGHLIGHT_COUNT];
-	static Index<String> name[HIGHLIGHT_COUNT];
-	static Index<String> kw_upp;
-	static int kw_macros, kw_logs, kw_sql_base, kw_sql_func;
-
-	struct Isx : Moveable<Isx> {
+	struct SyntaxPos {
 		int    line;
-		int    pos;
-
-		friend bool operator==(Isx a, Isx b) { return a.line == b.line && a.pos == b.pos; }
-		friend bool operator!=(Isx a, Isx b) { return !(a == b); }
+		String data;
+		
+		void Clear() { line = 0; data.Clear(); }
 	};
+	
+	SyntaxPos   syntax_cache[6];
 
-	struct IfState : Moveable<IfState> {
-		enum        { IF = '0', ELIF, ELSE, ELSE_ERROR, ENDIF_ERROR };
-		WString iftext;
-		short   ifline;
-		char    state;
+//	EditorSyntax rm_ins;
 
-		bool operator==(const IfState& b) const {
-			return iftext == b.iftext && state == b.state && ifline == b.ifline;
-		}
+	char    rmb;
+	int     highlight_bracket_pos0;
+	int     highlight_bracket_pos;
+	bool    bracket_flash;
+	int     bracket_start;
 
-		IfState()                         { ifline = state = 0; }
-	};
-
-	struct SyntaxState {
-		int         line;
-
-		bool        comment;
-		bool        linecomment;
-		bool        string;
-		bool        linecont;
-		bool        was_namespace;
-		char        macro;
-		enum        { MACRO_OFF, MACRO_CONT, MACRO_END };
-
-		int         cl, bl, pl;
-
-		WithDeepCopy< Vector<int> > brk;
-		WithDeepCopy< Vector<int> > blk;
-		WithDeepCopy< Vector<int> > bid;
-		WithDeepCopy< Vector<Isx> > par;
-		WithDeepCopy< Vector<IfState> > ifstack;
-
-		int         stmtline;
-		int         endstmtline;
-		int         seline;
-		int         spar;
-		Color       uvscolor;
-
-		void  DropItem(int type);
-		bool  Drop(int type);
-		void  ClearBraces();
-		void  Clear();
-		bool  MatchHilite(const SyntaxState& st) const;
-		void  Grounding(const wchar *ln, const wchar *e);
-		void  ScanSyntax(const wchar *ln, const wchar *e);
-
-		static Color IfColor(char ifstate);
-
-		SyntaxState()                         { Clear(); }
-	};
-
-	friend struct SyntaxState;
-
-	SyntaxState scache[4];
-	SyntaxState rm_ins;
-	char        rmb;
-	byte        hilite_bracket;
-	int         highlight_bracket_pos0;
-	int         highlight_bracket_pos;
-	bool        bracket_flash;
-	int         bracket_start;
-
-	byte    hilite_scope;
-	byte    hilite_ifdef;
-	bool    indent_spaces : 1;
-	bool    no_parenthesis_indent : 1;
-	bool    barline : 1;
-	int     indent_amount;
+	bool    barline;
 	double  stat_edit_time;
 	Time    last_key_time;
 
 	bool    auto_enclose;
 	bool    mark_lines;
 	bool    check_edited;
+	bool    persistent_find_replace;
+	bool    do_ff_restore_pos;
+	bool    withfindreplace;
+	bool    wordwrap;
+
+	int     ff_start_pos;
 
 	FindReplaceDlg findreplace;
 	
@@ -305,12 +261,22 @@ protected:
 	};
 
 	Array<Found> foundwild;
+	WString      foundtext;
 	bool   foundsel;
 	bool   found, notfoundfw, notfoundbk;
+	int    foundpos, foundsize;
+	
+	enum { SEL_CHARS, SEL_WORDS, SEL_LINES };
+	int    selkind;
 
-	int    iwc;
+	WString illuminated;
 
-	int    highlight;
+	String  iwc;
+
+	String highlight;
+	
+	int    spellcheck_comments = 0;
+	bool   wordwrap_comments = true;
 	
 	struct Tip : Ctrl {
 		Value v;
@@ -323,49 +289,46 @@ protected:
 	
 	Tip   tip;
 	int   tippos;
+	
+	int   replacei;
 
 	struct HlSt;
 	
-	static int  InitUpp(const char **q);
-	static void InitKeywords();
-
-	const wchar *HlString(HlSt& hls, const wchar *p);
-
-	SyntaxState ScanSyntax(int line);
-
+	bool   MouseSelSpecial(Point p, dword flags);
+	void   InitFindReplace();
 	void   CancelBracketHighlight(int& pos);
-	void   CheckBracket(int li, int pos, int ppos, int pos0, WString ln, int d, int limit);
-	void   CheckLeftBracket(int pos);
-	void   CheckRightBracket(int pos);
+	void   FindPrevNext(bool prev);
 	void   CheckBrackets();
+	void   OpenNormalFindReplace0(bool replace);
 	void   OpenNormalFindReplace(bool replace);
 	void   FindReplaceAddHistory();
 	void   FindWildcard();
 	void   ReplaceWildcard();
-	void   InsertWildcard(int c);
-	void   CheckBraces(const WString& text);
+	void   InsertWildcard(const char *s);
+	void   IncrementalFind();
+	void   NotFound();
+	void   NoFindError();
+	void   CheckSyntaxRefresh(int pos, const WString& text);
 
 	void   SetFound(int fi, int type, const WString& text);
 
 	int     Match(const wchar *f, const wchar *s, int line, bool we, bool icase, int fi = 0);
 	WString GetWild(int type, int& i);
 	WString GetReplaceText();
-	WString GetReplaceText(WString replace, bool wildcards);
 
 	bool   InsertRS(int chr, int count = 1);
-	void   IndentEnter(int count = 1);
-	void   SyntaxIndent(const SyntaxState& st, bool ndnt);
-	void   IndentInsert(int chr);
+
+	void   IndentInsert(int chr, int count);
 
 	void   ForwardWhenBreakpoint(int i);
-
-	Color  BlockColor(int level);
-	void   Bracket(int pos, HlSt& hls);
 
 	bool   ToggleSimpleComment(int &start_line, int &end_line, bool usestars = true);
 	void   ToggleLineComments(bool usestars = false);
 	void   ToggleStarComments();
 	void   Enclose(const char *c1, const char *c2, int l = -1, int h = -1);
+	void   Make(Event<String&> op);
+	void   TabsOrSpaces(String& out, bool maketabs);
+	void   LineEnds(String& out);
 
 	enum {
 		TIMEID_PERIODIC = Ctrl::TIMEID_COUNT,
@@ -375,24 +338,6 @@ protected:
 	void   Periodic();
 
 public:
-#define HL_COLOR(x, a, b)      x,
-	enum {
-#include "hl_color.i"
-		HL_COUNT
-	};
-#undef HL_COLOR
-
-	struct HlStyle {
-		Color color;
-		bool  bold;
-		bool  italic;
-		bool  underline;
-	};
-
-private:
-	HlStyle  hl_style[HL_COUNT];
-
-public:
 	struct MouseTip {
 		int            pos;
 		Value          value;
@@ -400,53 +345,68 @@ public:
 		Size           sz;
 	};
 
-	Callback         WhenSelection;
-	Gate1<MouseTip&> WhenTip;
-	Callback         WhenLeftDown;
-	Callback1<int>   WhenCtrlClick;
-	Callback         WhenAnnotationMove;
-	Callback         WhenAnnotationClick;
-	Callback         WhenAnnotationRightClick;
+	Event<>            WhenSelection;
+	Gate<MouseTip&>    WhenTip;
+	Event<>            WhenLeftDown;
+	Event<int>         WhenCtrlClick;
+	Event<>            WhenAnnotationMove;
+	Event<>            WhenAnnotationClick;
+	Event<>            WhenAnnotationRightClick;
+	Event<>            WhenOpenFindReplace;
+	Event<String&>     WhenPaste;
+	Event<>            WhenUpdate;
+
+	Event<const Vector<Tuple<int, int>>&> WhenFindAll;
 
 	FrameTop<Button>    topsbbutton;
 	FrameTop<Button>    topsbbutton1;
 
+	static dword find_next_key;
+	static dword find_prev_key;
+	static dword replace_key;
+
 	void   Clear()                    { LineEdit::Clear(); found = notfoundfw = notfoundbk = false; }
 
-	void   Highlight(int h)           { highlight = h; Refresh(); }
-	int    GetHighlight() const       { return highlight; }
+	void   Highlight(const String& h);
+	String GetHighlight() const       { return highlight; }
 
-	const HlStyle& GetHlStyle(int i);
-	void           SetHlStyle(int i, Color c, bool bold = false, bool italic = false, bool underline = false);
-
+	void   EscapeFindReplace();
 	void   CloseFindReplace();
 	void   FindReplace(bool pick_selection, bool pick_text, bool replace);
-	bool   Find(bool back, const wchar *text, bool wholeword, bool ignorecase, bool wildcards,
-	            bool block);
-	bool   Find(bool back = false, bool blockreplace = false, bool replace = false);
+	void   FindAll();
+	bool   FindFrom(int pos, bool back, bool block);
+	bool   RegExpFind(int pos, bool block);
+	bool   Find(bool back, bool block);
+	bool   Find(bool back, bool blockreplace, bool replace);
+	void   FindNext();
+	void   FindPrev();
 	bool   GetStringRange(int cursor, int& b, int &e) const;
 	bool   GetStringRange(int& b, int &e) const { return GetStringRange(GetCursor(), b, e); }
 	bool   FindString(bool back);
 	bool   FindLangString(bool back);
 	void   Replace();
-	void   BlockReplace();
-	int    BlockReplace(WString find, WString replace, bool wholeword, bool ignorecase, bool wildcards);
-	void   MakeTabs();
+	void   ReplaceAll(bool rest);
+	int    BlockReplace();
+
 	void   MakeTabsOrSpaces(bool tabs);
+	void   MakeLineEnds();
 
 	void   CopyWord();
 	void   SwapChars();
+	void   DuplicateLine();
+	void   Put(int chr);
+	void   FinishPut();
 
 	void   SerializeFind(Stream& s);
 	bool   IsFindOpen() const                       { return findreplace.IsOpen(); }
-	void   FindClose()                              { findreplace.Close(); }
+	void   FindClose()                              { CloseFindReplace(); }
 
 	void   Goto();
 
 	void   DoFind();
 	void   DoFindBack();
 
-	void    FindWord(bool back);
+//	void    FindWord(bool back);
 	WString GetI();
 	void    SetI(Ctrl *edit);
 	void    PutI(WithDropChoice<EditString>& edit);
@@ -468,12 +428,18 @@ public:
 	void   TabRight();
 	void   TabLeft();
 
-	Callback1<int> WhenBreakpoint;
+	Event<int> WhenBreakpoint;
+
+
+	void    CheckEdited(bool e = true)                { check_edited = e; }
+	bool    GetCheckEdited()                          { return check_edited; }
+
+	void    EditorBarLayout()                         { bar.SyncSize(); }
 
 	LineInfo GetLineInfo() const                      { return bar.GetLineInfo(); }
 	void     SetLineInfo(const LineInfo& lf);
 	LineInfoRem GetLineInfoRem()                      { return LineInfoRem(bar.GetLineInfoRem(), 0); }
-	void     SetLineInfoRem(pick_ LineInfoRem& lf)    { bar.SetLineInfoRem(LineInfoRem(lf, 0)); }
+	void     SetLineInfoRem(LineInfoRem pick_  lf)    { bar.SetLineInfoRem(LineInfoRem(lf, 0)); }
 	double   GetStatEditTime() const                  { return stat_edit_time; }
 	void     Renumber()                               { bar.Renumber(GetLineCount()); }
 	void     ClearBreakpoints()                       { bar.ClearBreakpoints(); }
@@ -493,45 +459,79 @@ public:
 	void     DisableBreakpointing()                   { bar.EnableBreakpointing(false); }
 	void     Renumber2();
 	int      GetLine2(int i) const;
+	void     ReformatComment();
 
-	void     HiliteScope(byte b)                      { hilite_scope = b; Refresh(); }
-	void     HiliteBracket(byte b)                    { hilite_bracket = b; Refresh(); }
-	void     HiliteIfDef(byte b)                      { hilite_ifdef = b; Refresh(); }
+// TODO: Syntax: Remove
+	void     HiliteScope(byte b)                      { EditorSyntax::hilite_scope = b; Refresh(); }
+	void     HiliteBracket(byte b)                    { EditorSyntax::hilite_bracket = b; Refresh(); }
+	void     HiliteIfDef(byte b)                      { EditorSyntax::hilite_ifdef = b; Refresh(); }
 	void     HiliteIfEndif(bool b)                    { bar.HiliteIfEndif(b); }
+
+	void     ThousandsSeparator(bool b)               { thousands_separator = b; Refresh(); }
 	void     IndentSpaces(bool is)                    { indent_spaces = is; }
 	void     IndentAmount(int ia)                     { indent_amount = ia; }
 	void     NoParenthesisIndent(bool b)              { no_parenthesis_indent = b; }
+	
+	void     SpellcheckComments(int lang)             { spellcheck_comments = lang; Refresh(); }
+	int      GetSpellcheckComments() const            { return spellcheck_comments; }
+	void     WordwrapComments(bool b)                 { wordwrap_comments = b; }
+	bool     IsWordwrapComments() const               { return wordwrap_comments; }
+
+	void     NoFindReplace()                          { withfindreplace = false; }
+
 	void     LineNumbers(bool b)                      { bar.LineNumbers(b); }
 	void     MarkLines(bool b)                        { mark_lines = b; }
 	bool     GetMarkLines()                           { return mark_lines; }
 	void     AutoEnclose(bool b)                      { auto_enclose = b; }
 	void     BarLine(bool b)                          { barline = b; }
+	void     WordWrap(bool b)                         { wordwrap = b; }
+	
+	void     PersistentFindReplace(bool b = true)     { persistent_find_replace = b; }
+	bool     IsPersistentFindReplace() const          { return persistent_find_replace; }
+
+	void     FindReplaceRestorePos(bool b = true)     { do_ff_restore_pos = b; }
+	bool     IsFindReplaceRestorePos() const          { return do_ff_restore_pos; }
 	
 	void     Annotations(int width)                   { bar.Annotations(width); }
+	void     ClearAnnotations()                       { bar.ClearAnnotations(); }
 	void     SetAnnotation(int i, const Image& icon, const String& a) { bar.SetAnnotation(i, icon, a); }
 	String   GetAnnotation(int i) const               { return bar.GetAnnotation(i); }
 	int      GetActiveAnnotationLine() const          { return bar.GetActiveAnnotationLine(); }
 
 	void     HideBar()                                { bar.Hide(); }
 
-	void     DefaultHlStyles();
-	void     LoadHlStyles(const char *s);
-	String   StoreHlStyles();
-	
 	void     SyncTip();
 	void     CloseTip()                               { if(tip.IsOpen()) tip.Close(); tip.d = NULL;  }
+	
+	void     Illuminate(const WString& text)          { illuminated = text; Refresh(); }
 
-	const char *GetHlName(int i);
-	bool        HasHlFont(int i);
+	One<EditorSyntax> GetSyntax(int line);
+	bool IsCursorBracket(int pos) const;
+	bool IsMatchingBracket(int pos) const;
+
+// TODO: Do we really need this ?
+	Vector<IfState> GetIfStack(int line)              { return GetSyntax(line)->PickIfStack(); }
+
+	struct FindReplaceData {
+		String find, replace;
+		String find_list, replace_list;
+		bool   wholeword, wildcards, ignorecase, samecase, regexp;
+	};
+	
+	FindReplaceData GetFindReplaceData();
+	void            SetFindReplaceData(const FindReplaceData& d);
 
 	typedef CodeEditor CLASSNAME;
 
 	CodeEditor();
 	virtual ~CodeEditor();
 
-	static const Index<String>& CppKeywords();
+	static void InitKeywords();
 };
 
-END_UPP_NAMESPACE
+String ReadList(WithDropChoice<EditString>& e);
+void   WriteList(WithDropChoice<EditString>& e, const String& data);
+
+}
 
 #endif

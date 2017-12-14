@@ -1,4 +1,4 @@
-description "Средство для построения всех примеров использования U++\377";
+description "Utility that builds all U++ examples\377";
 
 uses
 	Core;

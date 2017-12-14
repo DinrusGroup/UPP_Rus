@@ -3,30 +3,58 @@
 
 #include <RichText/RichText.h>
 
+#ifdef  flagNOGTK
+#undef  flagGTK
+#define flagX11
+#endif
+
 #include <guiplatform.h>
 
 #ifndef GUIPLATFORM_INCLUDE
 
-#ifdef PLATFORM_WIN32
-#define GUIPLATFORM_INCLUDE "Win32Gui.h"
-#endif
-
-#ifdef PLATFORM_POSIX
-#define GUIPLATFORM_INCLUDE "X11Gui.h"
-#endif
+	#ifdef flagTURTLE
+		#define GUIPLATFORM_KEYCODES_INCLUDE <Turtle/Keys.h>
+		//need to make SDL_keysym.h known before K_ enum
+		#define GUIPLATFORM_INCLUDE          <Turtle/Turtle.h>
+		#define GUIPLATFORM_NOSCROLL
+		#define PLATFORM_TURTLE
+		#define TURTLE
+	#elif PLATFORM_WIN32
+		#define GUIPLATFORM_INCLUDE "Win32Gui.h"
+	#else
+		#ifdef flagX11
+			#define GUIPLATFORM_INCLUDE "X11Gui.h"
+		#else
+			#ifndef flagGTK
+				#define flagGTK
+			#endif
+			#define GUIPLATFORM_INCLUDE "Gtk.h"
+		#endif
+	#endif
 
 #endif
 
 #include GUIPLATFORM_INCLUDE
 
-NAMESPACE_UPP
+namespace Upp {
+
+INITIALIZE(CtrlCore)
 
 #ifdef _MULTITHREADED
 void EnterGuiMutex();
 void LeaveGuiMutex();
+
+int  LeaveGuiMutexAll();
+void EnterGuiMutex(int n);
+
+bool ThreadHasGuiLock();
 #else
 inline void EnterGuiMutex() {}
 inline void LeaveGuiMutex() {}
+
+inline int  LeaveGuiMutexAll() { return 0; }
+inline void EnterGuiMutex(int) {}
+inline bool ThreadHasGuiLock() { return true; }
 #endif
 
 struct GuiLock {
@@ -34,12 +62,9 @@ struct GuiLock {
 	~GuiLock() { LeaveGuiMutex(); }
 };
 
-bool ScreenInPaletteMode();
-Size GetScreenSize();
+bool ScreenInPaletteMode(); // Deprecated
 
 typedef ImageDraw SystemImageDraw;
-
-void StdDrawImage(SystemDraw& w, int x, int y, int cx, int cy, const Image& img, const Rect& src, Color color);
 
 void SetSurface(Draw& w, const Rect& dest, const RGBA *pixels, Size srcsz, Point poff);
 void SetSurface(Draw& w, int x, int y, int cx, int cy, const RGBA *pixels);
@@ -76,24 +101,24 @@ enum {
 	DELAY_MINIMAL = 0
 };
 
-void  SetTimeCallback(int delay_ms, Callback cb, void *id = NULL); // delay_ms < 0 -> periodic
+void  SetTimeCallback(int delay_ms, Function<void ()> cb, void *id = NULL); // delay_ms < 0 -> periodic
 void  KillTimeCallback(void *id);
 bool  ExistsTimeCallback(void *id);
 dword GetTimeClick();
 
 inline
-void  PostCallback(Callback cb, void *id = NULL)                { SetTimeCallback(1, cb, id); }
+void  PostCallback(Function<void ()> cb, void *id = NULL)  { SetTimeCallback(1, cb, id); }
 
 class TimeCallback
 {
 public:
-	~TimeCallback()                      { Kill(); }
+	~TimeCallback()                               { Kill(); (void)dummy; }
 
-	void Set(int delay, Callback cb)     { UPP::SetTimeCallback(delay, cb, this); }
-	void Post(Callback cb)               { UPP::PostCallback(cb, this); }
-	void Kill()                          { UPP::KillTimeCallback(this); }
-	void KillSet(int delay, Callback cb) { Kill(); Set(delay, cb); }
-	void KillPost(Callback cb)           { Kill(); Post(cb); }
+	void Set(int delay, Function<void ()> cb)     { UPP::SetTimeCallback(delay, cb, this); }
+	void Post(Function<void ()> cb)               { UPP::PostCallback(cb, this); }
+	void Kill()                                   { UPP::KillTimeCallback(this); }
+	void KillSet(int delay, Function<void ()> cb) { Kill(); Set(delay, cb); }
+	void KillPost(Function<void ()> cb)           { Kill(); Post(cb); }
 
 private:
 	byte dummy;
@@ -172,13 +197,11 @@ void LayoutFrameRight(Rect& r, Ctrl *ctrl, int cx);
 void LayoutFrameTop(Rect& r, Ctrl *ctrl, int cy);
 void LayoutFrameBottom(Rect& r, Ctrl *ctrl, int cy);
 
-dword GetMouseFlags();
-
 Point GetMousePos();
 dword GetMouseFlags();
 
 #define IMAGECLASS CtrlCoreImg
-#define IMAGEFILE <CtrlCore/Ctrl.iml>
+#define IMAGEFILE <CtrlCore/CtrlCore.iml>
 #include <Draw/iml_header.h>
 
 class TopWindow;
@@ -274,7 +297,9 @@ void        Append(VectorMap<String, ClipData>& data, const Image& img);
 
 bool            IsAvailableFiles(PasteClip& clip);
 bool            AcceptFiles(PasteClip& clip);
+Vector<String>  GetClipFiles(const String& data);
 Vector<String>  GetFiles(PasteClip& clip);
+void            AppendFiles(VectorMap<String, ClipData>& data, const Vector<String>& files);
 
 template <class T>
 String ClipFmt()
@@ -287,7 +312,6 @@ bool   Accept(PasteClip& clip)
 {
 	return clip.Accept(ClipFmt<T>());
 }
-
 
 String GetInternalDropId__(const char *type, const char *id);
 void NewInternalDrop__(const void *ptr);
@@ -320,6 +344,12 @@ const T& GetInternal(PasteClip& d)
 	return *(T *)GetInternalDropPtr__();
 }
 
+template <class T>
+const T *GetInternalPtr(PasteClip& d, const char *id = "")
+{
+	return IsAvailableInternal<T>(d, id) ? (T *)GetInternalDropPtr__() : NULL;
+}
+
 class Ctrl : public Pte<Ctrl> {
 public:
 	enum PlacementConstants {
@@ -339,7 +369,7 @@ public:
 	class Logc {
 		dword data;
 
-		static int LSGN(dword d)       { return int16(d & 0x7fff | ((d & 0x4000) << 1)); }
+		static int LSGN(dword d)       { return int16((d & 0x7fff) | ((d & 0x4000) << 1)); }
 
 	public:
 		bool  operator==(Logc q) const { return data == q.data; }
@@ -356,7 +386,7 @@ public:
 		Logc()                         { data = 0xffffffff; }
 	};
 
-	struct LogPos {
+	struct LogPos : Moveable<LogPos> {
 		Logc x, y;
 
 		bool operator==(LogPos b) const   { return x == b.x && y == b.y; }
@@ -464,6 +494,7 @@ private:
 	static  Rect      caretRect;
 	static  Ptr<Ctrl> captureCtrl;
 	static  bool      ignoreclick;
+	static  bool      ignoremouseup;
 	static  bool      ignorekeyup;
 	static  bool      mouseinview;
 	static  bool      mouseinframe;
@@ -526,6 +557,7 @@ private:
 	static  void  DoCursorShape();
 	static  Image& CursorOverride();
 	bool    IsMouseActive() const;
+	Image   MouseEvent0(int event, Point p, int zdelta, dword keyflags);
 	Image   MouseEventH(int event, Point p, int zdelta, dword keyflags);
 	Image   FrameMouseEventH(int event, Point p, int zdelta, dword keyflags);
 	Image   MEvent0(int e, Point p, int zd);
@@ -562,34 +594,25 @@ private:
 	void    ScrollRefresh(const Rect& r, int dx, int dy);
 	void    ScrollCtrl(Top *top, Ctrl *q, const Rect& r, Rect cr, int dx, int dy);
 	void    SyncScroll();
+	void    Refresh0(const Rect& area);
 	void    PaintCaret(SystemDraw& w);
-	#ifdef flagWINGL
-	void 	CtrlPaint(SystemDraw& w, const Rect& clip, int depth = 0);
-	#else
 	void    CtrlPaint(SystemDraw& w, const Rect& clip);
-	#endif
 	void    RemoveFullRefresh();
 	bool    PaintOpaqueAreas(SystemDraw& w, const Rect& r, const Rect& clip, bool nochild = false);
 	void    GatherTransparentAreas(Vector<Rect>& area, SystemDraw& w, Rect r, const Rect& clip);
 	Ctrl   *FindBestOpaque(const Rect& clip);
+	void    ExcludeDHCtrls(SystemDraw& w, const Rect& r, const Rect& clip);
 	void    UpdateArea0(SystemDraw& draw, const Rect& clip, int backpaint);
 	void    UpdateArea(SystemDraw& draw, const Rect& clip);
-	Ctrl   *GetTopRect(Rect& r, bool inframe);
+	Ctrl   *GetTopRect(Rect& r, bool inframe, bool clip = true);
 	void    DoSync(Ctrl *q, Rect r, bool inframe);
 	bool    HasDHCtrl() const;
 	void    SyncDHCtrl();
 	void    SetInfoPart(int i, const char *txt);
 	String  GetInfoPart(int i) const;
 
-	static  Callback    CtrlCall;
-	
-	static  bool DoCall();
-
 // System window interface...
-	void WndShow0(bool b);
 	void WndShow(bool b);
-
-	void WndSetPos0(const Rect& rect);
 	void WndSetPos(const Rect& rect);
 
 	bool IsWndOpen() const;
@@ -604,50 +627,48 @@ private:
 	static void DoKillFocus(Ptr<Ctrl> pfocusCtrl, Ptr<Ctrl> nfocusCtrl);
 	static void DoSetFocus(Ptr<Ctrl> pfocusCtrl, Ptr<Ctrl> nfocusCtrl, bool activate);
 
+	bool SetFocus0(bool activate);
 	void ActivateWnd();
 	void ClickActivateWnd();
-	bool SetFocus0(bool activate);
-	void SetWndFocus0(bool *b);
 	bool SetWndFocus();
 	bool HasWndFocus() const;
 
-	void WndInvalidateRect0(const Rect& r);
 	void WndInvalidateRect(const Rect& r);
 
-	void SetWndForeground0();
+	void WndScrollView(const Rect& r, int dx, int dy);
+
 	void SetWndForeground();
 	bool IsWndForeground() const;
 
-	void WndEnable0(bool *b);
-	bool WndEnable(bool b);
+	void WndEnable(bool b);
 
 	Rect GetWndScreenRect() const;
-	void WndScrollView0(const Rect& r, int dx, int dy);
-	void WndScrollView(const Rect& r, int dx, int dy);
-	void WndUpdate0();
+
 	void WndUpdate();
-	void WndUpdate0r(const Rect& r);
 	void WndUpdate(const Rect& r);
 
 	void WndFree();
-	void WndDestroy0();
 	void WndDestroy();
 
-	static void GuiSleep0(int ms);
+	void SysEndLoop();
+
+	String Name0() const;
 
 	static void InitTimer();
 
 	static String appname;
 
+	static Size Bsize;
 	static Size Dsize;
 	static Size Csize;
+	static bool IsNoLayoutZoom;
 	static void Csizeinit();
 	static void (*skin)();
 
-	static  void ICall(Callback cb);
-
+	friend void  InitRichTextZoom();
 	friend void  AvoidPaintingCheck__();
-	friend void CtrlSetDefaultSkin(void (*fn1)(), void (*fn2)());
+	friend dword GetKeyStateSafe(dword what);
+	friend void  CtrlSetDefaultSkin(void (*fn1)(), void (*fn2)());
 	friend class DHCtrl;
 	friend class ViewDraw;
 	friend class TopWindow;
@@ -673,6 +694,8 @@ private:
 #else
 	GUIPLATFORM_CTRL_DECLS
 #endif
+
+	static void InstallPanicBox();
 
 private:
 			void    DoRemove();
@@ -759,7 +782,7 @@ public:
 	static  void   InstallStateHook(StateHook hook);
 	static  void   DeinstallStateHook(StateHook hook);
 	
-	static  int    RegisterSystemHotKey(dword key, Callback cb);
+	static  int    RegisterSystemHotKey(dword key, Function<void ()> cb);
 	static  void   UnregisterSystemHotKey(int id);
 
 	virtual bool   Accept();
@@ -767,6 +790,8 @@ public:
 	virtual void   SetData(const Value& data);
 	virtual Value  GetData() const;
 	virtual void   Serialize(Stream& s);
+	virtual void   Jsonize(JsonIO& jio);
+	virtual void   Xmlize(XmlIO& xio);
 	virtual void   SetModify();
 	virtual void   ClearModify();
 	virtual bool   IsModified() const;
@@ -778,6 +803,7 @@ public:
 
 	virtual void   Activate();
 	virtual void   Deactivate();
+	virtual void   DeactivateBy(Ctrl *new_focus);
 
 	virtual Image  FrameMouseEvent(int event, Point p, int zdelta, dword keyflags);
 	virtual Image  MouseEvent(int event, Point p, int zdelta, dword keyflags);
@@ -825,7 +851,7 @@ public:
 	virtual dword  GetAccessKeys() const;
 	virtual void   AssignAccessKeys(dword used);
 
-	virtual void   PostInput();
+	virtual void   PostInput(); // Deprecated
 
 	virtual void   ChildFrameMouseEvent(Ctrl *child, int event, Point p, int zdelta, dword keyflags);
 	virtual void   ChildMouseEvent(Ctrl *child, int event, Point p, int zdelta, dword keyflags);
@@ -856,7 +882,7 @@ public:
 
 	virtual String GetDesc() const;
 
-	Callback       WhenAction;
+	Event<>          WhenAction;
 
 	void             AddChild(Ctrl *child);
 	void             AddChild(Ctrl *child, Ctrl *insafter);
@@ -867,6 +893,9 @@ public:
 	Ctrl            *GetFirstChild() const       { return firstchild; }
 	Ctrl            *GetPrev() const             { return parent ? prev : NULL; }
 	Ctrl            *GetNext() const             { return parent ? next : NULL; }
+	int              GetChildIndex(const Ctrl *child) const;
+	Ctrl            *GetIndexChild(int i) const;
+	int              GetChildCount() const;
 
 	bool             IsChild() const             { return parent; }
 
@@ -934,21 +963,12 @@ public:
 	bool        InView() const                           { return !inframe; }
 	LogPos      GetPos() const                           { return pos; }
 
-	#ifdef flagWINGL
-	void        RefreshLayout()                          { }
-	void        RefreshLayoutDeep()                      { }
-	void        RefreshParentLayout()                    { }
-	
-	void        UpdateLayout()                           { }
-	void        UpdateParentLayout()                     { }
-	#else
 	void        RefreshLayout()                          { SyncLayout(1); }
 	void        RefreshLayoutDeep()                      { SyncLayout(2); }
 	void        RefreshParentLayout()                    { if(parent) parent->RefreshLayout(); }
 	
 	void        UpdateLayout()                           { SyncLayout(); }
 	void        UpdateParentLayout()                     { if(parent) parent->UpdateLayout(); }
-	#endif
 
 	Ctrl&       LeftPos(int a, int size = STDSIZE);
 	Ctrl&       RightPos(int a, int size = STDSIZE);
@@ -1024,11 +1044,13 @@ public:
 
 	static void IgnoreMouseClick();
 	static void IgnoreMouseUp();
+	static void UnIgnoreMouse();
 
 	bool    SetCapture();
 	bool    ReleaseCapture();
 	bool    HasCapture() const;
-	static bool ReleaseCtrlCapture();
+	static bool  ReleaseCtrlCapture();
+	static Ctrl *GetCaptureCtrl();
 
 	bool    SetFocus();
 	bool    HasFocus() const                   { return FocusCtrl() == this; }
@@ -1108,6 +1130,7 @@ public:
 	String  GetDescription() const;
 	String  GetHelpTopic() const;
 	String  GetLayoutId() const;
+	void    ClearInfo()                        { info.Clear(); }
 
 	void    Add(Ctrl& ctrl)                    { AddChild(&ctrl); }
 	Ctrl&   operator<<(Ctrl& ctrl)             { Add(ctrl); return *this; }
@@ -1118,21 +1141,19 @@ public:
 	const Value& operator<<=(const Value& v)   { SetData(v); return v; }
 	bool         IsNullInstance() const        { return GetData().IsNull(); }
 
-	Callback     operator<<=(Callback action)  { WhenAction = action; return action; }
-	Callback&    operator<<(Callback action)   { return WhenAction << action; }
+	Callback     operator<<=(Callback  action) { WhenAction = action; return action; }
 
-	void    SetTimeCallback(int delay_ms, Callback cb, int id = 0);
+	Event<>&     operator<<(Event<> action)    { return WhenAction << action; }
+	Event<>&     operator^=(Event<> action)    { return WhenAction = action; }
+
+	void    SetTimeCallback(int delay_ms, Function<void ()> cb, int id = 0);
 	void    KillTimeCallback(int id = 0);
-	void    KillSetTimeCallback(int delay_ms, Callback cb, int id);
+	void    KillSetTimeCallback(int delay_ms, Function<void ()> cb, int id);
 	bool    ExistsTimeCallback(int id = 0) const;
-	void    PostCallback(Callback cb, int id = 0);
-	void    KillPostCallback(Callback cb, int id);
+	void    PostCallback(Function<void ()> cb, int id = 0);
+	void    KillPostCallback(Function<void ()> cb, int id);
 	
 	enum { TIMEID_COUNT = 1 };
-
-	static void  Call(Callback cb);
-
-	static void  SetTimerGranularity(int ms);
 
 	static Ctrl *GetActiveCtrl();
 	static Ctrl *GetActiveWindow();
@@ -1144,18 +1165,12 @@ public:
 
 	void   SetAlpha(byte alpha);
 
-#ifdef PLATFORM_WIN32
-	static bool ProcessPaintEvent();
-	static bool ProcessPaintEvents();
-#endif
-
 	static bool IsWaitingEvent();
 	static bool ProcessEvent(bool *quit = NULL);
 	static bool ProcessEvents(bool *quit = NULL);
 
 	bool   IsPopUp() const          { return popup; }
 
-	static void  EventLoop0(Ctrl *ctrl);
 	static void  EventLoop(Ctrl *loopctrl = NULL);
 	static int   GetLoopLevel()     { return LoopLevel; }
 	static Ctrl *GetLoopCtrl()      { return LoopCtrl; }
@@ -1195,8 +1210,9 @@ public:
 	static Size LayoutZoom(Size sz);
 	static void NoLayoutZoom();
 	static void GetZoomRatio(Size& m, Size& d);
-
-	static int  HZoom(int cx)                            { return HorzLayoutZoom(cx); }
+	
+	static void SetUHDEnabled(bool set = true);
+	static bool IsUHDEnabled();
 
 	static bool ClickFocus();
 	static void ClickFocus(bool cf);
@@ -1207,6 +1223,7 @@ public:
 	static Rect   GetPrimaryScreenArea();
 	static void   GetWorkArea(Array<Rect>& rc);
 	static Rect   GetWorkArea(Point pt);
+	static Rect   GetMouseWorkArea()                     { return GetWorkArea(GetMousePos()); }
 	static int    GetKbdDelay();
 	static int    GetKbdSpeed();
 	static bool   IsAlphaSupported();
@@ -1221,7 +1238,8 @@ public:
 
 	static void   ReSkin();
 
-	String      Name() const;
+	String        Name() const;
+	static String Name(Ctrl *ctrl);
 
 #ifdef _DEBUG
 	virtual void   Dump() const;
@@ -1235,20 +1253,33 @@ public:
 	static bool MemoryCheck;
 
 	static void GuiSleep(int ms);
+
+	static void SetTimerGranularity(int ms);
+
+	static void Call(Function<void ()> cb);
+
+#ifdef _MULTITHREADED
+	static bool IsShutdownThreads()                     { return Thread::IsShutdownThreads(); }
+	static void ShutdownThreads();
+#endif
 	
 	static int64 GetEventId()                           { return eventid; }
-
-	void Xmlize(XmlIO xml);
 
 	Ctrl();
 	virtual ~Ctrl();
 };
 
-String GuiPlatformGetKeyDesc(dword key);
+inline Size GetScreenSize()  { return Ctrl::GetVirtualScreenArea().GetSize(); } // Deprecated
+
 bool   GuiPlatformHasSizeGrip();
 void   GuiPlatformGripResize(TopWindow *q);
 Color  GuiPlatformGetScreenPixel(int x, int y);
 void   GuiPlatformAfterMenuPopUp();
+
+inline int  Zx(int cx) { return Ctrl::HorzLayoutZoom(cx); }
+inline int  Zy(int cy) { return Ctrl::VertLayoutZoom(cy); }
+inline Size Zsz(int cx, int cy) { return Size(Zx(cx), Zy(cy)); }
+inline Size Zsz(Size sz) { return Zsz(sz.cx, sz.cy); }
 
 Font FontZ(int face, int height = 0);
 
@@ -1256,13 +1287,13 @@ Font StdFontZ(int height = 0);
 Font SansSerifZ(int height = 0);
 Font SerifZ(int height = 0);
 Font MonospaceZ(int height = 0);
-
-Font ScreenSansZ(int height = 0);
-Font ScreenSerifZ(int height = 0);
-Font ScreenFixedZ(int height = 0);
 Font RomanZ(int height = 0);
 Font ArialZ(int height = 0);
 Font CourierZ(int height = 0);
+
+Font ScreenSansZ(int height = 0); // deprecated
+Font ScreenSerifZ(int height = 0); // deprecated
+Font ScreenFixedZ(int height = 0); // deprecated
 
 int   EditFieldIsThin();
 Value TopSeparator1();
@@ -1286,6 +1317,7 @@ int GUI_AltAccessKeys();
 int GUI_AKD_Conservative();
 int GUI_DragDistance();
 int GUI_DblClickTime();
+int GUI_WheelScrollLines();
 
 void GUI_GlobalStyle_Write(int);
 void GUI_DragFullWindow_Write(int);
@@ -1296,6 +1328,7 @@ void GUI_AltAccessKeys_Write(int);
 void GUI_AKD_Conservative_Write(int);
 void GUI_DragDistance_Write(int);
 void GUI_DblClickTime_Write(int);
+void GUI_WheelScrollLines_Write(int);
 
 void  EditFieldIsThin_Write(int);
 void  TopSeparator1_Write(Value);
@@ -1426,6 +1459,7 @@ enum {
 
 void DrawDragRect(Ctrl& q, const Rect& rect1, const Rect& rect2, const Rect& clip, int n,
                   Color color, int type, int animation);
+void FinishDragRect(Ctrl& q);
 
 bool PointLoop(Ctrl& ctrl, const Vector<Image>& ani, int ani_ms);
 bool PointLoop(Ctrl& ctrl, const Image& img);
@@ -1462,12 +1496,13 @@ protected:
 	Rect            o;
 	Point           op;
 
-	Rect            Round(const Rect& r)           { return rounder ? rounder->Round(r) : r; }
+	Rect            Round(const Rect& r);
 
 	virtual void    DrawRect(Rect r1, Rect r2);
 
 public:
-	Callback1<Rect> sync;
+	Event<Rect>  sync;
+	Event<Rect&> round;
 
 	RectTracker&    SetCursorImage(const Image& m) { cursorimage = m; return *this; }
 	RectTracker&    MinSize(Size sz)               { minsize = sz; return *this; }
@@ -1521,6 +1556,8 @@ void    ClearClipboard();
 void    AppendClipboard(const char *format, const byte *data, int length);
 void    AppendClipboard(const char *format, const String& data);
 void    AppendClipboard(const char *format, const Value& data, String (*render)(const Value& data));
+void    AppendClipboard(const char *format, const ClipData& data);
+void    AppendClipboard(const VectorMap<String, ClipData>& data);
 String  ReadClipboard(const char *format);
 bool    IsClipboardAvailable(const char *format);
 
@@ -1592,6 +1629,6 @@ RichText   ParseRTF(const char *rtf);
 
 #include GUIPLATFORM_INCLUDE_AFTER
 
-END_UPP_NAMESPACE
+}
 
 #endif

@@ -6,9 +6,11 @@
 class Tcc
 {
 public:
-	Tcc() {stateTcc = 0;};
+	Tcc() {
+		stateTcc = 0;
+	};
 	~Tcc();
-#if defined(PLATFORM_WIN32)
+#if defined(COMPILER_MSC)
 	Tcc(const char *dllFile);
 	void Init(const char *dllFile = "libtcc.dll");
 #else
@@ -30,25 +32,23 @@ public:
 	void *GetSymbol(const char *funName); 
 	void Link(const char *fileName = 0);
 	
-	String GetProgram() {
-		String ret;
-		ret <<= program;
-		return ret;
-	}
+	String GetProgram();
 
 private:
+	static int numInstances;
 	TCCState *stateTcc;
-#if defined(PLATFORM_WIN32)
+#if defined(COMPILER_MSC)
 	HINSTANCE hinstLib;
 #endif
 
 	static void DefaultErrorHandler(void *opaque, const char *msg);
-	static String errorMsg;
-	static int initialProgramLines;
+	String errorMsg;
+	int initProgramLines;
+	int initLen;
 	String program;
 	bool outputMemory;
 	
-#if defined(PLATFORM_WIN32)
+#if defined(COMPILER_MSC)
 	TCCState *(*T_tcc_new)(void);
 	void (*T_tcc_delete)(TCCState *);
 	int (*T_tcc_set_output_type)(TCCState *s, int output_type);

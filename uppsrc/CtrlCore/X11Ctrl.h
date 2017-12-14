@@ -1,3 +1,4 @@
+//$ namespace Upp {
 //$ class Ctrl {
 	bool         ignoretakefocus:1;
 protected:
@@ -33,7 +34,7 @@ private:
 	       XWindow *GetXWindow();
 	static void     SyncMousePos();
 	static void     ReleaseGrab();
-	static Vector<Callback> hotkey;
+	static Vector<Event<> > hotkey;
 	static Vector<dword> modhot;
 	static Vector<dword> keyhot;
 
@@ -49,7 +50,6 @@ private:
 
 protected:
 	       void   Create(Ctrl *owner, bool redirect, bool savebits);
-	       void   Create0(Ctrl *owner, bool redirect, bool savebits);
 	       void   SyncExpose();
 	       void   TakeFocus();
 	static Window GetXServerFocusWindow();
@@ -110,4 +110,4 @@ public:
 	static void InitX11(const char *display);
 	static void ExitX11();
 	static void GuiFlush()                              { XFlush(Xdisplay); }
-//$ };
+//$ }};

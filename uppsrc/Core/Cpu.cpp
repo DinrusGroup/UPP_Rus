@@ -1,60 +1,55 @@
 #include "Core.h"
-
-NAMESPACE_UPP
+namespace Upp {
 
 #ifdef CPU_X86
+
+#ifdef COMPILER_MSC
+#include <intrin.h> 
+#else
+#include <cpuid.h>
+#endif
 
 static bool sHasMMX;
 static bool sHasSSE;
 static bool sHasSSE2;
 static bool sHasSSE3;
+static bool sHypervisor;
 
 static void sCheckCPU()
 {
 	static bool done;
 	if(done) return;
 	done = true;
-#ifdef PLATFORM_OSX11
-//	__asm__("pushl %%ebx\n\tmovl $1, %%eax\n\tcpuid\n\tpopl %%ebx" : "=d" (info1), "=c" (info2) : : "%eax");
-	sHasMMX = true;
-	sHasSSE = true;
-	sHasSSE2 = true;
-#else
-#ifdef CPU_AMD64
-	sHasMMX = true;
-	sHasSSE = true;
-	sHasSSE2 = true;
-#else
-#ifdef COMPILER_MSC
-	dword info1;
-	dword info2;
-	__asm {
-		mov eax, 1
-		cpuid
-		mov info1, edx
-		mov info2, ecx
+	ONCELOCK {
+		unsigned int eax, ebx, ecx, edx;
+		#ifdef COMPILER_MSC
+			int cpuInfo[4];
+			__cpuid(cpuInfo, 1);
+			eax = cpuInfo[0];
+			ebx = cpuInfo[1];
+			ecx = cpuInfo[2];
+			edx = cpuInfo[3];
+		#else
+			__get_cpuid(1, &eax, &ebx, &ecx, &edx);
+		#endif
+		// https://en.wikipedia.org/wiki/CPUID#EAX.3D1:_Processor_Info_and_Feature_Bits
+		sHasMMX = edx & (1 << 23);
+		sHasSSE = edx & (1 << 25);
+		sHasSSE2 = edx & (1 << 26);
+		sHasSSE3 = ecx & 1;
+		sHypervisor = ecx & (1 << 31);
 	}
-#else
-	dword info1;
-	dword info2;
-	__asm__("movl $1, %%eax\n\tcpuid" : "=d" (info1), "=c" (info2) : : "%eax", "%ebx");
-#endif
-	sHasMMX = ((info1 >> 23) & 0x1);
-	sHasSSE = ((info1 >> 25) & 0x1);
-	sHasSSE2 = ((info1 >> 26) & 0x1);
-	sHasSSE3 = ((info2) & 0x1);
-#endif
-#endif
 }
 
 INITBLOCK {
 //	sCheckCPU();
 }
 
-bool CpuMMX()  { sCheckCPU(); return sHasMMX; }
-bool CpuSSE()  { sCheckCPU(); return sHasSSE; }
-bool CpuSSE2() { sCheckCPU(); return sHasSSE2; }
-bool CpuSSE3() { sCheckCPU(); return sHasSSE3; }
+bool CpuMMX()        { sCheckCPU(); return sHasMMX; }
+bool CpuSSE()        { sCheckCPU(); return sHasSSE; }
+bool CpuSSE2()       { sCheckCPU(); return sHasSSE2; }
+bool CpuSSE3()       { sCheckCPU(); return sHasSSE3; }
+bool CpuHypervisor() { sCheckCPU(); return sHypervisor; }
 
 #ifdef PLATFORM_POSIX
 #ifdef PLATFORM_BSD
@@ -101,10 +96,31 @@ int CPU_Cores()
 	return n;
 }
 #else
-inline int CPU_Cores()
+
+#ifdef PLATFORM_LINUX
+	#ifdef PLATFORM_ANDROID
+	#include <cpu-features.h>
+	
+	int CPU_Cores()
+	{
+		return android_getCpuCount();
+	}
+	
+	#else
+	#include <sys/sysinfo.h>
+
+	int CPU_Cores()
+	{
+		return minmax(get_nprocs(), 1, 256);
+	}
+	#endif
+#else
+int CPU_Cores()
 {
-	return 1;	
+	return 1;
 }
+#endif
+
 #endif
 
 #ifdef PLATFORM_WIN32
@@ -115,7 +131,6 @@ bool IsDecentMachine()
 	MEMORYSTATUS m;
 	GlobalMemoryStatus(&m);
 	return m.dwTotalPhys > 500 * 1024 * 1024;
-
 }
 #else
 bool IsDecentMachine()
@@ -148,11 +163,11 @@ void PokeI64(void *ptr, int64 value) {
 #endif
 #define ENDIAN_SWAP { while(count--) { EndianSwap(*v++); } }
 
-void EndianSwap(word *v, int count) ENDIAN_SWAP
-void EndianSwap(int16 *v, int count) ENDIAN_SWAP
-void EndianSwap(dword *v, int count) ENDIAN_SWAP
-void EndianSwap(int *v, int count) ENDIAN_SWAP
-void EndianSwap(int64 *v, int count) ENDIAN_SWAP
-void EndianSwap(uint64 *v, int count) ENDIAN_SWAP
+void EndianSwap(word *v, size_t count) ENDIAN_SWAP
+void EndianSwap(int16 *v, size_t count) ENDIAN_SWAP
+void EndianSwap(dword *v, size_t count) ENDIAN_SWAP
+void EndianSwap(int *v, size_t count) ENDIAN_SWAP
+void EndianSwap(int64 *v, size_t count) ENDIAN_SWAP
+void EndianSwap(uint64 *v, size_t count) ENDIAN_SWAP
 
-END_UPP_NAMESPACE
+}

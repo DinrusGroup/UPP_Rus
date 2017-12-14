@@ -1,13 +1,11 @@
 #include "Geom.h"
-#pragma hdrstop
 
-#include <float.h>
-
-NAMESPACE_UPP
+namespace Upp {
 
 #define POLY_TIMING(n) // RTIMING(n)
 #define POLY_LOGGING   0 // 1 = on, 0 = off
 
+/*
 static bool ContainsPoints(const Point *poly, int count, Point P)
 {
 	if(count <= 2 || IsNull(P))
@@ -55,7 +53,7 @@ static bool ContainsPoints(const Point *poly, int count, Point P)
 	}
 	return in;
 }
-
+*/
 static inline int PolyCompare(Pointf P, Pointf A, Pointf B, Size ap, Size bp)
 {
 	if(ap.cx < 0 && bp.cx < 0 || ap.cy > 0 && bp.cy > 0 || ap.cy < 0 && bp.cy < 0)
@@ -410,8 +408,8 @@ void SplitPolygon(const Point *vertices, int vertex_count, const int *counts, in
 	PolygonIterator<int> pi(clip, max_trace_points);
 	pi.Add(vertices, vertex_count, counts, count_count);
 	pi.Run();
-	out_vertices = pi.out_vertices;
-	out_counts = pi.out_counts;
+	out_vertices = pick(pi.out_vertices);
+	out_counts = pick(pi.out_counts);
 }
 
 void SplitPolygon(const Vector<Point>& vertices, const Vector<int>& counts,
@@ -428,8 +426,8 @@ void SplitPolygon(Array<Pointf>::ConstIterator vertices, int vertex_count, const
 	PolygonIterator<double> pi(clip, max_trace_points);
 	pi.Add(vertices, vertex_count, counts, count_count);
 	pi.Run();
-	out_vertices = pi.out_vertices;
-	out_counts = pi.out_counts;
+	out_vertices = pick(pi.out_vertices);
+	out_counts = pick(pi.out_counts);
 }
 
 void SplitPolygon(const Array<Pointf>& vertices, const Vector<int>& counts,
@@ -684,7 +682,7 @@ void PolygonIterator<T>::Run()
 				Flush(flush, y);
 			Trace& n = traces.Insert(i1);
 			i2++;
-			n.avail = segments[s];
+			n.avail = pick(segments[s]);
 			n.next = n.avail.Begin();
 			n.stop = n.avail.End() - 1;
 			n.end = *++n.next;
@@ -692,7 +690,7 @@ void PolygonIterator<T>::Run()
 			if(i1 & 1)
 			{ // hole opening
 				Trace& r = traces[i1 + 1];
-				n.done = r.done;
+				n.done = pick(r.done);
 #if POLY_LOGGING
 				RLOG("insert: r.ypos = " << r.ypos);
 				if(r.ypos.y < n.done.Top().y)
@@ -716,7 +714,7 @@ void PolygonIterator<T>::Run()
 			else // simply insert segment
 				n.Add(n.next[-1]);
 			Trace& o = traces.Insert(i2);
-			o.avail = segments[s + 1];
+			o.avail = pick(segments[s + 1]);
 			o.next = o.avail.Begin();
 			o.stop = o.avail.End() - 1;
 			o.Add(*o.next);
@@ -1032,4 +1030,4 @@ void PolygonIterator<T>::DumpDone(int i) const
 	RLOG(out);
 }
 
-END_UPP_NAMESPACE
+}

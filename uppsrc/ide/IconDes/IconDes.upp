@@ -1,4 +1,4 @@
-description "RusIDE - .iml дизайнер\377B";
+description "TheIDE - .iml designer\377B";
 
 uses
 	IconDes,
@@ -6,7 +6,8 @@ uses
 
 file
 	IconDes.h,
+	IconDes.cpp,
 	IdeDes.cpp,
-	"Инфо" readonly separator,
+	Info readonly separator,
 	Copying;
 

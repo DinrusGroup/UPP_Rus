@@ -1,4 +1,4 @@
-description "Раскраска текста в разные цвета\377";
+description "Paints text using different colors";
 
 uses
 	CtrlLib;

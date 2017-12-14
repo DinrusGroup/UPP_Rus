@@ -1,5 +1,39 @@
 #include "Core.h"
 
+const char *SkipSpc(const char *term) {
+	while(*term == '\t' || *term == ' ')
+		term++;
+	return term;
+}
+
+String FindIncludeFile(const char *s, const String& filedir, const Vector<String>& incdir)
+{
+	s = SkipSpc(s);
+	int type = *s;
+	if(type == '<' || type == '\"' || type == '?') {
+		s++;
+		String name;
+		if(type == '<') type = '>';
+		while(*s != '\r' && *s != '\n') {
+			if(*s == type) {
+				if(type == '\"') {
+					String fn = NormalizePath(name, filedir);
+					if(FileExists(fn))
+						return fn;
+				}
+				for(int i = 0; i < incdir.GetCount(); i++) {
+					String fn = CatAnyPath(incdir[i], name);
+					if(FileExists(fn))
+						return fn;
+				}
+				break;
+			}
+			name.Cat(*s++);
+		}
+	}
+	return String();
+}
+
 class Hdepend {
 	struct Info {
 		Time                      time;
@@ -31,7 +65,7 @@ class Hdepend {
 	void   GetMacroIndex(Index<String>& dest, int ix);
 
 public:
-	void  SetDirs(pick_ Vector<String>& id)  { incdir = id; map.Clear(); }
+	void  SetDirs(Vector<String> pick_ id)  { incdir = pick(id); map.Clear(); }
 	void  TimeDirty();
 
 	void  ClearDependencies()  { depends.Clear(); }
@@ -39,7 +73,7 @@ public:
 
 	Time                  FileTime(const String& path);
 	bool                  BlitzApproved(const String& path);
-	String                FindIncludeFile(const char *s, const String& filedir);
+	String                FindIncludeFile(const char *s, const String& filedir) { return ::FindIncludeFile(s, filedir, incdir); }
 	const Vector<String>& GetDefines(const String& path);
 	Vector<String>        GetDependencies(const String& path);
 	const Vector<String>& GetAllFiles()                           { return map.GetKeys(); }
@@ -50,45 +84,10 @@ void Hdepend::AddDependency(const String& file, const String& dep)
 	depends.GetAdd(NormalizePath(file)).FindAdd(NormalizePath(dep));
 }
 
-const char *SkipSpc(const char *term) {
-	while(*term == '\t' || *term == ' ')
-		term++;
-	return term;
-}
-
 const char *RestOfLine(const char *term, String& val) {
 	while(*term && *term != '\r' && *term != '\n')
 		val.Cat(*term++);
 	return term;
-}
-
-String Hdepend::FindIncludeFile(const char *s, const String& filedir)
-{
-	s = SkipSpc(s);
-	int type = *s;
-	if(type == '<' || type == '\"' || type == '?') {
-		s++;
-		String name;
-		if(type == '<') type = '>';
-		while(*s != '\r' && *s != '\n') {
-			if(*s == type) {
-				if(type == '\"') {
-					String fn = NormalizePath(name, filedir);
-					if(FileExists(fn))
-						return fn;
-					FindFile ff(fn);
-				}
-				for(int i = 0; i < incdir.GetCount(); i++) {
-					String fn = CatAnyPath(incdir[i], name);
-					if(FileExists(fn))
-						return fn;
-				}
-				break;
-			}
-			name.Cat(*s++);
-		}
-	}
-	return String();
 }
 
 void Hdepend::Include(const char *s, Hdepend::Info& info, const String& filedir, bool bydefine) {
@@ -109,17 +108,17 @@ void Hdepend::Include(const char *s, Hdepend::Info& info, const String& filedir,
 }
 
 static const char *SkipComment(const char *s) {
-	if(*s == '/')
+	if(*s == '/') {
 		if(s[1] == '/')
 			for(s += 2; *s && *s != '\n';)
 				s++;
-		else if(s[1] == '*')
-		{
+		else if(s[1] == '*') {
 			for(s += 2; *s && (*s != '*' || s[1] != '/'); s++)
 				;
 			if(*s)
 				s += 2;
 		}
+	}
 	return s;
 }
 
@@ -150,12 +149,15 @@ void Hdepend::ScanFile(const String& path, int map_index) {
 		else
 		if(term[0] == '/' && term[1] == '/') {
 			if(term[2] == '#') {
-				CParser p(term + 3);
-				if(p.Id("BLITZ_APPROVE") || p.Id("once"))
-					info.guarded = true;
-				else
-				if(p.Id("BLITZ_PROHIBIT"))
-					info.blitzprohibit = true;
+				try {
+					CParser p(term + 3);
+					if(p.Id("BLITZ_APPROVE") || p.Id("once"))
+						info.guarded = true;
+					else
+					if(p.Id("BLITZ_PROHIBIT"))
+						info.blitzprohibit = true;
+				}
+				catch(CParser::Error) {}
 			}
 			while(*term) {
 				if(*term == '\n') break;
@@ -184,33 +186,42 @@ void Hdepend::ScanFile(const String& path, int map_index) {
 				   term[3] == 'd' && term[4] == 'e' && term[5] == 'f' &&
 				   (term[6] == ' ' || term[6] == '\t')) {
 					testg = false;
-					CParser p(term + 6);
-					if(p.IsId()) {
-						String id = p.ReadId();
-						if(p.Char('#') && p.Id("define") && p.IsId() && id == p.ReadId())
-							info.guarded = true;
+					try {
+						CParser p(term + 6);
+						if(p.IsId()) {
+							String id = p.ReadId();
+							if(p.Char('#') && p.Id("define") && p.IsId() && id == p.ReadId())
+								info.guarded = true;
+						}
 					}
+					catch(CParser::Error) {}
 				}
 				else
 				if(defines && term[0] == 'd' && term[1] == 'e' && term[2] == 'f' &&
 				   term[3] == 'i' && term[4] == 'n' && term[5] == 'e' &&
 				   (term[6] == ' ' || term[6] == '\t')) {
-				       CParser p(term + 6);
-				       if(p.IsId())
-				          info.define.Add(p.ReadId());
-				       term = p.GetPtr();
+				       try {
+					       CParser p(term + 6);
+					       if(p.IsId())
+					          info.define.Add(p.ReadId());
+					       term = p.GetPtr();
+				       }
+				       catch(CParser::Error) {}
 				}
 				else
 				if(term[0] == 'p' && term[1] == 'r' && term[2] == 'a' &&
 				   term[3] == 'g' && term[4] == 'm' && term[5] == 'a' &&
 				   (term[6] == ' ' || term[6] == '\t')) {
-					CParser p(term + 6);
-					if(p.Id("BLITZ_APPROVE") || p.Id("once"))
-						info.guarded = true;
-					else
-					if(p.Id("BLITZ_PROHIBIT"))
-						info.blitzprohibit = true;
-					term = p.GetPtr();
+				    try {
+						CParser p(term + 6);
+						if(p.Id("BLITZ_APPROVE") || p.Id("once"))
+							info.guarded = true;
+						else
+						if(p.Id("BLITZ_PROHIBIT"))
+							info.blitzprohibit = true;
+						term = p.GetPtr();
+				    }
+				    catch(CParser::Error) {}
 				}
 			}
 			else if(IsAlpha(*term) || *term == '_') {
@@ -253,7 +264,7 @@ void Hdepend::ScanFile(const String& path, int map_index) {
 		GetMacroIndex(new_minc, map_index);
 		if(new_minc.GetCount() <= minc.GetCount())
 			return;
-		minc = new_minc;
+		minc = pick(new_minc);
 		term = src;
 		while(*term) {
 			while(*term && (byte)*term <= ' ')
@@ -415,8 +426,6 @@ bool Hdepend::BlitzApproved(const String& path)
 		return false;
 	if(info.guarded)
 		return true;
-	if(info.guarded)
-		return true;
 	for(int i = 0; i < info.depend.GetCount(); i++)
 		if(!info.bydefine[i] && !map[info.depend[i]].CanBlitz()) {
 			PutVerbose(String().Cat() << map.GetKey(info.depend[i])
@@ -434,9 +443,9 @@ const Vector<String>& Hdepend::GetDefines(const String& path)
 	return map[d].define;
 }
 
-void HdependSetDirs(pick_ Vector<String>& id)
+void HdependSetDirs(Vector<String> pick_ id)
 {
-	Single<Hdepend>().SetDirs(id);
+	Single<Hdepend>().SetDirs(pick(id));
 }
 
 void HdependTimeDirty()

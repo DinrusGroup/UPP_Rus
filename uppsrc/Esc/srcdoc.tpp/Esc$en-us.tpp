@@ -1,19 +1,16 @@
-topic "Язык программирования Esc";
+topic "Esc scripting language";
 [2 $$0,0#00000000000000000000000000000000:Default]
 [b133;a83;*+117 $$1,0#31310162474203024125188417583966:subtitle]
 [b83;*+150 $$2,0#07864147445237544204411237157677:title]
 [l321;C@5;1 $$3,3#20902679421464641399138805415013:code]
 [{_}%EN-US 
-[s0; [*R8 Язык сценариев Esc]&]
-[s0;*R8 &]
-[s0; Esc простой язык сценариев, презназначенный 
-для внедрения в приложения Ultimate`+`+ 
-.&]
+[s0; [*R8 Esc scripting language]&]
 [s0; &]
-[s0; Он нетипированный, ориентированный 
-на значение, с простым интерфейсом 
-к C`+`+/U`+`+ коду. Очень простой, но вполне 
-самодостаточный язык.&]
+[s0; Esc is a simple scripting language intended for embedding in 
+Ultimate`+`+ applications.&]
+[s0; &]
+[s0; It is typeless, value oriented language with simple interfacing 
+with C`+`+/U`+`+ code. It is very simple yet quite complete language.&]
 [s0; &]
 [s2; Value types&]
 [s1; voids&]
@@ -475,5 +472,27 @@ function, otherwise is unspecified).]
 `"day`", `"month`" and `"year`" members, 0 otherwise.]
 :: [s0; [*C GetSysTime()]]
 :: [s0; Returns current time as map with `"second`", `"minute`", `"hour`", 
-`"day`", `"month`" and `"year`" members.]}}&]
-[s0; ]
+`"day`", `"month`" and `"year`" members.]
+:: [s0; [*C sin(][/C x][*C )]&]
+[s0; [*C cos(][/C x][*C )]&]
+[s0; [*C tan(][/C x][*C )]&]
+[s0; [*C asin(][/C x][*C )]&]
+[s0; [*C acos(][/C x][*C )]&]
+[s0; [*C atan(][/C x][*C )]&]
+[s0; [*C atan2(][/C a][*C , ][/C b][*C )]&]
+[s0; [*C sinh(][/C x][*C )]&]
+[s0; [*C cosh(][/C x][*C )]&]
+[s0; [*C tanh(][/C x][*C )]&]
+[s0; [*C asinh(][/C x][*C )]&]
+[s0; [*C acosh(][/C x][*C )]&]
+[s0; [*C atanh(][/C x][*C )]&]
+[s0; [*C exp(][/C x][*C )]&]
+[s0; [*C log(][/C x][*C )]&]
+[s0; [*C log10(][/C x][*C )]&]
+[s0; [*C exp2(][/C x][*C )]&]
+[s0; [*C log2(][/C x][*C )]&]
+[s0; [*C sqrt(][/C x][*C )]&]
+[s0; [*C cbrt(][/C x][*C )]&]
+[s0; [*C pow(][/C base][*C , ][/C exp][*C )]]
+:: [s0; Well know mathematical functions.]}}&]
+[s0; ]]

@@ -1,13 +1,14 @@
 #include "CtrlLib.h"
 
-NAMESPACE_UPP
+namespace Upp {
 
 CH_STYLE(Splitter, Style, StyleDefault)
 {
-	width = 4;
+	width = Ctrl::HorzLayoutZoom(4);
 	vert[0] = horz[0] = SColorFace();
 	vert[1] = horz[1] = GUI_GlobalStyle() >= GUISTYLE_XP ? Blend(SColorHighlight, SColorFace)
 	                                                     : SColorShadow();
+	dots = true;
 }
 
 int Splitter::ClientToPos(Point p) const
@@ -18,14 +19,6 @@ int Splitter::ClientToPos(Point p) const
 int Splitter::PosToClient(int pos) const
 {
 	return (vert ? GetSize().cy : GetSize().cx) * pos / 10000;
-}
-
-int Splitter::GetChildCount() const
-{
-	int count = 0;
-	for(Ctrl *child = GetFirstChild(); child; child = child->GetNext())
-		count++;
-	return count;
 }
 
 void Splitter::Layout() {
@@ -69,7 +62,24 @@ void Splitter::Layout() {
 	}
 }
 
-void   Splitter::Paint(Draw& w) {
+int Splitter::GetSplitWidth() const
+{
+	return chstyle->width;
+}
+
+void Splitter::PaintDots(Draw& w, const Rect& r, bool vert)
+{
+	int x = r.left + r.GetWidth() / 2;
+	int y = r.top + r.GetHeight() / 2;
+	(vert ? x : y) -= 8 * 4;
+	for(int i = 0; i < 16; i++) {
+		w.DrawRect(x - 1, y - 1, 1, 1, SColorShadow());
+		w.DrawRect(x, y, 1, 1, SColorShadow());
+		(vert ? x : y) += 4;
+	}
+}
+
+void Splitter::Paint(Draw& w) {
 	Size sz = GetSize();
 	if(!IsTransparent())
 		w.DrawRect(sz, SColorFace);
@@ -83,12 +93,15 @@ void   Splitter::Paint(Draw& w) {
 			else
 			if(!IsTransparent())
 				ChPaint(w, r, ch[0]);
+			if(chstyle->dots)
+				PaintDots(w, r, vert);
 		}
 }
 
 void   Splitter::MouseMove(Point p, dword) {
 	if(HasCapture() && mouseindex >= 0 && mouseindex < pos.GetCount()) {
 		SetPos(ClientToPos(p), mouseindex);
+		Refresh();
 		WhenAction();
 	}
 }
@@ -115,6 +128,7 @@ int Splitter::FindIndex(Point client) const {
 void   Splitter::LeftUp(Point p, dword keyflags) {
 	if(HasCapture())
 		WhenSplitFinish();
+	ReleaseCapture();
 	Refresh();
 }
 
@@ -124,12 +138,12 @@ Image Splitter::CursorImage(Point p, dword) {
 
 int Splitter::GetMins(int i) const
 {
-   int min1 = (i < mins.GetCount() ? mins[i] : 0);
-   int min2 = 0;
-   int cx = IsVert() ? GetSize().cy : GetSize().cx;
-   if(cx)
-       min2 = (i < minpx.GetCount() ? minpx[i] : 0) * 10000 / cx;
-   return max(min1, min2);
+	int min1 = (i < mins.GetCount() ? mins[i] : 0);
+	int min2 = 0;
+	int cx = IsVert() ? GetSize().cy : GetSize().cx;
+	if(cx)
+		min2 = (i < minpx.GetCount() ? minpx[i] : 0) * 10000 / cx;
+	return max(min1, min2);
 }
 
 Splitter& Splitter::SetPos(int p, int i) {
@@ -173,6 +187,24 @@ void Splitter::Add(Ctrl& pane)
 	Layout();
 }
 
+void Splitter::Insert(int ii, Ctrl& pane)
+{
+	if(ii >= GetCount())
+		Add(pane);
+	else {	
+		Ctrl::AddChildBefore(&pane, GetIndexChild(ii));
+		pos.Clear();
+		Layout();
+	}
+}
+
+void Splitter::Swap(Ctrl& child, Ctrl& newctrl)
+{
+	newctrl.SetRect(child.GetRect());
+	Ctrl::AddChildBefore(&newctrl, &child);
+	Ctrl::RemoveChild(&child);
+}
+
 void Splitter::Serialize(Stream& s) {
 	int version = 0x02;
 	s / version;
@@ -190,7 +222,7 @@ void Splitter::Serialize(Stream& s) {
 	}
 	if(s.IsLoading()) {
 		for(int i = 0; i < pos.GetCount(); i++)
-			if(pos[i] < 0 || pos[i] >= 10000) {
+			if(pos[i] < 0 || pos[i] > 10000) {
 				pos.Clear();
 				s.LoadError();
 			}
@@ -215,7 +247,7 @@ void Splitter::Remove(Ctrl& ctrl)
 				pos.Remove(n-1);
 			mins.Remove(n);
 			minpx.Remove(n);
-			RemoveChild(c);
+			RemoveChild(c); 
 			break;
 		}
 		c = c->GetNext();
@@ -261,4 +293,4 @@ Splitter::Splitter() {
 
 Splitter::~Splitter() {}
 
-END_UPP_NAMESPACE
+}

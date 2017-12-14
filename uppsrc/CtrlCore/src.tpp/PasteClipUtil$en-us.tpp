@@ -1,4 +1,4 @@
-topic "";
+topic "PasteClip basic formats support functions";
 [2 $$0,0#00000000000000000000000000000000:Default]
 [i448;a25;kKO9;2 $$1,0#37138531426314131252341829483380:class]
 [l288;2 $$2,2#27521748481378242620020725143825:desc]
@@ -87,6 +87,12 @@ asteClip][@(0.0.255) `&]_[*@3 clip])&]
 [s2;%% Accepts [%-*@3 clip].if it contains a list of OS shell files.&]
 [s3;%% &]
 [s4; &]
+[s5;:GetClipFiles`(const String`&`): [_^Vector^ Vector]<[_^String^ String]>_[* GetClipFiles
+]([@(0.0.255) const]_[_^String^ String][@(0.0.255) `&]_[*@3 data])&]
+[s2;%% Extracts a list of OS shell files from raw Clipboard [%-*@3 data] 
+(result of ClipData`::Get call).&]
+[s3;%% &]
+[s4; &]
 [s5;:GetFiles`(PasteClip`&`): [_^Vector^ Vector]<[_^String^ String]>_[* GetFiles]([_^PasteClip^ P
 asteClip][@(0.0.255) `&]_[*@3 clip])&]
 [s2;%% Extracts a list of OS shell files from [%-*@3 clip].&]
@@ -115,18 +121,24 @@ to objects. [%-*@3 x] must exists as long as clip is available.&]
 [s5;:IsAvailableInternal`(PasteClip`&`,const char`*`): [@(0.0.255) template]_<[@(0.0.255) c
 lass]_[*@4 T]>_[@(0.0.255) bool]_[* IsAvailableInternal]([_^PasteClip^ PasteClip][@(0.0.255) `&
 ]_[*@3 d], [@(0.0.255) const]_[@(0.0.255) char]_`*[*@3 id]_`=_`"`")&]
-[s2;%% Returns true if there is internal clip in [%-*@3 d].&]
+[s2;%% Returns true if there is internal clip  of required type and 
+[%-*@3 id ]in [%-*@3 d].&]
 [s3;%% &]
 [s4; &]
 [s5;:AcceptInternal`(PasteClip`&`,const char`*`): [@(0.0.255) template]_<[@(0.0.255) clas
 s]_[*@4 T]>_[@(0.0.255) bool]_[* AcceptInternal]([_^PasteClip^ PasteClip][@(0.0.255) `&]_[*@3 d
 ], [@(0.0.255) const]_[@(0.0.255) char]_`*[*@3 id]_`=_`"`")&]
-[s2;%% Accepts internal clip.&]
+[s2;%% Accepts internal clip of required type and [%-*@3 id].&]
 [s3;%% &]
 [s4; &]
 [s5;:GetInternal`(PasteClip`&`): [@(0.0.255) template]_<[@(0.0.255) class]_[*@4 T]>_[@(0.0.255) c
 onst]_[*@4 T][@(0.0.255) `&]_[* GetInternal]([_^PasteClip^ PasteClip][@(0.0.255) `&]_[*@3 d])
 &]
-[s2;%% Returns a reference to variable of internal clip.&]
-[s3;%% &]
-[s0;%% ]
+[s2;%% Returns a reference to internal clip.&]
+[s4; &]
+[s5;:Upp`:`:GetInternalPtr`(Upp`:`:PasteClip`&`,const char`*`): [@(0.0.255) template]_<
+[@(0.0.255) class]_[*@4 T]>_[@(0.0.255) const]_[*@4 T]_`*[* GetInternalPtr]([_^Upp`:`:PasteClip^ P
+asteClip][@(0.0.255) `&]_[*@3 d], [@(0.0.255) const]_[@(0.0.255) char]_`*[*@3 id]_`=_`"`")&]
+[s2;%% If internal clip of required type and [%-*@3 id ]is available, 
+returns a pointer to it, NULL otherwise.&]
+[s3;%% ]]

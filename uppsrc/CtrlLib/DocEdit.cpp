@@ -1,6 +1,6 @@
 #include "CtrlLib.h"
 
-NAMESPACE_UPP
+namespace Upp {
 
 void DocEdit::MouseWheel(Point p, int zdelta, dword keyflags)
 {
@@ -52,7 +52,7 @@ DocEdit::Fmt DocEdit::Format(const WString& text) const
 			*s = ' ';
 		}
 		x += cw;
-		if(x > cx)
+		if(x > cx) {
 			if(space && space <= s) {
 				space++;
 				fmt.line.Add(int(space - fmt.text));
@@ -63,6 +63,7 @@ DocEdit::Fmt DocEdit::Format(const WString& text) const
 				fmt.line.Add(int(s - fmt.text));
 				x = cw;
 			}
+		}
 	}
 	fmt.fi = fi;
 	return fmt;
@@ -165,6 +166,7 @@ void DocEdit::SetSb()
 	cx = max(Draw::GetStdFontCy(), sz.cx - 2);
 	sb.SetPage(GetSize().cy);
 	sb.SetTotal(GetY(para.GetCount()) + 2);
+	PlaceCaret(false);
 }
 
 void DocEdit::Layout()
@@ -223,11 +225,12 @@ int  DocEdit::GetCursorPos(Point p) {
 void DocEdit::PlaceCaret(bool scroll) {
 	Point cr = GetCaret(cursor);
 	int fy = font.Info().GetLineHeight();
-	if(scroll)
+	if(scroll) {
 		if(cursor == total)
 			sb.End();
 		else
 			sb.ScrollInto(cr.y, fy + 2);
+	}
 	SetCaret(cr.x + 1, cr.y - sb, 1, fy);
 	WhenSel();
 }
@@ -260,7 +263,7 @@ int DocEdit::GetMousePos(Point p)
 }
 
 void DocEdit::LeftDown(Point p, dword flags) {
-	SetWantFocus();
+	SetFocus();
 	int c = GetMousePos(p);
 	int l, h;
 	if(GetSelection(l, h) && c >= l && c < h) {
@@ -276,9 +279,10 @@ void DocEdit::LeftUp(Point p, dword flags)
 	if(!HasCapture() && selclick) {
 		int c = GetMousePos(p);
 		PlaceCaret(c, flags & K_SHIFT);
-		SetWantFocus();
+		SetFocus();
 	}
 	selclick = false;
+	ReleaseCapture();
 }
 
 void DocEdit::MouseMove(Point p, dword flags) {
@@ -501,6 +505,7 @@ DocEdit::DocEdit()
 	sb.WhenScroll = THISBACK(Scroll);
 	InsertLines(0, 1);
 	eofline = true;
+	PlaceCaret(false);
 }
 
 DocEdit::~DocEdit() {}
@@ -513,9 +518,11 @@ void DocEdit::DragAndDrop(Point p, PasteClip& d)
 		NextUndo();
 		int a = sb;
 		int sell, selh;
+		WString txt = GetWString(d);
 		if(GetSelection(sell, selh)) {
 			if(c >= sell && c < selh) {
-				RemoveSelection();
+				if(!IsReadOnly())
+					RemoveSelection();
 				if(IsDragAndDropSource())
 					d.SetAction(DND_COPY);
 				c = sell;
@@ -524,11 +531,12 @@ void DocEdit::DragAndDrop(Point p, PasteClip& d)
 			if(d.GetAction() == DND_MOVE && IsDragAndDropSource()) {
 				if(c > sell)
 					c -= selh - sell;
-				RemoveSelection();
+				if(!IsReadOnly())
+					RemoveSelection();
 				d.SetAction(DND_COPY);
 			}
 		}
-		int count = Insert(c, GetWString(d));
+		int count = Insert(c, txt);
 		sb = a;
 		SetFocus();
 		SetSelection(c, c + count);
@@ -585,11 +593,11 @@ void DocEdit::LeftDrag(Point p, dword flags)
 		iw.Alpha().DrawRect(ssz, Black());
 		DrawTLText(iw.Alpha(), 0, 0, ssz.cx, sample, StdFont(), White());
 		NextUndo();
-		if(DoDragAndDrop(ClipFmtsText(), iw) == DND_MOVE) {
+		if(DoDragAndDrop(ClipFmtsText(), iw) == DND_MOVE && !IsReadOnly()) {
 			RemoveSelection();
 			Action();
 		}
 	}
 }
 
-END_UPP_NAMESPACE
+}

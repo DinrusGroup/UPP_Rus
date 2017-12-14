@@ -1,9 +1,33 @@
 #include <CtrlLib/CtrlLib.h>
 
-NAMESPACE_UPP
+namespace Upp {
 
 #ifdef GUI_WIN
 void AvoidPaintingCheck__();
+
+Image ProcessSHIcon(const SHFILEINFO& info)
+{
+	AvoidPaintingCheck__();
+	Color c = White();
+	Image m[2];
+	for(int i = 0; i < 2; i++) {
+		ICONINFO iconinfo;
+		if(!info.hIcon || !GetIconInfo(info.hIcon, &iconinfo))
+			return Image();
+		BITMAP bm;
+		::GetObject((HGDIOBJ)iconinfo.hbmMask, sizeof(BITMAP), (LPVOID)&bm);
+		Size sz(bm.bmWidth, bm.bmHeight);
+		ImageDraw iw(sz);
+		iw.DrawRect(sz, c);
+		::DrawIconEx(iw.GetHandle(), 0, 0, info.hIcon, 0, 0, 0, NULL, DI_NORMAL|DI_COMPAT);
+		::DeleteObject(iconinfo.hbmColor);
+		::DeleteObject(iconinfo.hbmMask);
+		c = Black();
+		m[i] = iw;
+	}
+	::DestroyIcon(info.hIcon);
+	return RecreateAlpha(m[0], m[1]);
+}
 
 struct FileIconMaker : ImageMaker {
 	String file;
@@ -16,31 +40,12 @@ struct FileIconMaker : ImageMaker {
 	}
 
 	virtual Image Make() const {
-		Color c = White();
-		Image m[2];
-		for(int i = 0; i < 2; i++) {
-			SHFILEINFO info;
-			AvoidPaintingCheck__();
-			SHGetFileInfo(ToSystemCharset(file), dir ? FILE_ATTRIBUTE_DIRECTORY : FILE_ATTRIBUTE_NORMAL,
-			              &info, sizeof(info),
-			              SHGFI_ICON|(large ? SHGFI_LARGEICON : SHGFI_SMALLICON)|(exe ? 0 : SHGFI_USEFILEATTRIBUTES));
-			HICON icon = info.hIcon;
-			ICONINFO iconinfo;
-			if(!icon || !GetIconInfo(icon, &iconinfo))
-				return Image();
-			BITMAP bm;
-			::GetObject((HGDIOBJ)iconinfo.hbmMask, sizeof(BITMAP), (LPVOID)&bm);
-			Size sz(bm.bmWidth, bm.bmHeight);
-			ImageDraw iw(sz);
-			iw.DrawRect(sz, c);
-			::DrawIconEx(iw.GetHandle(), 0, 0, info.hIcon, 0, 0, 0, NULL, DI_NORMAL|DI_COMPAT);
-			::DeleteObject(iconinfo.hbmColor);
-			::DeleteObject(iconinfo.hbmMask);
-			::DestroyIcon(info.hIcon);
-			c = Black();
-			m[i] = iw;
-		}
-		return RecreateAlpha(m[0], m[1]);
+		SHFILEINFO info;
+		AvoidPaintingCheck__();
+		SHGetFileInfo(ToSystemCharset(file), dir ? FILE_ATTRIBUTE_DIRECTORY : FILE_ATTRIBUTE_NORMAL,
+		              &info, sizeof(info),
+		              SHGFI_ICON|(large ? SHGFI_LARGEICON : SHGFI_SMALLICON)|(exe ? 0 : SHGFI_USEFILEATTRIBUTES));
+		return ProcessSHIcon(info);
 	}
 };
 
@@ -76,13 +81,18 @@ Image GetFileIcon(const char *path, bool dir, bool force, bool large, bool quick
 
 #endif
 
-#if defined(GUI_X11) && !defined(flagNOGTK)
+#if defined(PLATFORM_X11) && !defined(flagNOGTK)
 
 Image GtkThemeIcon(const char *name, bool large);
 
 Image GnomeImage(const char *s, bool large = false)
 {
 	return GtkThemeIcon(String("gnome-") + s, large);
+}
+
+Image SystemImage(const char *s, bool large = false)
+{
+	return GtkThemeIcon(s, large);
 }
 
 struct ExtToMime {
@@ -155,21 +165,48 @@ struct FileExtMaker : ImageMaker {
 		String minor;
 		if(!Single<ExtToMime>().GetMime(ext, major, minor))
 			return Null;
-		Image img = GnomeImage("mime-" + major + '-' + minor, large);
-		return IsNull(img) ? GnomeImage("mime-" + major) : img;
+		Image img = SystemImage(major + '-' + minor, large);
+		return IsNull(img) ? SystemImage(major) : img;
 	}
 };
 
 Image PosixGetDriveImage(String dir, bool large)
 {
-	static Image cdrom = GnomeImage("dev-cdrom");
-	static Image lcdrom = GnomeImage("dev-cdrom", true);
-	static Image harddisk = GnomeImage("dev-harddisk");
-	static Image lharddisk = GnomeImage("dev-harddisk", true);
-	static Image floppy = GnomeImage("dev-floppy");
-	static Image lfloppy = GnomeImage("dev-floppy", true);
-	static Image computer = GnomeImage("dev-computer");
-	static Image lcomputer = GnomeImage("dev-computer", true);
+	static bool init = false;
+	static Image cdrom;
+	static Image lcdrom;
+	static Image harddisk;
+	static Image lharddisk;
+	static Image floppy;
+	static Image lfloppy;
+	static Image computer;
+	static Image lcomputer;
+	
+	if (!init) {
+		bool KDE = Environment().Get("KDE_FULL_SESSION", String()) == "true";
+		if (KDE) {
+			cdrom     = SystemImage("media-optical");
+			lcdrom    = SystemImage("media-optical", true);
+			harddisk  = SystemImage("drive-harddisk");
+			lharddisk = SystemImage("drive-harddisk", true);
+			floppy    = SystemImage("media-floppy");
+			lfloppy   = SystemImage("media-floppy", true);
+			computer  = SystemImage("computer");
+			lcomputer = SystemImage("computer", true);
+		}
+		else {
+			cdrom     = GnomeImage("dev-cdrom");
+			lcdrom    = GnomeImage("dev-cdrom", true);
+			harddisk  = GnomeImage("dev-harddisk");
+			lharddisk = GnomeImage("dev-harddisk", true);
+			floppy    = GnomeImage("dev-floppy");
+			lfloppy   = GnomeImage("dev-floppy", true);
+			computer  = GnomeImage("dev-computer");
+			lcomputer = GnomeImage("dev-computer", true);
+		}
+		
+		init = true;
+	}
 	if(dir.GetCount() == 0 || dir == "/") {
 		Image m = large ? lcomputer : computer;
 		return IsNull(m) ? CtrlImg::Computer() : m;
@@ -188,23 +225,128 @@ Image PosixGetDriveImage(String dir, bool large)
 
 Image GetFileIcon(const String& folder, const String& filename, bool isdir, bool isexe, bool large)
 {
-	static Image file = GnomeImage("fs-regular");
-	static Image lfile = GnomeImage("fs-regular", true);
-	static Image dir = GnomeImage("fs-directory");
-	static Image ldir = GnomeImage("fs-directory", true);
-	static Image exe = GnomeImage("fs-executable");
-	static Image lexe = GnomeImage("fs-executable", true);
-	static Image home = GnomeImage("fs-home");
-	static Image lhome = GnomeImage("fs-home", true);
-	static Image desktop = GnomeImage("fs-desktop");
-	static Image ldesktop = GnomeImage("fs-desktop", true);
+	static bool init = false;
+	static bool KDE  = Environment().Get("KDE_FULL_SESSION", String()) == "true";
+	
+	static Image file;
+	static Image lfile;
+	static Image dir;
+	static Image ldir;
+	static Image exe;
+	static Image lexe;
+	static Image home;
+	static Image lhome;
+	static Image desktop;
+	static Image ldesktop;
+	static Image music;
+	static Image lmusic;
+	static Image pictures;
+	static Image lpictures;
+	static Image video;
+	static Image lvideo;
+	static Image documents;
+	static Image ldocuments;
+	static Image download;
+	static Image ldownload;
+	static Image help;
+	static Image lhelp;
+	static Image translation;
+	static Image ltranslation;
+	static Image layout;
+	static Image llayout;
+	
+	static Image fileImage;
+	static Image fileMusic  = SystemImage("audio-x-generic");
+	static Image fileScript = SystemImage("text-x-script");
+	
+	if (!init) {
+		if (KDE) {
+			file         = SystemImage("text-plain");
+			lfile        = SystemImage("text-plain", true);
+			dir          = SystemImage("folder");
+			ldir         = SystemImage("folder", true);
+			exe          = SystemImage("application-x-executable");
+			lexe         = SystemImage("application-x-executable", true);
+			home         = SystemImage("user-home");
+			lhome        = SystemImage("user-home", true);
+			desktop      = SystemImage("user-desktop");
+			ldesktop     = SystemImage("user-desktop", true);
+			music        = SystemImage("folder-sound");
+			lmusic       = SystemImage("folder-sound", true);
+			pictures     = SystemImage("folder-image");
+			lpictures    = SystemImage("folder-image", true);
+			video        = SystemImage("folder-video");
+			lvideo       = SystemImage("folder-video", true);
+			documents    = SystemImage("folder-documents");
+			ldocuments   = SystemImage("folder-documents", true);
+			download     = SystemImage("folder-downloads");
+			ldownload    = SystemImage("folder-downloads", true);
+			help         = SystemImage("help-contents");
+			lhelp        = SystemImage("help-contents", true);
+			translation  = SystemImage("applications-education-language");
+			ltranslation = SystemImage("applications-education-language", true);
+			layout       = SystemImage("applications-development");
+			llayout      = SystemImage("applications-development", true);
+			
+			fileImage    = SystemImage("application-x-egon");
+		}
+		else {
+			file         = GnomeImage("fs-regular");
+			lfile        = GnomeImage("fs-regular", true);
+			dir          = GnomeImage("fs-directory");
+			ldir         = GnomeImage("fs-directory", true);
+			exe          = GnomeImage("fs-executable");
+			lexe         = GnomeImage("fs-executable", true);
+			home         = GnomeImage("fs-home");
+			lhome        = GnomeImage("fs-home", true);
+			desktop      = GnomeImage("fs-desktop");
+			ldesktop     = GnomeImage("fs-desktop", true);
+			music        = SystemImage("folder-music");
+			lmusic       = SystemImage("folder-music", true);
+			pictures     = SystemImage("folder-pictures");
+			lpictures    = SystemImage("folder-pictures", true);
+			video        = SystemImage("folder-video");
+			lvideo       = SystemImage("folder-video", true);
+			documents    = SystemImage("folder-documents");
+			ldocuments   = SystemImage("folder-documents", true);
+			download     = SystemImage("folder-downloads");
+			ldownload    = SystemImage("folder-downloads", true);
+			help         = SystemImage("help");
+			lhelp        = SystemImage("help", true);
+			translation  = SystemImage("preferences-desktop-locale");
+			ltranslation = SystemImage("preferences-desktop-locale", true);
+			layout       = SystemImage("applications-development");
+			llayout      = SystemImage("applications-development", true);
+
+			fileImage    = SystemImage("image-x-generic");
+		}
+		
+		init = true;
+	}
+	if (filename == "Help Topics")
+		return large ? lhelp : help;
 	if(isdir) {
 		Image img = dir;
 		if(AppendFileName(folder, filename) == GetHomeDirectory())
 			return large ? lhome : home;
 		else
-		if(folder == GetHomeDirectory() && filename == "Desktop")
+		if(AppendFileName(folder, filename) ==  GetDesktopFolder ())
 			return large ? ldesktop : desktop;
+		else
+		if(AppendFileName(folder, filename) == GetMusicFolder ())
+			return large ? lmusic : music;
+		else
+		if(AppendFileName(folder, filename) == GetPicturesFolder())
+			return large ? lpictures : pictures;
+		else
+		if(AppendFileName(folder, filename) == GetVideoFolder())
+			return large ? lvideo : video;
+		else
+		if(AppendFileName(folder, filename) == GetDocumentsFolder())
+			return large ? ldocuments : documents;
+		else
+		if(AppendFileName(folder, filename) == GetDownloadFolder())
+			return large ? ldownload : download;
 		else
 		if(folder == "/media" || filename.GetCount() == 0)
 			return PosixGetDriveImage(filename, large);
@@ -212,11 +354,38 @@ Image GetFileIcon(const String& folder, const String& filename, bool isdir, bool
 	}
 	FileExtMaker m;
 	m.ext = GetFileExt(filename);
+	for (int i = 1; i < m.ext.GetCount(); ++i)
+		m.ext.Set (i, ToLower(m.ext[i]));
+	
+	// Fixing format problems
+	if (m.ext == ".gz") m.ext = ".tar.gz";
+	
+	// Ultimate++ - files extensions
+	if (m.ext == ".t" || m.ext == ".lng") return large ? ltranslation : translation;
+	if (m.ext == ".lay") return large ? llayout : layout;
+	if (m.ext == ".iml") return fileImage;
+	if (m.ext == ".usc") return fileScript;
+	
+	// Binary - files extensions (It seems that KDE has problem with multimedia MIME icons handling)
+	if (KDE) {
+		if (m.ext == ".bmp" || m.ext == ".dib" ||
+			m.ext == ".gif" ||
+			m.ext == ".jpg" || m.ext == ".jpeg" || m.ext == ".jpe" ||
+			m.ext == ".png" ||
+			m.ext == ".tif" || m.ext == ".tiff" ||
+			m.ext == ".svg" ||
+			m.ext == ".ico" ||
+			m.ext == ".xcf")
+			return fileImage;
+		if (m.ext == ".aac" || m.ext == ".ogg" || m.ext == ".mp3")  return fileMusic;
+	}
+
 	Image img;
 	if(m.ext.GetCount()) {
 		m.ext = m.ext.Mid(1);
 		m.large = large;
 		img = MakeImage(m);
+		isexe = false;
 	}
 	return IsNull(img) ? isexe ? (large ? lexe : exe) : (large ? lfile : file) : img;
 }
@@ -296,7 +465,7 @@ bool MatchSearch(const String& filename, const String& search)
 }
 
 bool Load(FileList& list, const String& dir, const char *patterns, bool dirs,
-          Callback3<bool, const String&, Image&> WhenIcon, FileSystemInfo& filesystem,
+          Event<bool, const String&, Image&> WhenIcon, FileSystemInfo& filesystem,
           const String& search, bool hidden, bool hiddenfiles, bool lazyicons)
 {
 	if(dir.IsEmpty()) {
@@ -304,16 +473,17 @@ bool Load(FileList& list, const String& dir, const char *patterns, bool dirs,
 		for(int i = 0; i < root.GetCount(); i++)
 			if(MatchSearch(root[i].filename, search))
 				list.Add(root[i].filename,
-			#ifdef PLATFORM_WIN32
-					GetFileIcon(root[i].filename, false, true, false),
-			#else
 					GetDriveImage(root[i].root_style),
-			#endif
 					StdFont().Bold(), SColorText, true, -1, Null, SColorDisabled,
-					root[i].root_desc, StdFont()
+			#ifdef PLATFORM_WIN32
+					Nvl(root[i].root_desc, String(" ") + t_("Local Disk")),
+			#else
+					root[i].root_desc,
+			#endif
+					StdFont()
 				);
 		#ifdef PLATFORM_WIN32
-			list.Add(t_("Сеть"), CtrlImg::Network(), StdFont().Bold(), SColorText,
+			list.Add(t_("Network"), CtrlImg::Network(), StdFont().Bold(), SColorText,
 			         true, -1, Null, SColorDisabled, Null, StdFont());
 		#endif
 	}
@@ -337,13 +507,11 @@ bool Load(FileList& list, const String& dir, const char *patterns, bool dirs,
 			   (fi.is_directory || PatternMatchMulti(patterns, fi.filename)) &&
 			   MatchSearch(fi.filename, search) && show) {
 				Image img;
-			#ifdef GUI_X11
+			#ifdef PLATFORM_POSIX
 				img = isdrive ? PosixGetDriveImage(fi.filename, false)
 				              : GetFileIcon(dir, fi.filename, fi.is_directory, fi.unix_mode & 0111, false);
 			#endif
 			#ifdef GUI_WIN
-//				Image img = lazyicons ? fi.is_directory ? CtrlImg::Dir() : CtrlImg::File()
-//				                      : GetFileIcon(AppendFileName(dir, fi.filename), fi.is_directory, fi.unix_mode & 0111, false);
 				img = GetFileIcon(AppendFileName(dir, fi.filename), fi.is_directory, false, false, lazyicons);
 			#endif
 				if(IsNull(img))
@@ -371,41 +539,98 @@ bool Load(FileList& list, const String& dir, const char *patterns, bool dirs,
 	return true;
 }
 
-void LazyFileIcons::Do()
+#ifdef GUI_WIN
+static Mutex      sExeMutex;
+static char       sExePath[1025];
+static bool       sExeRunning;
+static SHFILEINFO sExeInfo;
+
+static auxthread_t auxthread__ sExeIconThread(void *)
 {
-	if(Ctrl::IsWaitingEvent()) {
-		Restart(5);
+	SHFILEINFO info;
+	char path[1025];
+	sExeMutex.Enter();
+	strncpy(path, sExePath, 1024);
+	sExeMutex.Leave();
+	AvoidPaintingCheck__();
+	SHGetFileInfo(sExePath, FILE_ATTRIBUTE_NORMAL, &info, sizeof(info), SHGFI_ICON|SHGFI_SMALLICON);
+	sExeMutex.Enter();
+	memcpy(&sExeInfo, &info, sizeof(info));
+	sExeRunning = false;
+	sExeMutex.Leave();
+	return 0;
+}
+
+void LazyExeFileIcons::Done(Image img)
+{
+	if(pos >= ndx.GetCount())
 		return;
-	}
-	int tm = GetTickCount();
-	while(pos < ndx.GetCount()) {
-		if((int)GetTickCount() - tm > ptime) {
-			ptime = 50;
-			Restart(0);
-			return;
+	int ii = ndx[pos];
+	if(ii < 0 || ii >= list->GetCount())
+		return;
+	const FileList::File& f = list->Get(ii);
+	WhenIcon(false, f.name, img);
+	if(f.hidden)
+		img = Contrast(img, 200);
+	list->SetIcon(ii, img);
+	pos++;
+}
+
+String LazyExeFileIcons::Path()
+{
+	if(pos >= ndx.GetCount())
+		return Null;
+	int ii = ndx[pos];
+	if(ii < 0 || ii >= list->GetCount())
+		return Null;
+	const FileList::File& f = list->Get(ii);
+	return ToSystemCharset(AppendFileName(dir, f.name));
+}
+
+void LazyExeFileIcons::Do()
+{
+	int start = msecs();
+	for(;;) {
+		for(;;) {
+			SHFILEINFO info;
+			bool done = false;
+			String path = Path();
+			if(IsNull(path))
+				return;
+			sExeMutex.Enter();
+			bool running = sExeRunning;
+			if(!running) {
+				done = path == sExePath;
+				memcpy(&info, &sExeInfo, sizeof(info));
+				*sExePath = '\0';
+				memset(&sExeInfo, 0, sizeof(sExeInfo));
+			}
+			sExeMutex.Leave();
+			Image img = ProcessSHIcon(info);
+			if(done)
+				Done(img);
+			if(!running)
+				break;
+			Sleep(0);
+			if(msecs(start) > 10 || Ctrl::IsWaitingEvent()) {
+				Restart(0);
+				return;
+			}
 		}
-		int ii = ndx[pos];
-		if(ii < 0 || ii >= list->GetCount())
+
+		String path = Path();
+		if(IsNull(path))
 			return;
-		const FileList::File& f = list->Get(ii);
-		int t0 = GetTickCount();
-#ifdef PLATFORM_WIN32
-		Image img = GetFileIcon(AppendFileName(dir, f.name), f.isdir, f.unixexe, false, quick);
-#else
-		Image img = GetFileIcon(dir, f.name, f.isdir, f.unixexe, false);
-#endif
-		WhenIcon(f.isdir, f.name, img);
-		if(f.hidden)
-			img = Contrast(img, 200);
-		list->SetIcon(ii, img);
-		if(GetTickCount() - t0 > 700)
-			return;
-		pos++;
+		sExeMutex.Enter();
+		strncpy(sExePath, ~path, 1024);
+		sExeRunning = true;
+		StartAuxThread(sExeIconThread, NULL);
+		sExeMutex.Leave();
 	}
 }
 
-void LazyFileIcons::ReOrder()
-{
+void LazyExeFileIcons::ReOrder()
+{ // gather .exe files; sort based on length so that small .exe get resolved first
 	ndx.Clear();
 	Vector<int> len;
 	for(int i = 0; i < list->GetCount(); i++) {
@@ -419,17 +644,15 @@ void LazyFileIcons::ReOrder()
 	Restart(0);
 }
 
-void LazyFileIcons::Start(FileList& list_, const String& dir_, Callback3<bool, const String&, Image&> WhenIcon_)
+void LazyExeFileIcons::Start(FileList& list_, const String& dir_, Event<bool, const String&, Image&> WhenIcon_)
 {
 	list = &list_;
 	dir = dir_;
 	WhenIcon = WhenIcon_;
 	pos = 0;
-	quick = false;
-	ptime = 150;
-	start = GetTickCount();
 	ReOrder();
 }
+#endif
 
 class FileListSortName : public FileList::Order {
 public:
@@ -503,8 +726,10 @@ Image GetDriveImage(char drive_style)
 	switch(drive_style)
 	{
 	case FileSystemInfo::ROOT_NO_ROOT_DIR: return Null;
+	case FileSystemInfo::ROOT_REMOTE:
+	case FileSystemInfo::ROOT_NETWORK:   return CtrlImg::Share();
 	case FileSystemInfo::ROOT_COMPUTER:  return CtrlImg::Computer();
-	case FileSystemInfo::ROOT_REMOVABLE: return CtrlImg::Diskette();
+	case FileSystemInfo::ROOT_REMOVABLE: return CtrlImg::Flash();
 	case FileSystemInfo::ROOT_CDROM:     return CtrlImg::CdRom();
 	default:                             return CtrlImg::Hd();
 	}
@@ -564,7 +789,7 @@ void FileSel::SelectNet()
 		if(p.GetCount())
 			SetDir(p);
 		else {
-			netstack.Add() = netnode[q];		
+			netstack.Add() = netnode[q];
 			netnode = netstack.Top().Enum();
 			LoadNet();
 		}
@@ -574,6 +799,7 @@ void FileSel::SelectNet()
 
 void FileSel::SearchLoad()
 {
+	loaded = true;
 	list.EndEdit();
 	list.Clear();
 	String d = GetDir();
@@ -587,7 +813,7 @@ void FileSel::SearchLoad()
 #endif
 	String emask = GetMask();
 	if(!UPP::Load(list, d, emask, mode == SELECTDIR, WhenIcon, *filesystem, ~search, ~hidden, ~hiddenfiles, true)) {
-		Exclamation(t_("[A3* Не удаётся прочесть папку !]&&") + DeQtf((String)~dir) + "&&" +
+		Exclamation(t_("[A3* Unable to read the directory !]&&") + DeQtf((String)~dir) + "&&" +
 		            GetErrorMessage(GetLastError()));
 		if(!basedir.IsEmpty() && String(~dir).IsEmpty()) {
 			Break(IDCANCEL);
@@ -628,16 +854,120 @@ void FileSel::SearchLoad()
 		if(!IsEmpty(basedir) && String(~dir).IsEmpty())
 			dirup.Disable();
 	olddir = ~dir;
-	if(olddir.GetCount() || basedir.GetCount())
+	if(olddir.GetCount() || basedir.GetCount()) {
 		if(sortext && mode != SELECTDIR)
 			SortByExt(list);
 		else
 			SortByName(list);
+	}
 	Update();
-#ifdef PLATFORM_WIN32
+#ifdef GUI_WIN
 	lazyicons.Start(list, d, WhenIcon);
 #endif
+#ifdef _MULTITHREADED
+	StartLI();
+#endif
 }
+
+#ifdef _MULTITHREADED
+
+StaticMutex FileSel::li_mutex;
+void      (*FileSel::li_current)(const String& path, Image& result);
+String      FileSel::li_path;
+Image       FileSel::li_result;
+bool        FileSel::li_running;
+int         FileSel::li_pos;
+
+void FileSel::LIThread()
+{
+	String path;
+	void (*li)(const String& path, Image& result);
+	{
+		Mutex::Lock __(li_mutex);
+		path = li_path;
+		li = li_current;
+	}
+	Image result;
+	if(path.GetCount())
+		li(path, result);
+	if(!IsNull(result) && result.GetWidth() > 16 || result.GetHeight() > 16)
+		result = Rescale(result, 16, 16);
+	{
+		Mutex::Lock __(li_mutex);
+		li_result = result;
+		li_running = false;
+	}
+}
+
+String FileSel::LIPath()
+{
+	return li_pos >= 0 && li_pos < list.GetCount() ? FilePath(list.Get(li_pos).name) : Null;
+}
+
+void FileSel::DoLI()
+{
+	int start = msecs();
+	for(;;) {
+		for(;;) {
+			bool done = false;
+			String path = LIPath();
+			if(IsNull(path))
+				return;
+			bool running;
+			Image img;
+			{
+				Mutex::Lock __(li_mutex);
+				running = li_running;
+				if(!running) {
+					done = li_path == path && li_current == WhenIconLazy;
+					img = li_result;
+				}
+			}
+			if(done) {
+				if(li_pos < 0 || li_pos >= list.GetCount())
+					return;
+				if(!IsNull(img)) {
+					const FileList::File& f = list.Get(li_pos);
+					WhenIcon(f.isdir, f.name, img);
+					if(f.hidden)
+						img = Contrast(img, 200);
+					list.SetIcon(li_pos, img);
+				}
+				li_pos++;
+			}
+			if(!running)
+				break;
+			Sleep(0);
+			if(msecs(start) > 10 || Ctrl::IsWaitingEvent()) {
+				ScheduleLI();
+				return;
+			}
+		}
+
+		String path = LIPath();
+		if(IsNull(path))
+			return;
+		{
+			Mutex::Lock __(li_mutex);
+			if(!li_running) {
+				li_current = WhenIconLazy;
+				li_path = path;
+				li_running = true;
+				Thread::Start(callback(LIThread));
+			}
+		}
+	}
+}
+
+void FileSel::StartLI()
+{
+	if(WhenIconLazy) {
+		li_pos = 0;
+		ScheduleLI();
+	}
+}
+
+#endif
 
 String TrimDot(String f) {
 	int i = f.Find('.');
@@ -648,6 +978,9 @@ String TrimDot(String f) {
 
 void FileSel::AddName(Vector<String>& fn, String& f) {
 	if(!f.IsEmpty()) {
+		f = TrimDot(f);
+		if(f[0] == '\"' && f.GetCount() > 2)
+			f = f.Mid(1, f.GetCount() - 2);
 		if(f.Find('.') < 0) {
 			String t = GetMask();
 			int q = t.Find('.');
@@ -661,11 +994,7 @@ void FileSel::AddName(Vector<String>& fn, String& f) {
 			if(defext.GetCount())
 				f << '.' << defext;
 		}
-		f = TrimDot(f);
-		if(f[0] == '\"' && f.GetCount() > 2)
-			fn.Add(f.Mid(1, f.GetCount() - 2));
-		else
-			fn.Add(f);
+		fn.Add(f);
 	}
 	f.Clear();
 }
@@ -679,12 +1008,23 @@ void FileSel::Finish() {
 	fn.Clear();
 	if(mode == SELECTDIR) {
 		String p = GetDir();
-		if(list.GetCursor() >= 0) {
-			const FileList::File& m = list[list.GetCursor()];
-			if(m.isdir)
-				p = AppendFileName(p, m.name);
+		if(list.IsSelection() && multi) {
+			for(int i = 0; i < list.GetCount(); i++)
+				if(list.IsSelected(i)) {
+					const FileList::File& m = list[i];
+					if(m.isdir)
+						fn.Add(AppendFileName(p, m.name));
+				}
 		}
-		fn.Add(p);
+		else {
+			String p = GetDir();
+			if(list.GetCursor() >= 0) {
+				const FileList::File& m = list[list.GetCursor()];
+				if(m.isdir)
+					p = AppendFileName(p, m.name);
+			}
+			fn.Add(p);
+		}
 		Break(IDOK);
 		return;
 	}
@@ -700,10 +1040,7 @@ void FileSel::Finish() {
 				AddName(fn, o);
 				s++;
 				for(;;) {
-					if(*s == '\0')
-						AddName(fn, o);
-					else
-					if(*s == '\"') {
+					if(*s == '\0' || *s == '\"') {
 						AddName(fn, o);
 						break;
 					}
@@ -731,12 +1068,12 @@ void FileSel::Finish() {
 		Array<FileSystemInfo::FileInfo> ff = filesystem->Find(p, 1);
 		p = DeQtf(p);
 		if(!ff.IsEmpty() && ff[0].is_directory) {
-			Exclamation(p + t_(" является папкой."));
+			Exclamation(p + t_(" is directory."));
 			return;
 		}
-		if(asking)
+		if(asking) {
 			if(mode == SAVEAS) {
-				if(!ff.IsEmpty() && !PromptOKCancel(p + t_(" уже существует.&Продолжить ?")))
+				if(!ff.IsEmpty() && !PromptOKCancel(p + t_(" already exists.&Do you want to continue ?")))
 					return;
 			}
 			else
@@ -745,10 +1082,11 @@ void FileSel::Finish() {
 				nonexist << p;
 				ne++;
 			}
+		}
 	}
 	if(ne) {
-		nonexist << (ne == 1 ? t_(" не существует.") : t_("&не существуют."));
-		if(!PromptOKCancel(nonexist + t_("&Продолжить?")))
+		nonexist << (ne == 1 ? t_(" does not exist.") : t_("&do not exist."));
+		if(!PromptOKCancel(nonexist + t_("&Do you want to continue ?")))
 			return;
 	}
 	Break(IDOK);
@@ -764,7 +1102,7 @@ bool FileSel::OpenItem() {
 	#endif
 		const FileList::File& m = list.Get(list.GetCursor());
 	#ifdef PLATFORM_WIN32
-		if(IsNull(dir) && m.name == t_("Сеть")) {
+		if(IsNull(dir) && m.name == t_("Network")) {
 			netnode = NetNode::EnumRoot();
 			netnode.Append(NetNode::EnumRemembered());
 			LoadNet();
@@ -820,13 +1158,13 @@ void FileSel::Open() {
 			if(q >= 0)
 				type.SetIndex(q);
 			else {
-				type.Add(fn, t_("Особый тип файла (") + fn + ')');
+				type.Add(fn, t_("Custom file type (") + fn + ')');
 				type.SetIndex(type.GetCount() - 1);
 			}
 			Load();
 			return;
 		}
-		if(fn.Find(' ') < 0 && fn.Find('\"') < 0) {
+		if(fn.Find('\"') < 0) {
 			if(filesystem->IsWin32())
 			{
 				if(fn.GetLength() >= 2 && fn[1] == ':' && fn.GetLength() <= 3) {
@@ -962,19 +1300,19 @@ void FileSel::DirUp() {
 void FileSel::MkDir() {
 	if(String(~dir).IsEmpty() && basedir.IsEmpty()) return;
 	String name, error;
-	if(EditText(name, t_("Новая папка"), t_("Имя")) && !name.IsEmpty())
-		if(filesystem->CreateFolder(FilePath(name), error))
-		{
+	if(EditText(name, t_("New directory"), t_("Name")) && !name.IsEmpty()) {
+		if(filesystem->CreateFolder(FilePath(name), error)) {
 			Load();
 			list.FindSetCursor(name);
 		}
 		else
-			Exclamation(t_("[A3* Неудачное создание папки !&&]") + error);
+			Exclamation(t_("[A3* Creating directory failed !&&]") + error);
+	}
 }
 
 void FileSel::PlusMinus(const char *title, bool sel) {
 	String pattern;
-	if(EditText(pattern, title, t_("Маска")) && !pattern.IsEmpty())
+	if(EditText(pattern, title, t_("Mask")) && !pattern.IsEmpty())
 		for(int i = 0; i < list.GetCount(); i++)
 			if(!list.Get(i).isdir)
 				if(PatternMatchMulti(pattern, list.Get(i).name))
@@ -982,17 +1320,33 @@ void FileSel::PlusMinus(const char *title, bool sel) {
 }
 
 void FileSel::Plus() {
-	PlusMinus(t_("Добавить к выбору"), true);
+	PlusMinus(t_("Add to selection"), true);
 }
 
 void FileSel::Minus() {
-	PlusMinus(t_("Удалить из выбора"), false);
+	PlusMinus(t_("Remove from selection"), false);
 }
 
 void FileSel::Toggle() {
 	for(int i = 0; i < list.GetCount(); i++)
 		if(!list.Get(i).isdir)
 			list.SelectOne(i, !list.IsSelected(i));
+}
+
+void FileSel::Reload()
+{
+	String fn = list.GetCurrentName();
+	int a = list.GetScroll();
+	SearchLoad();
+	list.ScrollTo(a);
+	list.FindSetCursor(fn);
+}
+
+void FileSel::Activate()
+{
+	if(loaded)
+		Reload();
+	TopWindow::Activate();
 }
 
 bool FileSel::Key(dword key, int count) {
@@ -1010,6 +1364,9 @@ bool FileSel::Key(dword key, int count) {
 		return true;
 	case '*':
 		toggle.PseudoPush();
+		return true;
+	case K_F5:
+		Reload();
 		return true;
 	case K_F6:
 		list.StartEdit();
@@ -1048,12 +1405,12 @@ String FormatFileSize(int64 n)
 		return Format("%d B  ", n);
 	else
 	if(n < 10000 * 1024)
-		return Format("%d K  ", n >> 10);
+		return Format("%d.%d K  ", n >> 10, (n & 1023) / 103);
 	else
 	if(n < I64(10000000) * 1024)
-		return Format("%d M  ", n >> 20);
+		return Format("%d.%d M  ", n >> 20, (n & 1023) / 103);
 	else
-		return Format("%d G  ", n >> 30);
+		return Format("%d.%d G  ", n >> 30, (n & 1023) / 103);
 }
 
 void FileSel::Update() {
@@ -1079,14 +1436,14 @@ void FileSel::Update() {
 	if(list.IsCursor()) {
 		fn = list[list.GetCursor()].name;
 		if(fn[1] == ':' && fn.GetLength() <= 3)
-			filename = t_("  Диск");
+			filename = t_("  Drive");
 		else {
 			String path = FilePath(fn);
 			Array<FileSystemInfo::FileInfo> ff = filesystem->Find(path, 1);
 			if(!ff.IsEmpty()) {
 				filename = "  " + fn;
 				if(ff[0].is_directory)
-					filesize = t_("Папка  ");
+					filesize = t_("Directory  ");
 				else {
 					if(mode == SAVEAS)
 						file <<= fn;
@@ -1120,14 +1477,14 @@ void FileSel::Update() {
 			}
 		String s;
 		if(drives)
-			s << drives << t_(" диск(-ов)");
+			s << drives << t_(" drive(s)");
 		else {
 			if(dirs)
-				s << dirs << t_(" папка(-ок)");
+				s << dirs << t_(" folder(s)");
 			if(files) {
 				if(s.GetCount())
 					s << ", ";
-				s << files << t_(" файла(-ов)");
+				s << files << t_(" file(s)");
 			}
 		}
 		filename = "  " + s;
@@ -1142,12 +1499,12 @@ void FileSel::FileUpdate() {
 		ok.Enable(!IsNull(~dir));
 		return;
 	}
-	bool b = list.IsCursor() || !String(file).IsEmpty();
+	bool b = list.IsCursor() || !String(~file).IsEmpty();
 	ok.Enable(b);
 	if(mode != SAVEAS || list.IsCursor() && list[list.GetCursor()].isdir)
-		ok.SetLabel(t_("Открыть"));
+		ok.SetLabel(t_("Open"));
 	else
-		ok.SetLabel(t_("Сохранить"));
+		ok.SetLabel(t_("Save"));
 }
 
 void FileSel::Rename(const String& on, const String& nn) {
@@ -1161,7 +1518,7 @@ void FileSel::Rename(const String& on, const String& nn) {
 		list.FindSetCursor(nn);
 	}
 	else
-		Exclamation(t_("[A3* Неудачное переименование файла !&&]") + GetErrorMessage(GetLastError()));
+		Exclamation(t_("[A3* Renaming of file failed !&&]") + GetErrorMessage(GetLastError()));
 }
 
 void FileSel::Choice() {
@@ -1204,7 +1561,7 @@ FileSel& FileSel::ActiveType(int i)
 }
 
 FileSel& FileSel::AllFilesType() {
-	return Type(t_("Все файлы"), "*.*");
+	return Type(t_("All files"), "*.*");
 }
 
 struct FolderDisplay : public Display {
@@ -1215,18 +1572,23 @@ struct FolderDisplay : public Display {
 Image GetDirIcon(const String& s)
 {
 	Image img;
-#ifdef GUI_X11
+#ifdef PLATFORM_X11
 	img = GetFileIcon(GetFileFolder(s), GetFileName(s), true, false, false);
 #endif
-#ifdef GUI_WIN
+#ifdef PLATFORM_WIN32
 	if((byte)*s.Last() == 255)
 		img = CtrlImg::Network();
-	else
-		img = s.GetCount() ? GetFileIcon(s, false, true, false) : CtrlImg::Computer();
+	else {
+		int q = s.Find(0);
+		if(q >= 0 && q + 1 < s.GetCount())
+			img = GetDriveImage(s[q + 1]);
+		else
+			img = s.GetCount() ? GetFileIcon(s, false, true, false) : CtrlImg::Computer();
+	}
 #endif
 	if(IsNull(img))
 		img = CtrlImg::Dir();
-	return img;
+	return DPI(img);
 }
 
 void FolderDisplay::Paint(Draw& w, const Rect& r, const Value& q,
@@ -1236,7 +1598,7 @@ void FolderDisplay::Paint(Draw& w, const Rect& r, const Value& q,
 	w.DrawRect(r, paper);
 	Image img = GetDirIcon(s);
 	w.DrawImage(r.left, r.top + (r.Height() - img.GetSize().cx) / 2, img);
-	w.DrawText(r.left + 20,
+	w.DrawText(r.left + Zx(20),
 	           r.top + (r.Height() - StdFont().Bold().Info().GetHeight()) / 2,
 			   ~s, StdFont().Bold(), ink);
 }
@@ -1245,9 +1607,10 @@ struct HomeDisplay : public Display {
 	virtual void Paint(Draw& w, const Rect& r, const Value& q,
 	                   Color ink, Color paper, dword style) const {
 		w.DrawRect(r, paper);
-		w.DrawImage(r.left, r.top + (r.Height() - CtrlImg::Home().GetSize().cx) / 2,
+		Image img = CtrlImg::Home();
+		w.DrawImage(r.left, r.top + (r.Height() - img.GetSize().cx) / 2,
 			        CtrlImg::Home());
-		w.DrawText(r.left + 20,
+		w.DrawText(r.left + Zx(20),
 		           r.top + (r.Height() - StdFont().Bold().Info().GetHeight()) / 2,
 				   String(q), StdFont().Bold(), ink);
 	}
@@ -1275,6 +1638,16 @@ void FileSel::GoToPlace()
 
 bool FileSel::Execute(int _mode) {
 	mode = _mode;
+
+	int system_row = -1;
+	for(int i = places.GetCount() - 1; i >= 0; i--) {
+		if(places.Get(i, 3) == "PLACES:SYSTEM") {
+			system_row = i;
+			places.Remove(i);
+		}
+	}
+	AddSystemPlaces(system_row);
+		
 	if(mode == SELECTDIR) {
 		if(!fn.IsEmpty())
 			dir <<= NormalizePath(fn[0]);
@@ -1284,15 +1657,15 @@ bool FileSel::Execute(int _mode) {
 		file_lbl.Hide();
 		sortext.Hide();
 		sort_lbl.Hide();
-		ok.SetLabel(t_("&Выбрать"));
+		ok.SetLabel(t_("&Select"));
 		Logc p = filename.GetPos().y;
-		int q = ok.GetPos().y.GetA() + ok.GetPos().y.GetB() + 8;
+		int q = ok.GetPos().y.GetA() + ok.GetPos().y.GetB() + Zy(8);
 		p.SetA(q);
 		filename.SetPosY(p);
 		filesize.SetPosY(p);
 		filetime.SetPosY(p);
 		p = splitter.Ctrl::GetPos().y;
-		p.SetB(q + 20);
+		p.SetB(q + Zy(20));
 		splitter.SetPosY(p);
 		LogPos ps = search.GetPos();
 		LogPos pl = sort_lbl.GetPos();
@@ -1312,17 +1685,17 @@ bool FileSel::Execute(int _mode) {
 		SetRect(r);
 	}
 	readonly.Show(rdonly && mode == OPEN);
-	list.Multi(multi && mode == OPEN);
+	list.Multi(multi && (mode == OPEN || mode == SELECTDIR));
+	list.SelectDir(multi && mode == SELECTDIR);
 	dir.ClearList();
 	file <<= Null;
-	int i;
 	if(basedir.IsEmpty()) {
 		dir.Add(GetHomeDirectory());
 	#ifdef PLATFORM_POSIX
 		Array<FileSystemInfo::FileInfo> root = filesystem->Find("/media/*");
 		dir.Add(GetDesktopFolder());
 		dir.Add("/");
-		for(i = 0; i < root.GetCount(); i++) {
+		for(int i = 0; i < root.GetCount(); i++) {
 			String ugly = root[i].filename;
 			if(ugly[0] != '.') {
 				dir.Add("/media/" + root[i].filename);
@@ -1331,7 +1704,7 @@ bool FileSel::Execute(int _mode) {
 	#else
 		dir.Add(GetDesktopFolder());
 		Array<FileSystemInfo::FileInfo> root = filesystem->Find(Null);
-		for(i = 0; i < root.GetCount(); i++) {
+		for(int i = 0; i < root.GetCount(); i++) {
 			String ugly = root[i].filename;
 			if(ugly != "A:\\" && ugly != "B:\\") {
 				ugly.Cat('\0');
@@ -1340,13 +1713,13 @@ bool FileSel::Execute(int _mode) {
 			}
 		}
 		if(filesystem == &StdFileSystemInfo())
-			dir.Add("\\", String(t_("Сеть")) + String(0, 1) + "\xff");
+			dir.Add("\\", String(t_("Network")) + String(0, 1) + "\xff");
 	#endif
 		if(filesystem->IsPosix() && String(~dir).IsEmpty())
 			dir <<= GetHomeDirectory();
 		if(lru.GetCount())
 			dir.AddSeparator();
-		for(i = 0; i < lru.GetCount(); i++)
+		for(int i = 0; i < lru.GetCount(); i++)
 			if(IsFullPath(lru[i]) && filesystem->FolderExists(lru[i]))
 				dir.Add(lru[i]);
 		dir.SetDisplay(Single<FolderDisplay>(), max(16, Draw::GetStdFontCy()));
@@ -1440,19 +1813,19 @@ bool FileSel::Execute(int _mode) {
 }
 
 bool FileSel::ExecuteOpen(const char *title) {
-	Title(title ? title : t_("Открыть"));
+	Title(title ? title : t_("Open"));
 	return Execute(OPEN);
 }
 
 bool FileSel::ExecuteSaveAs(const char *title) {
-	Title(title ? title : t_("Сохранить как"));
-	ok.SetLabel(t_("Сохранить"));
+	Title(title ? title : t_("Save as"));
+	ok.SetLabel(t_("Save"));
 	return Execute(SAVEAS);
 }
 
 bool FileSel::ExecuteSelectDir(const char *title)
 {
-	Title(title ? title : t_("Выбрать папку"));
+	Title(title ? title : t_("Select directory"));
 	return Execute(SELECTDIR);
 }
 
@@ -1466,7 +1839,7 @@ void FileSel::Serialize(Stream& s) {
 	int version = 10;
 	s / version;
 	String ad = ~dir;
-	int dummy;
+	int dummy = 0;
 	if(version < 10)
 		s / dummy;
 	else
@@ -1570,31 +1943,36 @@ FileSel& FileSel::Preview(const Display& d)
 	return Preview(preview_display);
 }
 
-void FileSel::AddPlaceRaw(const String& path, const Image& m, const String& name)
+void FileSel::AddPlaceRaw(const String& path, const Image& m, const String& name, const char* group, int row)
 {
 	if(path.GetCount()) {
-		places.Add(path, m, name);
-		places.SetLineCy(places.GetCount() - 1, max(m.GetSize().cy + 4, GetStdFontCy() + 4));
+		row = row < 0 ? places.GetCount() : row;
+		places.Insert(row);
+		places.Set(row, 0, path);
+		places.Set(row, 1, DPI(m));
+		places.Set(row, 2, name);
+		places.Set(row, 3, group);
+		places.SetLineCy(row, max(m.GetSize().cy + 4, GetStdFontCy() + 4));
 		SyncSplitter();
 		InitSplitter();
 	}
 }
 
-FileSel& FileSel::AddPlace(const String& path, const Image& m, const String& name)
+FileSel& FileSel::AddPlace(const String& path, const Image& m, const String& name, const char* group, int row)
 {
 	if(path.GetCount())
-		AddPlaceRaw(NormalizePath(path), m, name);
+		AddPlaceRaw(NormalizePath(path), DPI(m), name, group, row);
 	return *this;
 }
 
-FileSel& FileSel::AddPlace(const String& path, const String& name)
+FileSel& FileSel::AddPlace(const String& path, const String& name, const char* group, int row)
 {
-	return AddPlace(path, GetDirIcon(NormalizePath(path)), name);
+	return AddPlace(path, GetDirIcon(NormalizePath(path)), name, group, row);
 }
 
-FileSel& FileSel::AddPlace(const String& path)
+FileSel& FileSel::AddPlace(const String& path, const char* group, int row)
 {
-	return AddPlace(path, GetFileTitle(path));
+	return AddPlace(path, GetFileTitle(path), group, row);
 }
 
 FileSel& FileSel::AddPlaceSeparator()
@@ -1612,17 +1990,12 @@ FileSel& FileSel::ClearPlaces()
 	return *this;
 }
 
-FileSel& FileSel::AddStandardPlaces()
+void FileSel::AddSystemPlaces(int row)
 {
-	AddPlace(GetHomeDirectory(), t_("Дом"));
-	AddPlace(GetDesktopFolder(), t_("Рабочий Стол"));
-	AddPlace(GetMusicFolder(), t_("Музыка"));
-	AddPlace(GetPicturesFolder(), t_("Картинки"));
-	AddPlace(GetVideoFolder(), t_("Видео"));
-	AddPlace(GetDocumentsFolder(), t_("Документы"));
-	AddPlace(GetDownloadFolder(), t_("Закачки"));
-	AddPlaceSeparator();
-	Array<FileSystemInfo::FileInfo> root = filesystem->Find(Null);
+	row = row < 0 ? places.GetCount() : row;
+	Array<FileSystemInfo::FileInfo> root;
+#ifdef PLATFORM_WIN32
+	root = filesystem->Find(Null);
 	for(int i = 0; i < root.GetCount(); i++) {
 		String desc = root[i].root_desc;
 		String n = root[i].filename;
@@ -1631,33 +2004,46 @@ FileSel& FileSel::AddStandardPlaces()
 			if(*n.Last() == '\\')
 				n.Trim(n.GetCount() - 1);
 		#endif
-			if(desc.GetCount())
-				desc << " (" << n << ")";
-			else
-				desc = n;
-			AddPlace(root[i].filename, desc);
+			if(desc.GetCount() == 0)
+			    desc << " " << t_("Local Disk");
+			desc << " (" << n << ")";
+			AddPlace(root[i].filename, GetDriveImage(root[i].root_style), desc, "PLACES:SYSTEM", row++);
 		}
 	}
 
-#ifdef PLATFORM_WIN32
 	if(GetSystemMetrics(SM_REMOTESESSION))
 		for(int drive = 'A'; drive < 'Z'; drive++) {
 			String path = Format("\\\\tsclient\\%c", drive);
 			if(FindFile(path + "\\*.*"))
-				AddPlace(path, Format(t_("%c на клиенте"), drive));
+				AddPlace(path, Format(t_("%c on client"), drive), "PLACES:SYSTEM", row++);
 		}
 #endif
+
 #ifdef PLATFORM_POSIX
 	root = filesystem->Find("/media/*");
 	for(int i = 0; i < root.GetCount(); i++) {
 		String fn = root[i].filename;
 		if(*fn != '.' && fn.Find("floppy") < 0)
-			AddPlace("/media/" + fn, fn);
+			AddPlace("/media/" + fn, fn, "PLACES:SYSTEM", row++);
 	}
+	AddPlace("/", t_("Computer"), "PLACES:SYSTEM");
 #endif
+}
+
+FileSel& FileSel::AddStandardPlaces()
+{
+	AddPlace(GetHomeDirectory(), t_("Home"), "PLACES:FOLDER");
+	AddPlace(GetDesktopFolder(), t_("Desktop"), "PLACES:FOLDER");
+	AddPlace(GetMusicFolder(), t_("Music"), "PLACES:FOLDER");
+	AddPlace(GetPicturesFolder(), t_("Pictures"), "PLACES:FOLDER");
+	AddPlace(GetVideoFolder(), t_("Videos"), "PLACES:FOLDER");
+	AddPlace(GetDocumentsFolder(), t_("Documents"), "PLACES:FOLDER");
+	AddPlace(GetDownloadFolder(), t_("Downloads"), "PLACES:FOLDER");
+	AddPlaceSeparator();
+	AddSystemPlaces();
 #ifdef PLATFORM_WIN32
 	AddPlaceSeparator();
-	AddPlaceRaw("\\", CtrlImg::Network(), t_("Сеть"));
+	AddPlaceRaw("\\", CtrlImg::Network(), t_("Network"), "PLACES:NETWORK");
 #endif
 	return *this;
 }
@@ -1684,7 +2070,9 @@ struct DisplayPlace : Display {
 	}
 };
 
-FileSel::FileSel() {
+FileSel::FileSel()
+{
+	loaded = false;
 	filesystem = &StdFileSystemInfo();
 	CtrlLayout(*this);
 	ArrangeOKCancel(ok, cancel);
@@ -1715,19 +2103,19 @@ FileSel::FileSel() {
 	list.WhenRename = THISBACK(Rename);
 	Sizeable();
 	dirup.SetImage(CtrlImg::DirUp()).NoWantFocus();
-	dirup.Tip(t_("На папку выше") + String(" (Ctrl+Up)"));
+	dirup.Tip(t_("Dir up") + String(" (Ctrl+Up)"));
 	mkdir.SetImage(CtrlImg::MkDir()).NoWantFocus();
-	mkdir.Tip(t_("Создать папку") + String(" (F7)"));
+	mkdir.Tip(t_("Create directory") + String(" (F7)"));
 	plus.SetImage(CtrlImg::Plus()).NoWantFocus();
-	plus.Tip(t_("Выбрать файлы"));
+	plus.Tip(t_("Select files"));
 	minus.SetImage(CtrlImg::Minus()).NoWantFocus();
-	minus.Tip(t_("Убрать файлы"));
+	minus.Tip(t_("Unselect files"));
 	toggle.SetImage(CtrlImg::Toggle()).NoWantFocus();
-	toggle.Tip(t_("Переключить файлы"));
+	toggle.Tip(t_("Toggle files"));
 	type <<= THISBACK(Load);
 	sortext <<= 0;
 
-	search.NullText("Поиск", StdFont().Italic(), SColorDisabled());
+	search.NullText(t_("Search"), StdFont().Italic(), SColorDisabled());
 	search.SetFilter(CharFilterDefaultToUpperAscii);
 	search <<= THISBACK(SearchLoad);
 
@@ -1763,6 +2151,7 @@ FileSel::FileSel() {
 	
 	places.AddKey();
 	places.AddColumn().AddIndex().SetDisplay(Single<DisplayPlace>());
+	places.AddIndex();
 	places.NoHeader().NoGrid();
 	places.WhenLeftClick = THISBACK(GoToPlace);
 	places.NoWantFocus();
@@ -1775,8 +2164,12 @@ FileSel::FileSel() {
 	
 	list.AutoHideSb();
 	places.AutoHideSb();
+
+#ifdef _MULTITHREADED	
+	WhenIconLazy = NULL;
+#endif
 }
 
 FileSel::~FileSel() {}
 
-END_UPP_NAMESPACE
+}

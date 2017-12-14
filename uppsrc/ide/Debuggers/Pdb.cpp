@@ -1,22 +1,22 @@
 #include "Debuggers.h"
 
-#ifdef COMPILER_MSC
+#define KEYGROUPNAME "Debugger"
+#define KEYNAMESPACE PdbKeys
+#define KEYFILE      <ide/Debuggers/Pdb.key>
+#include             <CtrlLib/key_source.h>
+
+#ifdef PLATFORM_WIN32
 
 #pragma comment(lib, "DbgHelp.lib")
 #pragma comment(lib, "psapi.lib")
 
 #define LLOG(x) // LOG(x)
 
-#define KEYGROUPNAME "PdbDebugger"
-#define KEYNAMESPACE PdbKeys
-#define KEYFILE      <ide/Debuggers/Pdb.key>
-#include             <CtrlLib/key_source.h>
-
 using namespace PdbKeys;
 
 void Pdb::DebugBar(Bar& bar)
 {
-	bar.Add(AK_STOP, THISBACK(Stop));
+	bar.Add(AK_STOP, DbgImg::StopDebug(), THISBACK(Stop));
 	bool b = !IdeIsDebugLock();
 	bar.Separator();
 	bar.Add(b, AK_STEPINTO, DbgImg::StepInto(), THISBACK1(Trace, false));
@@ -25,35 +25,38 @@ void Pdb::DebugBar(Bar& bar)
 	bar.Add(b, AK_RUNTO, DbgImg::RunTo(), THISBACK(DoRunTo));
 	bar.Add(b, AK_RUN, DbgImg::Run(), THISBACK(Run));
 	bar.Add(b, AK_SETIP, DbgImg::SetIp(), THISBACK(SetIp));
-	bar.Add(!b, AK_STOP, DbgImg::Stop(), THISBACK(BreakRunning));
+	bar.Add(!b, AK_BREAK, DbgImg::Stop(), THISBACK(BreakRunning));
 	bar.MenuSeparator();
 	bar.Add(b, AK_AUTOS, THISBACK1(SetTab, 0));
 	bar.Add(b, AK_LOCALS, THISBACK1(SetTab, 1));
-	bar.Add(b, AK_WATCHES, THISBACK1(SetTab, 2));
+	bar.Add(b, AK_THISS, THISBACK1(SetTab, 2));
+	bar.Add(b, AK_WATCHES, THISBACK1(SetTab, 3));
 	bar.Add(b, AK_CLEARWATCHES, THISBACK(ClearWatches));
 	bar.Add(b, AK_ADDWATCH, THISBACK(AddWatch));
 	bar.Add(b, AK_EXPLORER, THISBACK(DoExplorer));
-	bar.Add(b, AK_MEMORY, THISBACK1(SetTab, 4));
+	bar.Add(b, AK_CPU, THISBACK1(SetTab, 5));
+	bar.Add(b, AK_MEMORY, THISBACK1(SetTab, 6));
 	bar.MenuSeparator();
-	bar.Add(b, "Копировать бэктрей", THISBACK(CopyStack));
-	bar.Add(b, "Копировать дизасм", THISBACK(CopyDisas));
+	bar.Add(b, "Copy backtrace", THISBACK(CopyStack));
+	bar.Add(b, "Copy dissassembly", THISBACK(CopyDisas));
 }
 
 void Pdb::Tab()
 {
 	switch(tab.Get()) {
-	case 0: autos.SetFocus(); break;
-	case 1: locals.SetFocus(); break;
-	case 2: watches.SetFocus(); break;
-	case 3: explorer.SetFocus(); break;
-	case 4: memory.SetFocus(); break;
+	case TAB_AUTOS: autos.SetFocus(); break;
+	case TAB_LOCALS: locals.SetFocus(); break;
+	case TAB_THIS: self.SetFocus(); break;
+	case TAB_WATCHES: watches.SetFocus(); break;
+	case TAB_EXPLORER: explorer.SetFocus(); break;
+	case TAB_MEMORY: memory.SetFocus(); break;
 	}
 	Data();
 }
 
 bool Pdb::Key(dword key, int count)
 {
-	if(key >= 32 && key < 65535 && tab.Get() == 2) {
+	if(key >= 32 && key < 65535 && tab.Get() == TAB_LOCALS) {
 		watches.DoInsertAfter();
 		Ctrl* f = GetFocusCtrl();
 		if(f && watches.HasChildDeep(f))
@@ -103,14 +106,31 @@ bool Pdb::Create(One<Host> local, const String& exefile, const String& cmdline)
 	Buffer<char> env(local->GetEnvironment().GetCount() + 1);
 	memcpy(env, ~local->GetEnvironment(), local->GetEnvironment().GetCount() + 1);
 	bool h = CreateProcess(exefile, cmd, NULL, NULL, TRUE,
-	                       NORMAL_PRIORITY_CLASS|CREATE_NEW_CONSOLE|DEBUG_ONLY_THIS_PROCESS|DEBUG_PROCESS,
+	                       /*NORMAL_PRIORITY_CLASS|CREATE_NEW_CONSOLE|*/DEBUG_ONLY_THIS_PROCESS/*|DEBUG_PROCESS*/,
 	                       ~env, NULL, &si, &pi);
 	if(!h) {
-		Exclamation("Ошибка при создании процесса&[* " + DeQtf(exefile) + "]&" +
-		            "Ошибка Windows: " + DeQtf(GetLastErrorMessage()));
+		Exclamation("Error creating process&[* " + DeQtf(exefile) + "]&" +
+		            "Windows error: " + DeQtf(GetLastErrorMessage()));
 		return false;
 	}
 	hProcess = pi.hProcess;
+	mainThread = pi.hThread;
+	mainThreadId = pi.dwThreadId;
+
+#ifdef CPU_64
+	BOOL _64;
+	win64 = IsWow64Process(hProcess, &_64) && !_64;
+	LLOG("Win64 app: " << win64);
+	disas.Mode64(win64);
+#else
+	win64 = false;
+#endif
+
+	if(win64)
+		memory.SetTotal(I64(0xffffffffffff));
+	else
+		memory.SetTotal(0x80000000);
+	
 	CloseHandle(pi.hThread);
 
 	IdeSetBottom(*this);
@@ -130,11 +150,12 @@ bool Pdb::Create(One<Host> local, const String& exefile, const String& cmdline)
 	terminated = false;
 
 	running = true;
+	
+	break_running = false;
 
 	RunToException();
-//	Sync();
 
-	return true;
+	return !terminated;
 }
 
 INITBLOCK {
@@ -157,23 +178,34 @@ void Pdb::SerializeSession(Stream& s)
 	}
 }
 
+struct CpuRegisterDisplay : Display {
+	virtual void Paint(Draw& w, const Rect& r, const Value& q, Color ink, Color paper, dword style) const
+	{
+		Font fnt = Courier(Ctrl::HorzLayoutZoom(12));
+		static int cx1 = GetTextSize("EFLAGS12", fnt().Bold()).cx +
+		                 GetTextSize("0000 0000 0000 0000", fnt).cx;
+		String name;
+		String value;
+		String odd;
+		SplitTo((String)q, '|', name, value, odd);
+		w.DrawRect(r, odd != "1" || (style & CURSOR) ? paper : Blend(SColorMark, SColorPaper, 220));
+		int i = value.GetLength() - 4;
+		while(i > 0) {
+			value.Insert(i, ' ');
+			i -= 4;
+		}
+		Size tsz = GetTextSize(value, fnt);
+		int tt = r.top + max((r.Height() - tsz.cy) / 2, 0);
+		w.DrawText(r.left, tt, name, fnt().Bold(), ink);
+		w.DrawText(r.left + cx1 - tsz.cx, tt, value, fnt, ink);
+	}
+};
+
 Pdb::Pdb()
 {
+	hWnd = NULL;
 	hProcess = INVALID_HANDLE_VALUE;
-
-	CtrlLayout(regs);
-	regs.Height(regs.GetLayoutSize().cy);
-	AddReg("eax", &regs.eax);
-	AddReg("ebx", &regs.ebx);
-	AddReg("ecx", &regs.ecx);
-	AddReg("edx", &regs.edx);
-	AddReg("esi", &regs.esi);
-	AddReg("edi", &regs.edi);
-	AddReg("ebp", &regs.ebp);
-	AddReg("esp", &regs.esp);
-	regs.Color(SColorLtFace);
-	regs.AddFrame(TopSeparatorFrame());
-	regs.AddFrame(RightSeparatorFrame());
+	current_frame = NULL;
 
 	locals.NoHeader();
 	locals.AddColumn("", 1);
@@ -181,14 +213,26 @@ Pdb::Pdb()
 	locals.WhenEnterRow = THISBACK1(SetTreeA, &locals);
 	locals.WhenBar = THISBACK(LocalsMenu);
 	locals.WhenLeftDouble = THISBACK1(ExploreKey, &locals);
+	locals.EvenRowColor();
+
+	self.NoHeader();
+	self.AddColumn("", 1);
+	self.AddColumn("", 6).SetDisplay(Single<VisualDisplay>());
+	self.WhenEnterRow = THISBACK1(SetTreeA, &self);
+	self.WhenBar = THISBACK(LocalsMenu);
+	self.WhenLeftDouble = THISBACK1(ExploreKey, &self);
+	self.EvenRowColor();
 
 	watches.NoHeader();
 	watches.AddColumn("", 1).Edit(watchedit);
 	watches.AddColumn("", 6).SetDisplay(Single<VisualDisplay>());
-	watches.Inserting().Removing();
+	watches.Moving();
 	watches.WhenEnterRow = THISBACK1(SetTreeA, &watches);
 	watches.WhenBar = THISBACK(WatchesMenu);
 	watches.WhenLeftDouble = THISBACK1(ExploreKey, &watches);
+	watches.WhenAcceptEdit = THISBACK(Data);
+	watches.WhenDrop = THISBACK(DropWatch);
+	watches.EvenRowColor();
 
 	autos.NoHeader();
 	autos.AddColumn("", 1);
@@ -196,6 +240,7 @@ Pdb::Pdb()
 	autos.WhenEnterRow = THISBACK1(SetTreeA, &autos);
 	autos.WhenBar = THISBACK(AutosMenu);
 	autos.WhenLeftDouble = THISBACK1(ExploreKey, &autos);
+	autos.EvenRowColor();
 
 	int c = EditField::GetStdHeight();
 	explorer.AddColumn("", 1);
@@ -216,14 +261,21 @@ Pdb::Pdb()
 	exback.Disable();
 	exfw.Disable();
 
-	tab.Add(autos.SizePos(), "Авто");
-	tab.Add(locals.SizePos(), "Лок");
-	tab.Add(watches.SizePos(), "Просмотры");
-	tab.Add(explorer_pane.SizePos(), "Проводник");
-	memory.cdb = this;
-	tab.Add(memory.SizePos(), "Память");
+	tab.Add(autos.SizePos(), "Autos");
+	tab.Add(locals.SizePos(), "Locals");
+	tab.Add(self.SizePos(), "this");
+	tab.Add(watches.SizePos(), "Watches");
+	tab.Add(explorer_pane.SizePos(), "Explorer");
+	tab.Add(cpu.SizePos(), "CPU");
+	tab.Add(memory.SizePos(), "Memory");
 
-	dlock = "  Выполняется..";
+	cpu.Columns(4);
+	cpu.ItemHeight(Courier(Ctrl::HorzLayoutZoom(12)).GetCy());
+	cpu.SetDisplay(Single<CpuRegisterDisplay>());
+
+	memory.pdb = this;
+
+	dlock = "  Running..";
 	dlock.SetFrame(BlackFrame());
 	dlock.SetInk(Red);
 	dlock.NoTransparent();
@@ -231,13 +283,12 @@ Pdb::Pdb()
 	framelist.Ctrl::Add(dlock.SizePos());
 
 	pane.Add(tab.SizePos());
-	pane.Add(threadlist.LeftPosZ(320, 60).TopPos(2, EditField::GetStdHeight()));
-	pane.Add(framelist.HSizePosZ(384, 0).TopPos(2, EditField::GetStdHeight()));
+	pane.Add(threadlist.LeftPosZ(380, 60).TopPos(2, EditField::GetStdHeight()));
+	pane.Add(framelist.HSizePosZ(444, 0).TopPos(2, EditField::GetStdHeight()));
 	split.Horz(pane, tree.SizePos());
 	split.SetPos(8000);
 	Add(split);
 
-	disas.AddFrame(regs);
 	disas.WhenCursor = THISBACK(DisasCursor);
 	disas.WhenFocus = THISBACK(DisasFocus);
 
@@ -247,10 +298,6 @@ Pdb::Pdb()
 
 	framelist <<= THISBACK(SetFrame);
 	threadlist <<= THISBACK(SetThread);
-
-	watches.WhenAcceptEdit = THISBACK(Data);
-	watches.WhenDrop = THISBACK(DropWatch);
-	tab <<= THISBACK(Data);
 
 	tree.WhenOpen = THISBACK(TreeExpand);
 
@@ -264,23 +311,16 @@ Pdb::Pdb()
 	Load(callback(this, &Pdb::SerializeSession), ss);
 }
 
-void Pdb::CleanupOnExit()
-{
-	if(hProcess != INVALID_HANDLE_VALUE) {
-		while(threads.GetCount())
-			RemoveThread(threads.GetKey(0));
-		UnloadModuleSymbols();
-		SymCleanup(hProcess);
-		CloseHandle(hProcess);
-		hProcess = INVALID_HANDLE_VALUE;
-	}
-}
-
 void Pdb::CopyStack()
 {
 	String s;
-	for(int i = 0; i < framelist.GetCount(); i++)
-		s << framelist.GetValue(i) << "\n";
+	for(int i = 0; i < framelist.GetCount(); i++) {
+		s << framelist.GetValue(i);
+		FilePos fp = GetFilePos(frame[i].pc);
+		if(fp)
+			s << " at " << fp.path << " " << fp.line + 1;
+		s << "\n";
+	}
 	WriteClipboardText(s);
 }
 
@@ -289,40 +329,95 @@ void Pdb::CopyDisas()
 	disas.WriteClipboard();
 }
 
-Pdb::~Pdb()
+void Pdb::Stop()
 {
-	SaveTree();
-	String fn = ConfigFile("TreeTypes.txt");
-	FileOut out(fn);
-	for(int i = 0; i < treetype.GetCount(); i++)
-		out << treetype.GetKey(i) << "\r\n" << treetype[i] << "\r\n";
-	StringStream ss;
-	Store(callback(this, &Pdb::SerializeSession), ss);
-	WorkspaceConfigData("pdb-debugger") = ss;
-	if(hProcess != INVALID_HANDLE_VALUE) {
-		if(!running)
-			ContinueDebugEvent(event.dwProcessId, event.dwThreadId, DBG_CONTINUE);
-		TerminateProcess(hProcess, -1);
-		do {
-			if(!WaitForDebugEvent(&event, INFINITE))
-				break;
-			if(!ContinueDebugEvent(event.dwProcessId, event.dwThreadId, DBG_CONTINUE))
-				break;
+	if(!terminated) {
+		terminated = true;
+		SaveTree();
+		String fn = ConfigFile("TreeTypes.txt");
+		FileOut out(fn);
+		for(int i = 0; i < treetype.GetCount(); i++)
+			out << treetype.GetKey(i) << "\r\n" << treetype[i] << "\r\n";
+		StringStream ss;
+		Store(callback(this, &Pdb::SerializeSession), ss);
+		WorkspaceConfigData("pdb-debugger") = ss;
+		if(hProcess != INVALID_HANDLE_VALUE) {
+			DebugActiveProcessStop(processid);
+			TerminateProcess(hProcess, 0);
+			while(threads.GetCount())
+				RemoveThread(threads.GetKey(0)); // To CloseHandle
+			UnloadModuleSymbols();
+			SymCleanup(hProcess);
+			CloseHandle(hProcess);
 		}
-		while(event.dwDebugEventCode != EXIT_PROCESS_DEBUG_EVENT);
-		CleanupOnExit();
+		StoreToGlobal(*this, CONFIGNAME);
+		IdeRemoveBottom(*this);
+		IdeRemoveRight(disas);
 	}
-	StoreToGlobal(*this, CONFIGNAME);
-	IdeRemoveBottom(*this);
-	IdeRemoveRight(disas);
 }
 
-One<Debugger> PdbCreate(One<Host> host, const String& exefile, const String& cmdline)
+bool Pdb::IsFinished()
+{
+	return terminated;
+}
+
+Pdb::~Pdb()
+{
+	Stop();
+}
+
+One<Debugger> PdbCreate(One<Host>&& host, const String& exefile, const String& cmdline)
 {
 	One<Debugger> dbg;
-	if(!dbg.Create<Pdb>().Create(host, exefile, cmdline))
+	if(!dbg.Create<Pdb>().Create(pick(host), exefile, cmdline))
 		dbg.Clear();
 	return dbg;
+}
+
+#define LAYOUTFILE <ide/Debuggers/Pdb.lay>
+#include <CtrlCore/lay.h>
+
+#define TOPICFILE <ide/Debuggers/app.tpp/all.i>
+#include <Core/topic_group.h>
+
+struct PDBExpressionDlg : WithEditPDBExpressionLayout<TopWindow> {
+	Pdb *pdb;
+
+	void Sync();
+
+	typedef PDBExpressionDlg CLASSNAME;
+
+	PDBExpressionDlg(const char *title, String& brk, Pdb *pdb);
+};
+
+void PDBExpressionDlg::Sync()
+{
+	if(pdb)
+		value <<= RawPickToValue(pick(pdb->Visualise(~text)));
+}
+
+PDBExpressionDlg::PDBExpressionDlg(const char *title, String& brk, Pdb *pdb)
+:	pdb(pdb)
+{
+	CtrlLayoutOKCancel(*this, title);
+	help.SetQTF(GetTopic("ide/Debuggers/app/PDBExpressions$en-us"));
+	help.Background(White());
+	help.SetFrame(ViewFrame());
+	text <<= brk;
+	text <<= THISBACK(Sync);
+	value.SetDisplay(Single<Pdb::VisualDisplay>());
+	value.Show(pdb);
+	value_lbl.Show(pdb);
+	Sync();
+}
+
+bool EditPDBExpression(const char *title, String& brk, Pdb *pdb)
+{
+	PDBExpressionDlg dlg(title, brk, pdb);
+	if(dlg.Execute() != IDOK)
+		return false;
+	brk = ~dlg.text;
+	return true;
 }
 
 #endif

@@ -3,7 +3,7 @@
 #include "lib/sqlite3.h"
 #include "Sqlite3.h"
 
-NAMESPACE_UPP
+namespace Upp {
 
 #define LLOG(x) // LOG(x)
 
@@ -347,6 +347,7 @@ bool Sqlite3Session::Open(const char* filename) {
 	return false;
 }
 void Sqlite3Session::Close() {
+	sql.Clear();
 	if (NULL != db) {
 		int retval;
 #ifndef flagNOAPPSQL
@@ -513,7 +514,7 @@ const char *Sqlite3ReadString(const char *s, String& stmt) {
 		if(*s == '\0') break;
 		else
 		if(*s == '\'' && s[1] == '\'') {
-			stmt.Cat('\'');
+			stmt.Cat("\'\'");
 			s += 2;
 		}
 		else
@@ -534,7 +535,7 @@ const char *Sqlite3ReadString(const char *s, String& stmt) {
 	return s;
 }
 
-bool Sqlite3PerformScript(const String& txt, StatementExecutor& se, Gate2<int, int> progress_canceled) {
+bool Sqlite3PerformScript(const String& txt, StatementExecutor& se, Gate<int, int> progress_canceled) {
 	const char *text = txt;
 	for(;;) {
 		String stmt;
@@ -563,4 +564,4 @@ bool Sqlite3PerformScript(const String& txt, StatementExecutor& se, Gate2<int, i
 	return true;
 }
 
-END_UPP_NAMESPACE
+}

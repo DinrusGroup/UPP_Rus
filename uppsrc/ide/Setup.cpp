@@ -11,6 +11,10 @@ void DlCharset(DropList& d)
 {
 	d.Add(CHARSET_UTF8, "UTF8");
 	d.Add(TextCtrl::CHARSET_UTF8_BOM, "UTF8 BOM");
+	d.Add(TextCtrl::CHARSET_UTF16_LE, "UTF16 LE");
+	d.Add(TextCtrl::CHARSET_UTF16_BE, "UTF16 BE");
+	d.Add(TextCtrl::CHARSET_UTF16_LE_BOM, "UTF16 LE BOM");
+	d.Add(TextCtrl::CHARSET_UTF16_BE_BOM, "UTF16 BE BOM");
 	for(int i = 1; i < CharsetCount(); i++)
 		d.Add(i, CharsetName(i));
 }
@@ -26,7 +30,7 @@ class FontSelectManager {
 	void Select();
 
 public:
-	Callback  WhenAction;
+	Event<>   WhenAction;
 
 	typedef FontSelectManager CLASSNAME;
 
@@ -75,7 +79,7 @@ void FontSelectManager::Set(DropList& _face, DropList& _height,
 	LoadFonts(face, fni, false);
 	face->SetIndex(0);
 	height->ClearList();
-	for(int i = 6; i < 32; i++)
+	for(int i = 6; i < 64; i++)
 		height->Add(i);
 	FaceSelect();
 }
@@ -119,27 +123,31 @@ void Ide::UpdateFormat(CodeEditor& editor)
 	editor.IndentSpaces(indent_spaces);
 	editor.IndentAmount(indent_amount);
 	editor.ShowTabs(show_tabs);
+	editor.ShowLineEndings(show_tabs);
+	editor.WarnWhiteSpace(warnwhitespace);
 	editor.NoParenthesisIndent(no_parenthesis_indent);
 	editor.HiliteScope(hilite_scope);
 	editor.HiliteBracket(hilite_bracket);
 	editor.HiliteIfDef(hilite_ifdef);
 	editor.BarLine(barline);
 	editor.HiliteIfEndif(hilite_if_endif);
+	editor.ThousandsSeparator(thousands_separator);
+	editor.ShowCurrentLine(hline ? HighlightSetup::GetHlStyle(HighlightSetup::SHOW_LINE).color : (Color)Null);
 	editor.LineNumbers(line_numbers);
 	editor.AutoEnclose(auto_enclose);
 	editor.MarkLines(mark_lines);
 	editor.BorderColumn(bordercolumn, bordercolor);
+	editor.PersistentFindReplace(persistent_find_replace);
+	editor.FindReplaceRestorePos(find_replace_restore_pos);
 	editor.Refresh();
 }
 
 void Ide::UpdateFormat() {
-	SetupEditor();	
+	SetupEditor();
 	UpdateFormat(editor);
 	UpdateFormat(editor2);
 	console.SetFont(consolefont);
 	console.WrapText(wrap_console_text);
-	console2.SetFont(consolefont);
-	console2.WrapText(wrap_console_text);
 	statusbar.Show(show_status_bar);
 	SetupBars();
 	
@@ -147,15 +155,15 @@ void Ide::UpdateFormat() {
 		if(filetabs >=0) {
 			tabs.SetAlign(filetabs);
 			editpane.SetFrame(tabs);
-		} else {
-			editpane.SetFrame(ViewFrame());
 		}
+		else
+			editpane.SetFrame(NullFrame());
 	}
-	
+
 	tabs.Grouping(tabs_grouping);
 	tabs.Stacking(tabs_stacking);
 	tabs.FileIcons(tabs_icons, false);
-	tabs.Crosses(tabs_crosses >= 0, tabs_crosses);	
+	tabs.Crosses(tabs_crosses >= 0, tabs_crosses);
 }
 
 void Ide::EditorFontScroll(int d)
@@ -170,6 +178,7 @@ void Ide::EditorFontScroll(int d)
 	while(editorfont.GetCy() == h && (d < 0 ? editorfont.GetCy() > 5 : editorfont.GetCy() < 40))
 		editorfont.Height(q += d);
 	editor.SetFont(editorfont);
+	editor.EditorBarLayout();
 }
 
 struct FormatDlg : TabDlg {
@@ -185,7 +194,7 @@ void Ide::ReadHlStyles(ArrayCtrl& hlstyle)
 {
 	hlstyle.Clear();
 	for(int i = 0; i < CodeEditor::HL_COUNT; i++) {
-		const CodeEditor::HlStyle& s = editor.GetHlStyle(i);
+		const HlStyle& s = editor.GetHlStyle(i);
 		hlstyle.Add(editor.GetHlName(i), s.color, s.bold, s.italic, s.underline);
 	}
 }
@@ -205,13 +214,13 @@ AStyleSetupDialog::AStyleSetupDialog(Ide *_ide)
 {
 	ide = _ide;
 
-	BracketFormatMode.Add(astyle::NONE_MODE, "не установлен");
-	BracketFormatMode.Add(astyle::ATTACH_MODE, "прикрепление");
+	BracketFormatMode.Add(astyle::NONE_MODE, "none");
+	BracketFormatMode.Add(astyle::ATTACH_MODE, "attach");
 	BracketFormatMode.Add(astyle::BREAK_MODE, "break");
-	ParensPaddingMode.Add(astyle::PAD_NONE, "нет пространств отступа вокруг скобок");
-	ParensPaddingMode.Add(astyle::PAD_INSIDE, "отступ в виде пробела внутри скобок");
-	ParensPaddingMode.Add(astyle::PAD_OUTSIDE, "отступ в виде пробела вокруг скобок");
-	ParensPaddingMode.Add(astyle::PAD_BOTH, "обе стороны скобок с отступами в виде пробелов");
+	ParensPaddingMode.Add(astyle::PAD_NONE, "no space pad around parenthesis");
+	ParensPaddingMode.Add(astyle::PAD_INSIDE, "pad parenthesis inside with space");
+	ParensPaddingMode.Add(astyle::PAD_OUTSIDE, "pad parenthesis outside with space");
+	ParensPaddingMode.Add(astyle::PAD_BOTH, "pad both parenthesis sides with spaces");
 
 	Test <<= THISBACK(AstyleTest);
 	Defaults << THISBACK(UppDefaults);
@@ -300,9 +309,60 @@ void SetConsole(EditString *e, const char *text)
 	*e <<= text;
 }
 
+void AddPath(EditString *es)
+{
+	String s = SelectDirectory();
+	if(IsNull(s))
+		return;
+	String h = ~*es;
+	if(h.GetCount() && *h.Last() != ';')
+		h << ';';
+	h << s;
+	*es <<= h;
+	es->SetWantFocus();
+}
+
+void InsertPath(EditString *es)
+{
+	String s = SelectDirectory();
+	if(IsNull(s))
+		return;
+	es->Clear();
+	*es <<= s;
+	es->SetWantFocus();
+}
+
+void DlSpellerLangs(DropList& dl)
+{
+	static Vector<int> lng;
+	ONCELOCK {
+		VectorMap<int, String> lngs;
+		String path = GetExeDirFile("scd") + ';' + ConfigFile("scd") + ';' +
+		              GetExeFolder() + ';' + GetConfigFolder() + ';' +
+		              getenv("LIB") + ';' + getenv("PATH");
+		Vector<String> p = Split(path, ';');
+		for(auto dir : p) {
+			for(int pass = 0; pass < 2; pass++) {
+				FindFile ff(AppendFileName(dir, pass ? "*.udc" : "*.scd"));
+				while(ff) {
+					int lang = LNGFromText(ff.GetName());
+					if(lang)
+						lngs.Add(lang, LNGAsText(lang));
+					ff.Next();
+				}
+			}
+		}
+		SortByValue(lngs);
+		lng = lngs.PickKeys();
+	}
+	dl.Add(0, "Off");
+	for(auto l : lng)
+		dl.Add(l, LNGAsText(l));
+}
+
 void Ide::SetupFormat() {
 	FormatDlg dlg;
-	dlg.Title("Установка формата");
+	dlg.Title("Settings");
 	WithSetupFontLayout<ParentCtrl> fnt;
 	WithSetupHlLayout<ParentCtrl> hlt;
 	WithSetupEditorLayout<ParentCtrl> edt;
@@ -315,10 +375,19 @@ void Ide::SetupFormat() {
 	ide.kde.Hide();
 	ide.gnome.Hide();
 	ide.xterm.Hide();
+	ide.mate.Hide();
+	
 #endif
 	ide.kde <<= callback2(SetConsole, &ide.console, "/usr/bin/konsole -e");
 	ide.gnome <<= callback2(SetConsole, &ide.console, "/usr/bin/gnome-terminal -x");
+	ide.mate <<= callback2(SetConsole, &ide.console, "/usr/bin/mate-terminal -x");
 	ide.xterm <<= callback2(SetConsole, &ide.console, "/usr/bin/xterm -e");
+	
+	edt.lineends
+		.Add(LF, "LF")
+		.Add(CRLF, "CRLF")
+		.Add(DETECT_LF, "Detect with default LF")
+		.Add(DETECT_CRLF, "Detect with default CRLF");
 	
 	edt.filetabs
 		.Add(AlignedFrame::LEFT, "Left")
@@ -332,12 +401,12 @@ void Ide::SetupFormat() {
 		.Add(AlignedFrame::RIGHT, "Right")
 		.Add(-1, "Off");
 	
-	dlg.Add(fnt, "Шрифты");
-	dlg.Add(hlt, "Подсветка синтаксиса");
-	dlg.Add(edt, "Редактор");
-	dlg.Add(assist, "Асистент");
+	dlg.Add(fnt, "Fonts");
+	dlg.Add(hlt, "Syntax highlighting");
+	dlg.Add(edt, "Editor");
+	dlg.Add(assist, "Assist");
 	dlg.Add(ide, "IDE");
-	dlg.Add(ast, "Форматирование кода");
+	dlg.Add(ast, "Code formatting");
 	dlg.WhenClose = dlg.Acceptor(IDEXIT);
 	FontSelectManager ed, vf, con, f1, f2, tf;
 	ed.Set(fnt.face, fnt.height, fnt.bold, fnt.italic, fnt.naa);
@@ -360,28 +429,39 @@ void Ide::SetupFormat() {
 	edt.indent_amount.Enable(indent_spaces);
 	CtrlRetriever rtvr;
 	int hs = hilite_scope;
+
+	DlSpellerLangs(edt.spellcheck_comments);
+	
 	rtvr
 		(hlt.hilite_scope, hs)
 		(hlt.hilite_bracket, hilite_bracket)
 		(hlt.hilite_ifdef, hilite_ifdef)
 		(hlt.hilite_if_endif, hilite_if_endif)
+		(hlt.thousands_separator, thousands_separator)
+		(hlt.hline, hline)
 
 		(edt.indent_spaces, indent_spaces)
 		(edt.no_parenthesis_indent, no_parenthesis_indent)
 		(edt.showtabs, show_tabs)
-		(edt.forcecrlf, force_crlf)
+		(edt.warnwhitespace, warnwhitespace)
+		(edt.lineends, line_endings)
 		(edt.numbers, line_numbers)
 		(edt.bookmark_pos, bookmark_pos)
 		(edt.bordercolumn, bordercolumn)
 		(edt.bordercolor, bordercolor)
 		(edt.findpicksel, find_pick_sel)
 		(edt.findpicktext, find_pick_text)
+		(edt.deactivate_save, deactivate_save)
 		(edt.filetabs, filetabs)
 		(edt.tabs_icons, tabs_icons)
 		(edt.tabs_crosses, tabs_crosses)
 		(edt.tabs_grouping, tabs_grouping)
 		(edt.tabs_stacking, tabs_stacking)
 		(edt.tabs_serialize, tabs_serialize)
+		(edt.spellcheck_comments, spellcheck_comments)
+		(edt.wordwrap_comments, wordwrap_comments)
+		(edt.persistent_find_replace, persistent_find_replace)
+		(edt.find_replace_restore_pos, find_replace_restore_pos)
 
 		(assist.barline, barline)
 		(assist.auto_enclose, auto_enclose)
@@ -391,6 +471,9 @@ void Ide::SetupFormat() {
 		(assist.mark_lines, mark_lines)
 		(assist.qtfsel, qtfsel)
 		(assist.assist, editor.auto_assist)
+		(assist.rescan, auto_rescan)
+		(assist.check, auto_check)
+		(assist.navigator_right, editor.navigator_right)
 
 		(ide.showtime, showtime)
 		(ide.show_status_bar, show_status_bar)
@@ -400,6 +483,7 @@ void Ide::SetupFormat() {
 		(ide.mute_sounds, mute_sounds)
 		(ide.wrap_console_text, wrap_console_text)
 		(ide.hydra1_threads, hydra1_threads)
+		(ide.gdbSelector, gdbSelector)
 		(ide.chstyle, chstyle)
 		(ide.console, LinuxHostConsole)
 		(ide.output_per_assembly, output_per_assembly)
@@ -428,27 +512,41 @@ void Ide::SetupFormat() {
 		(ast.TabSpaceConversionMode,        astyle_TabSpaceConversionMode)
 		(ast.TestBox,						astyle_TestBox)
 	;
-	hlt.hlstyle.AddColumn("Стиль");
-	hlt.hlstyle.AddColumn("Цвет").Ctrls(HlPusherFactory);
-	hlt.hlstyle.AddColumn("Полужирный").Ctrls<Option>();
-	hlt.hlstyle.AddColumn("Курсив").Ctrls<Option>();
-	hlt.hlstyle.AddColumn("Подчёркивание").Ctrls<Option>();
-	hlt.hlstyle.ColumnWidths("130 70 40 40 70");
+	hlt.hlstyle.AddColumn("Style");
+	hlt.hlstyle.AddColumn("Color").Ctrls(HlPusherFactory);
+	hlt.hlstyle.AddColumn("Bold").Ctrls<Option>();
+	hlt.hlstyle.AddColumn("Italic").Ctrls<Option>();
+	hlt.hlstyle.AddColumn("Underline").Ctrls<Option>();
+	hlt.hlstyle.ColumnWidths("211 80 45 45 80");
 	hlt.hlstyle.EvenRowColor().NoHorzGrid().SetLineCy(EditField::GetStdHeight() + 2);
 	ReadHlStyles(hlt.hlstyle);
 	edt.charset <<= (int)default_charset;
-	edt.tabsize <<= rtvr <<=
+	edt.tabsize.WhenAction = rtvr <<=
 		hlt.hlstyle.WhenCtrlsAction = ed.WhenAction = tf.WhenAction =
 		con.WhenAction = f1.WhenAction = f2.WhenAction = dlg.Breaker(222);
 	ide.showtimeafter <<= Nvl((Date)FileGetTime(ConfigFile("version")), GetSysDate() - 1);
 	hlt.hl_restore <<= dlg.Breaker(333);
-	ide.chstyle.Add(0, "Платформа-хост");
-	ide.chstyle.Add(1, "Стандарт");
-	ide.chstyle.Add(2, "Классика");
-	ide.chstyle.Add(3, "Платформа-хост, синие панели");
-	ide.chstyle.Add(4, "Стандарт, синие панели");
+	hlt.hl_restore_white <<= dlg.Breaker(334);
+	hlt.hl_restore_dark <<= dlg.Breaker(335);
+	ide.chstyle.Add(0, "Host platform");
+	ide.chstyle.Add(1, "Standard");
+	ide.chstyle.Add(2, "Classic");
+	ide.chstyle.Add(3, "Host platform, blue bars");
+	ide.chstyle.Add(4, "Standard, blue bars");
+
+	FrameRight<Button> uscBrowse;
+	uscBrowse.SetImage(CtrlImg::right_arrow());
+	uscBrowse <<= callback1(AddPath, &ide.uscpath);
+	ide.uscpath.AddFrame(uscBrowse);
+	String usc_path = GetHomeDirFile("usc.path");
+	ide.uscpath <<= LoadFile(usc_path);
+	
 	for(;;) {
 		int c = dlg.Run();
+		if(IsNull(ide.uscpath))
+			FileDelete(usc_path);
+		else
+			Upp::SaveFile(GetHomeDirFile("usc.path"), ~ide.uscpath);
 		editorfont = ed.Get();
 		tfont = tf.Get();
 		veditorfont = vf.Get();
@@ -457,12 +555,11 @@ void Ide::SetupFormat() {
 		font2 = f2.Get();
 		editortabsize = Nvl((int)~edt.tabsize, 4);
 		rtvr.Retrieve();
-		console.SetSlots(hydra1_threads);
+		console.SetSlots(minmax(hydra1_threads, 1, 256));
 		hilite_scope = hs;
 		if(indent_spaces)
 			indent_amount = ~edt.indent_amount;
-		else
-		{
+		else {
 			indent_amount = editortabsize;
 			edt.indent_amount <<= editortabsize;
 		}
@@ -474,16 +571,33 @@ void Ide::SetupFormat() {
 		UpdateFormat();
 		if(c == IDEXIT)
 			break;
-		if(c == 333 && PromptYesNo("Восстановить цвета подсвечивания по умолчанию?")) {
+		if(c == 333 && PromptYesNo("Restore default highlighting colors?")) {
 			editor.DefaultHlStyles();
+			SetupEditor();
+			ReadHlStyles(hlt.hlstyle);
+		}
+		if(c == 334 && PromptYesNo("Set white theme?")) {
+			editor.WhiteTheme();
+			SetupEditor();
+			ReadHlStyles(hlt.hlstyle);
+		}
+		if(c == 335 && PromptYesNo("Set dark theme?")) {
+			editor.DarkTheme();
+			SetupEditor();
 			ReadHlStyles(hlt.hlstyle);
 		}
 	}
+	FileSetTime(ConfigFile("version"), ToTime(~ide.showtimeafter));
+	FinishConfig();
+	SaveConfig();
+}
+
+void Ide::FinishConfig()
+{
 	if(filelist.IsCursor()) {
 		FlushFile();
 		FileCursor();
 	}
-	FileSetTime(ConfigFile("version"), ToTime(~ide.showtimeafter));
 	SaveLoadPackage();
 	SyncCh();
 }
@@ -526,15 +640,15 @@ void sSetOption(One<Ctrl>& ctrl)
 void MainConfigDlg::FlagDlg()
 {
 	WithConfLayout<TopWindow> cfg;
-	CtrlLayoutOKCancel(cfg, "Флаги конфигурации");
+	CtrlLayoutOKCancel(cfg, "Configuration flags");
 	cfg.Sizeable().MaximizeBox();
-	Vector<String> flg = SplitFlags0(String(fe));
+	Vector<String> flg = SplitFlags0(~~fe);
 	Vector<String> accepts = wspc.GetAllAccepts(0);
 	Sort(accepts, GetLanguageInfo());
 	enum { CC_SET, CC_NAME, CC_PACKAGES, CC_COUNT };
-	cfg.accepts.AddColumn("Установка").Ctrls(sSetOption).HeaderTab().Fixed(40);
-	cfg.accepts.AddColumn("Флаг", 1);
-	cfg.accepts.AddColumn("Пакеты", 2);
+	cfg.accepts.AddColumn("Set").Ctrls(sSetOption).HeaderTab().Fixed(40);
+	cfg.accepts.AddColumn("Flag", 1);
+	cfg.accepts.AddColumn("Packages", 2);
 	cfg.accepts.SetCount(accepts.GetCount());
 	for(int i = 0; i < accepts.GetCount(); i++) {
 		String acc = accepts[i];
@@ -546,7 +660,7 @@ void MainConfigDlg::FlagDlg()
 		cfg.accepts.Set(i, CC_NAME, accepts[i]);
 		cfg.accepts.Set(i, CC_PACKAGES, Join(pkg, ","));
 	}
-	
+
 	cfg.other.SetFilter(FlagFilterM);
 	cfg.dll <<= cfg.gui <<= cfg.mt <<= cfg.sse2 <<= 0;
 	String other;
@@ -583,13 +697,13 @@ void MainConfigDlg::FlagDlg()
 }
 
 MainConfigDlg::MainConfigDlg(const Workspace& wspc_) : wspc(wspc_) {
-	CtrlLayoutOKCancel(*this, "Конфигурация(-и) главного пакета");
+	CtrlLayoutOKCancel(*this, "Main package configuration(s)");
 	fe.AddFrame(cb);
 	fe.SetFilter(FlagFilterM);
 	cb.SetImage(CtrlImg::smallright()).NoWantFocus();
 	cb <<= THISBACK(FlagDlg);
-	list.AddColumn("Флаги", 3).Edit(fe);
-	list.AddColumn("Опционное имя", 2).Edit(ce);
+	list.AddColumn("Flags", 3).Edit(fe);
+	list.AddColumn("Optional name", 2).Edit(ce);
 	list.Appending().Removing();
 }
 
@@ -623,4 +737,9 @@ void Ide::MainConfig() {
 	SyncMainConfigList();
 	SetHdependDirs();
 	MakeTitle();
+}
+
+bool Ide::IsPersistentFindReplace()
+{
+	return persistent_find_replace;
 }

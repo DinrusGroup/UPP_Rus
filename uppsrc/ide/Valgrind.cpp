@@ -40,10 +40,10 @@ void Ide::Valgrind()
 	ConsoleClear();
 	PutConsole("Valgrind..");
 	if(IsNull(h->Execute(cmdline))) {
-		PutConsole("Ошибка при выполнении valgrind");
+		PutConsole("Error executing valgrind");
 		return;
 	}
-	PutConsole("Разбор вывода от valgrind..");
+	PutConsole("Parsing valgrind output..");
 	Sync();
 	String txt = LoadFile(fn);
 	DeleteFile(fn);
@@ -54,7 +54,7 @@ void Ide::Valgrind()
 		p.PassTag("valgrindoutput");
 		while(!p.End()) {
 			if(p.Tag("error")) {
-				String hdr = "Ошибка (описание отсутствует)";
+				String hdr = "Error (missing description)";
 				String pos;
 				Vector<String> ln;
 				bool src = false;
@@ -148,6 +148,6 @@ void Ide::Valgrind()
 		}
 	}
 	catch(XmlError) {
-		PutConsole("Ошибка при разборе вывода от valgrind");
+		PutConsole("Error parsing valgrind output");
 	}
 }

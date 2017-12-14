@@ -4,6 +4,11 @@
 
 #include <plugin/bz2/bz2.h>
 
+LocalHost::LocalHost()
+	: tools(MakeOne<LocalHostTools>())
+{
+}
+
 String LocalHost::GetEnvironment()
 {
 	return environment;
@@ -32,9 +37,6 @@ Vector<Host::FileInfo> LocalHost::GetFileInfo(const Vector<String>& path)
 		FileInfo& f = fi.Add();
 		if(ff) {
 			(Time&)f = ff.GetLastWriteTime();
-#ifdef PLATFORM_WIN32
-			f.second = f.second & ~1; // FAT vs NTFS accuracy fix
-#endif
 			f.length = ff.IsFile() ? (int)ff.GetLength() : -1;
 		}
 		else {
@@ -62,7 +64,7 @@ void LocalHost::ChDir(const String& path)
 	SetCurrentDirectory(path);
 #endif
 #ifdef PLATFORM_POSIX
-	chdir(path);
+	IGNORE_RESULT( chdir(path) );
 #endif
 	if(cmdout)
 		*cmdout << "cd \"" << GetHostPath(path) << "\"\n";
@@ -76,16 +78,17 @@ void LocalHost::DoDir(const String& dir)
 	}
 }
 
-void LocalHost::RealizeDir(const String& path)
+bool LocalHost::RealizeDir(const String& path)
 {
-	RealizeDirectory(path);
+	bool realized = RealizeDirectory(path);
 	if(cmdout)
 		DoDir(path);
+	return realized;
 }
 
-void    LocalHost::SaveFile(const String& path, const String& data)
+bool LocalHost::SaveFile(const String& path, const String& data)
 {
-	::SaveFile(path, data);
+	return ::SaveFile(path, data);
 }
 
 String  LocalHost::LoadFile(const String& path)
@@ -99,25 +102,25 @@ int LocalHost::Execute(const char *cmdline)
 		*cmdout << cmdline << '\n';
 	PutVerbose(cmdline);
 	int q = IdeConsoleExecute(FindCommand(exedirs, cmdline), NULL, environment, false);
-	PutVerbose(Format("Код выхода: %d", q));
+	PutVerbose(Format("Exitcode: %d", q));
 	return q;
 }
 
-int LocalHost::ExecuteWithInput(const char *cmdline)
+int LocalHost::ExecuteWithInput(const char *cmdline, bool noconvert)
 {
 	if(cmdout)
 		*cmdout << cmdline << '\n';
 	PutVerbose(cmdline);
-	int q = IdeConsoleExecuteWithInput(FindCommand(exedirs, cmdline), NULL, environment, false);
-	PutVerbose(Format("Код выхода: %d", q));
+	int q = IdeConsoleExecuteWithInput(FindCommand(exedirs, cmdline), NULL, environment, false, noconvert);
+	PutVerbose(Format("Exitcode: %d", q));
 	return q;
 }
 
-int LocalHost::Execute(const char *cmdline, Stream& out)
+int LocalHost::Execute(const char *cmdline, Stream& out, bool noconvert)
 {
 	PutVerbose(cmdline);
-	int q = IdeConsoleExecute(FindCommand(exedirs, cmdline), &out, environment, true);
-	PutVerbose(Format("Код выхода: %d", q));
+	int q = IdeConsoleExecute(FindCommand(exedirs, cmdline), &out, environment, true, noconvert);
+	PutVerbose(Format("Exitcode: %d", q));
 	return q;
 }
 
@@ -141,15 +144,27 @@ bool LocalHost::Wait()
 	return IdeConsoleWait();
 }
 
-One<SlaveProcess> LocalHost::StartProcess(const char *cmdline)
+bool LocalHost::Wait(int slot)
+{
+	return IdeConsoleWait(slot);
+}
+
+void LocalHost::OnFinish(Event<>  cb)
+{
+	IdeConsoleOnFinish(cb);
+}
+
+One<AProcess> LocalHost::StartProcess(const char *cmdline)
 {
 	try {
 		PutVerbose(cmdline);
-		return ::StartProcess(FindCommand(exedirs, cmdline), environment, REMOTE_TIMEOUT);
+		One<AProcess> p;
+		if(p.Create<LocalProcess>().Start(FindCommand(exedirs, cmdline), environment))
+			return p;
 	}
 	catch(...) {
-		return NULL;
 	}
+	return NULL;
 }
 
 #ifdef PLATFORM_POSIX
@@ -206,62 +221,65 @@ void LocalHost::Launch(const char *_cmdline, bool console)
 		CloseHandle(pi.hThread);
 	}
 	else
-		PutConsole("Не удаётся запустить " + String(_cmdline));
+		PutConsole("Unable to launch " + String(_cmdline));
 #endif
 #ifdef PLATFORM_POSIX
 	String script = ConfigFile("console-script-" + AsString(getpid()) + ".tmp");
-	int c = LinuxHostConsole.FindFirstOf(" ");
-	String lc =  c < 0 ? LinuxHostConsole : LinuxHostConsole.Left(c);
-	if(FileExists(lc)){
-		if(console){
+	String lc;
+	static const char *term[] = {
+		"/usr/bin/mate-terminal -x",
+		"/usr/bin/gnome-terminal -x",
+		"/usr/bin/konsole -e",
+		"/usr/bin/xterm -e",
+	};
+	int ii = 0;
+	for(;;) { // If (pre)defined terminal emulator is not available, try to find one
+		int c = LinuxHostConsole.FindFirstOf(" ");
+		lc = c < 0 ? LinuxHostConsole : LinuxHostConsole.Left(c);
+		if(ii >= __countof(term) || FileExists(lc))
+			break;
+		LinuxHostConsole = term[ii++];
+	}
+	if(FileExists(lc)) {
+		if(console) {
 			FileStream out(script, FileStream::CREATE, 0777);
 			out << "#!/bin/sh\n"
 			    << cmdline << '\n'
-			    << "echo \"<--- Завершено, нажмите любую клавишу, чтобы закрыть окно --->\"\nread\n";
+			    << "echo \"<--- Finished, press any key to close the window --->\"\nread dummy\n";
 			cmdline = LinuxHostConsole + " sh " + script;
 		}
 	}
 	else
 	if(LinuxHostConsole.GetCount())
-		PutConsole("Внимание: Терминал '"+lc+"' не обнаружен, выполнение в фоне.");
+		PutConsole("Warning: Terminal '" + lc + "' not found, executing in background.");
 	Buffer<char> cmd_buf(strlen(cmdline) + 1);
-	char *cmd_out = cmd_buf;
 	Vector<char *> args;
-	const char *p = cmdline;
-	const char *b = p;
-	while(*p && (byte)*p > ' ')
-		if(*p++ == '\"')
-			while(*p && *p++ != '\"')
-				;
-	args.Add(cmd_out);
-	memcpy(cmd_out, b, p - b);
-	cmd_out += p - b;
-	*cmd_out++ = '\0';
 
-	while(*p)
-		if((byte)*p <= ' ')
-			p++;
-		else {
-			args.Add(cmd_out);
-			b = p;
-			while(*p && (byte)*p > ' ')
-				if(*p++ == '\"')
-				{
-					memcpy(cmd_out, b, p - b - 1);
-					cmd_out += p - b - 1;
-					b = p;
-					while(*p && *p != '\"')
-						p++;
-					memcpy(cmd_out, b, p - b);
-					cmd_out += p - b;
-					if(*p == '\"')
-						p++;
-					b = p;
+	char *o = cmd_buf;
+	const char *s = cmdline;
+	while(*s) {
+		char *arg = o;
+		while((byte)*s > ' ') {
+			if(*s == '\"') {
+				s++;
+				while(*s) {
+					if(*s == '\"') {
+						s++;
+						break;
+					}
+					*o++ = *s++;
 				}
-			memcpy(cmd_out, b, p - b);
-			cmd_out += p - b;
-			*cmd_out++ = '\0';
+			}
+			else
+				*o++ = *s++;
 		}
+		while(*s && (byte)*s <= ' ')
+			s++;
+		if(o > arg) {
+			*o++ = '\0';
+			args.Add(arg);
+		}
+	}
 
 	args.Add(NULL);
 
@@ -293,16 +311,23 @@ void LocalHost::Launch(const char *_cmdline, bool console)
 
 void LocalHost::AddFlags(Index<String>& cfg)
 {
+	if(HasPlatformFlag(cfg))
+		return;
+	
 #if   defined(PLATFORM_WIN32)
 	cfg.Add("WIN32");
+#endif
+
+#ifdef PLATFORM_POSIX
+	cfg.Add("POSIX");
 #endif
 
 #ifdef PLATFORM_LINUX
 	cfg.Add("LINUX");
 #endif
 
-#ifdef PLATFORM_POSIX
-	cfg.Add("POSIX");
+#ifdef PLATFORM_ANDROID
+	cfg.Add("ANDROID");
 #endif
 
 #ifdef PLATFORM_BSD
@@ -321,6 +346,10 @@ void LocalHost::AddFlags(Index<String>& cfg)
 	cfg.Add("NETBSD");
 #endif
 
+#ifdef PLATFORM_DRAGONFLY
+	cfg.Add("DRAGONFLY");
+#endif
+
 #ifdef PLATFORM_SOLARIS
 	cfg.Add("SOLARIS");
 #endif
@@ -330,6 +359,32 @@ void LocalHost::AddFlags(Index<String>& cfg)
 #endif
 }
 
+const Vector<String>& LocalHost::GetExecutablesDirs() const
+{
+	return exedirs;
+}
+
+const HostTools& LocalHost::GetTools() const
+{
+	return *tools.Get();
+}
+
+bool LocalHost::HasPlatformFlag(const Index<String>& cfg)
+{
+	static const Index<String> platformFlags = {
+		"WIN32", "POSIX", "LINUX", "ANDROID",
+		"BSD", "FREEBSD", "OPENBSD", "NETBSD",
+		"DRAGONFLY", "SOLARIS", "OSX11"
+	};
+
+	for(const String& flag : cfg)
+		if(platformFlags.Find(flag) >= 0)
+			return true;
+
+	return false;
+}
+
+#if 0
 static bool IsSamePath(const char *a, const char *b, int count) {
 	for(; --count >= 0; a++, b++)
 		if(a != b && ToLower(*a) != ToLower(*b) && !((*a == '\\' || *a == '/') && (*b == '\\' || *b == '/')))
@@ -395,7 +450,7 @@ String RemoteHost::RemoteExec(String cmd)
 	}
 */
 	if(!ClientSocket(socket, host, port, true, NULL, 2000)) {
-		PutConsole(NFormat("Ошибка при подключении к '%s', порт %d: %s", host, port, Socket::GetErrorText()));
+		PutConsole(NFormat("Error connecting to '%s', port %d: %s", host, port, Socket::GetErrorText()));
 		return String::GetVoid();
 	}
 	socket.Write(cmd);
@@ -503,7 +558,7 @@ String  RemoteHost::LoadFile(const String& path)
 	String data = BZ2Decompress(ASCII85Decode(p));
 	if(data.GetLength() != len)
 	{
-		PutConsole(NFormat("%s: расжатая длина (%d) не соответствует длине в заголовке (%d)",
+		PutConsole(NFormat("%s: decompressed length (%d) doesn't match length in header (%d)",
 			hpath, data.GetLength(), len));
 		return String::GetVoid();
 	}
@@ -513,21 +568,21 @@ String  RemoteHost::LoadFile(const String& path)
 int RemoteHost::Execute(const char *cmdline)
 {
 	int q = IdeConsoleExecute(StartProcess(cmdline), cmdline);
-	PutVerbose(Format("Код выхода: %d", q));
+	PutVerbose(Format("Exitcode: %d", q));
 	return q;
 }
 
 int RemoteHost::ExecuteWithInput(const char *cmdline)
 {
 	int q = IdeConsoleExecute(StartProcess(cmdline), cmdline);
-	PutVerbose(Format("Код выхода: %d", q));
+	PutVerbose(Format("Exitcode: %d", q));
 	return q;
 }
 
 int RemoteHost::Execute(const char *cmdline, Stream& out)
 {
 	int q = IdeConsoleExecute(StartProcess(cmdline), cmdline, &out, true);
-	PutVerbose(Format("Код выхода: %d", q));
+	PutVerbose(Format("Exitcode: %d", q));
 	return q;
 }
 
@@ -551,7 +606,7 @@ bool RemoteHost::Wait()
 	return IdeConsoleWait();
 }
 
-One<SlaveProcess> RemoteHost::StartProcess(const char *cmdline)
+One<AProcess> RemoteHost::StartProcess(const char *cmdline)
 {
 	try {
 		PutVerbose(cmdline);
@@ -570,3 +625,4 @@ void RemoteHost::AddFlags(Index<String>& cfg)
 {
 	cfg.Add(os_type);
 }
+#endif

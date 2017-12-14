@@ -4,7 +4,7 @@
 class OciSqlConnection;
 
 
-NAMESPACE_UPP
+namespace Upp {
 
 Date        OciDecodeDate(const byte data[7]);
 bool        OciEncodeDate(byte data[7], Date d);
@@ -41,7 +41,7 @@ public:
 };
 
 #ifndef NOAPPSQL
-bool OraclePerformScript(const String& text, StatementExecutor& se = SQLStatementExecutor(), Gate2<int, int> progress_canceled = false);
+bool OraclePerformScript(const String& text, StatementExecutor& se = SQLStatementExecutor(), Gate<int, int> progress_canceled = false);
 #else
 bool OraclePerformScript(const String& text, StatementExecutor& se, Gate2<int, int> progress_canceled = false);
 #endif
@@ -82,6 +82,6 @@ protected:
 	virtual void SetParam(int i, OracleRef ref) = 0;
 };
 
-END_UPP_NAMESPACE
+}
 
-#endif//ORACOMMON_H
+#endif

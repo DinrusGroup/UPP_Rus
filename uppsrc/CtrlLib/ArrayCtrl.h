@@ -1,8 +1,7 @@
-
 template <class T>
 void DefaultCtrlFactoryFn(One<Ctrl>& ctrl)
 {
-	ctrl = new T;
+	ctrl.Create<T>();
 }
 
 template <class T>
@@ -58,17 +57,19 @@ public:
 		int                   index;
 		Mitor<int>            pos;
 		const Convert        *convert;
+		Function<Value(const Value&)> convertby;
 		Ptr<Ctrl>             edit;
 		const Display        *display;
-		Callback2<int, One<Ctrl>&> factory;
-		Callback1< One<Ctrl>& > factory1;
+		Event<int, One<Ctrl>&> factory;
+		Event<One<Ctrl>&>     factory1;
 		int                 (*accel)(int);
 		int                   margin;
 		bool                  cached;
 		bool                  clickedit;
 		mutable Any           cache;
 		const ValueOrder     *order;
-		int                 (*cmp)(const Value& a, const Value& b);
+		Function<int (const Value& a, const Value& b)> cmp;
+		Gate<int, int>        line_order;
 
 
 		void   InvalidateCache(int i);
@@ -76,7 +77,6 @@ public:
 		void   RemoveCache(int i);
 		void   ClearCache();
 		void   Sorts();
-		void   Factory1(int, One<Ctrl>& ctrl);
 		
 		typedef Column CLASSNAME;
 
@@ -84,21 +84,20 @@ public:
 
 	public:
 		Column& Add(int _pos)                      { pos.Add(_pos); return *this; }
-		Column& Add(Id id)                         { pos.Add(-id.AsNdx()); return *this; }
-		Column& AddIndex(Id id)                    { arrayctrl->AddIndex(id); return Add(id); }
+		Column& Add(const Id& id)                  { pos.Add(-arrayctrl->AsNdx(id)); return *this; }
+		Column& AddIndex(const Id& id)             { arrayctrl->AddIndex(id); return Add(id); }
 		Column& AddIndex()                         { Add(arrayctrl->GetIndexCount()); arrayctrl->AddIndex(); return *this; }
 
 		Column& SetConvert(const Convert& c);
+		Column& ConvertBy(Function<Value(const Value&)> cv);
 		Column& SetFormat(const char *fmt);
 		Column& SetDisplay(const Display& d);
 		Column& NoEdit();
 		Column& Edit(Ctrl& e);
-		Column& Ctrls(Callback1<One<Ctrl>&> factory);
-		Column& Ctrls(void (*factory)(One<Ctrl>&)) { return Ctrls(callback(factory)); }
 		template <class T>
 		Column& Ctrls()                            { return Ctrls(DefaultCtrlFactory<T>()); }
-		Column& Ctrls(Callback2<int, One<Ctrl>&> factory);
-		Column& Ctrls(void (*factory)(int, One<Ctrl>&)) { return Ctrls(callback(factory)); }
+		Column& WithLined(Event<int, One<Ctrl>&> factory);
+		Column& With(Event<One<Ctrl>&> factory);
 		Column& InsertValue(const Value& v);
 		Column& InsertValue(ValueGen& g);
 		Column& NoClickEdit()                      { clickedit = false; return *this; }
@@ -106,17 +105,27 @@ public:
 		Column& Accel(int (*filter)(int))          { accel = filter; return *this; }
 		Column& Accel()                            { return Accel(CharFilterDefaultToUpperAscii); }
 
-		Column& Sorting(const ValueOrder& o);
-		Column& Sorting(int (*c)(const Value& a, const Value& b));
 		Column& Sorting();
+		Column& Sorting(const ValueOrder& o);
+		Column& SortingLined(Gate<int, int> line_order);
+		Column& SortingBy(Function<int (const Value& a, const Value& b)> cmp);
 		Column& SortDefault();
 
 		Column& Margin(int m)                      { margin = m; return *this; }
 
 		HeaderCtrl::Column& HeaderTab();
+		const HeaderCtrl::Column& HeaderTab() const;
 		Column& Tip(const char *tip)               { HeaderTab().Tip(tip); return *this; }
 
 		Column();
+
+// deprecated (due to overloading issues)
+		Column& Ctrls(Callback1<One<Ctrl>&> factory); // deprecated
+		Column& Ctrls(void (*factory)(One<Ctrl>&)) { return Ctrls(Event<int, One<Ctrl>&>([=](int, One<Ctrl>& h) { factory(h); })); }
+		Column& Ctrls(Event<int, One<Ctrl>&> factory);
+		Column& Ctrls(void (*factory)(int, One<Ctrl>&)) { return Ctrls(Event<int, One<Ctrl>&>([=](int a, One<Ctrl>& b){ factory(a, b); })); }
+		Column& Sorting(Gate<int, int> order) { return SortingLined(order); }
+		Column& Sorting(int (*c)(const Value& a, const Value& b)) { return SortingBy(c); }
 	};
 
 	struct Order {
@@ -154,7 +163,7 @@ private:
 		bool           IsDisplay() const          { return !ptr.GetBit() && ptr.GetPtr(); }
 		const Display& GetDisplay() const         { ASSERT(IsDisplay()); return *(const Display *)ptr.GetPtr(); }
 
-		CellInfo(pick_ CellInfo& s);
+		CellInfo(CellInfo&& s);
 		CellInfo() {}
 		~CellInfo();
 	};
@@ -171,10 +180,15 @@ private:
 	struct Line : Moveable<Line> {
 		bool          select:1;
 		bool          enabled:1;
+		bool          visible:1;
+		Color         paper;
 		Vector<Value> line;
 
-		Line() { select = false; enabled = true; }
+		Line() { select = false; enabled = true; visible = true; paper = Null; }
 	};
+	
+	static int StdValueCompare(const Value& a, const Value& b) { return Upp::StdValueCompare(a, b); }
+
 
 	Vector<Line>               array;
 	HeaderCtrl                 header;
@@ -186,11 +200,14 @@ private:
 	Vector<Ln>                 ln;
 	Vector< Vector<CellInfo> > cellinfo;
 	Vector<bool>               modify;
-	FrameBottom<StaticRect>    scrollbox;
+	FrameBottom<ParentCtrl>    scrollbox;
+	Vector<int>                column_width, column_pos;
 	DisplayPopup               info;
 	const Order               *columnsortsecondary;
 	int                        min_visible_line, max_visible_line;
 	int                        ctrl_low, ctrl_high;
+	int                        sorting_from;
+	Index<String>              id_ndx;
 
 	int   keypos;
 	int   cursor;
@@ -233,10 +250,13 @@ private:
 	bool  nobg:1;
 	bool  focussetcursor:1;
 	bool  allsorting:1;
+	bool  spanwidecells:1;
 
 	mutable bool  selectiondirty:1;
 
 	unsigned  bains:2;
+	
+	Image cursor_override;
 
 	bool  isdrag:1;
 	bool  selclick:1;
@@ -248,7 +268,9 @@ private:
 
 	void   SetSb();
 	void   MinMaxLine();
+	void   SyncColumnsPos();
 	void   HeaderLayout();
+	void   HeaderScroll();
 	void   Scroll();
 	int    FindEnabled(int i, int dir);
 	void   Page(int q);
@@ -258,8 +280,6 @@ private:
 	int    GetClickColumn(int ii, Point p);
 	void   ClickColumn(Point p);
 	void   ClickSel(dword flags);
-	Rect   GetCellRect(int i, int col) const;
-	Rect   GetCellRectM(int i, int col) const;
 
 	Point           FindCellCtrl(Ctrl *c);
 	Ctrl           *SyncLineCtrls(int i, Ctrl *p = NULL);
@@ -279,7 +299,6 @@ private:
 	void   AfterSet(int i);
 
 	void   Reline(int i, int y);
-	bool   AcceptRow();
 	void   Remove0(int i);
 	void   DisableCtrls();
 	void   SetCtrls();
@@ -289,6 +308,7 @@ private:
 	const Display& GetCellInfo(int i, int j, bool f0, Value& v, Color& fg, Color& bg, dword& st);
 	Ctrl&  SetCtrl(int i, int j, Ctrl *newctrl, bool owned, bool value);
 	Size   DoPaint(Draw& w, bool sample);
+	void   SpanWideCell(const Display& d, const Value& q, int cm, int& cw, Rect& r, int i, int& j);
 
 	bool   TestKey(int i, int key);
 
@@ -304,9 +324,22 @@ private:
 	void   DnD(int line, int col);
 	enum { DND_INSERTLINE = -1, DND_LINE = -2 };
 
+	bool   ColumnSortPred(int i1, int i2, int column, const ValueOrder *o);
+	bool   OrderPred(int i1, int i2, const ArrayCtrl::Order *o);
+	bool   DescendingPred(int i1, int i2, const Gate<int, int> *pred);
 	void   SyncInfo();
 	void   SortA();
 	void   SortB(const Vector<int>& o);
+	
+	int    AsNdx(const String& id)              { return id_ndx.FindAdd(id); }
+
+	using Ctrl::IsModified;
+
+	// These are listed here as private because name has changed to SetMap/AddMap
+	void       Set(int i, const ValueMap& m);
+	void       Add(const ValueMap& m);
+	
+	bool       IsLineVisible0(int i) const { return i < 0 ? false : i < array.GetCount() ? array[i].visible : true; }
 
 public: // temporary (TRC 06/07/28) // will be removed!
 	Ctrl&  SetCtrl(int i, int j, Ctrl *newctrl) { return SetCtrl(i, j, newctrl, true, true); }
@@ -318,61 +351,67 @@ protected:
 	void   ClearModify();
 
 public:
-	Callback          WhenLeftDouble;
-	Callback1<Point>  WhenMouseMove;
-	Callback          WhenEnterKey;
-	Callback          WhenLeftClick;
-	Callback1<Bar&>   WhenBar;
-	Gate              WhenAcceptRow;
-	Callback          WhenUpdateRow;
-	Callback          WhenArrayAction;
-	Callback          WhenStartEdit;
-	Callback          WhenAcceptEdit;
-	Callback          WhenCtrlsAction;
-	Callback          WhenSel;
-	Callback          WhenScroll;
+	Event<>           WhenSel; // the most usual ArrayCtrl callbak
 
-	Callback                        WhenDrag;
-	Callback3<int, int, PasteClip&> WhenDropCell;
-	Callback2<int, PasteClip&>      WhenDropInsert;
-	Callback2<int, PasteClip&>      WhenDropLine;
-	Callback1<PasteClip&>           WhenDrop;
+	Event<>           WhenLeftDouble;
+	Event<Point>      WhenMouseMove;
+	Event<>           WhenEnterKey;
+	Event<>           WhenLeftClick;
+	Event<Bar&>       WhenBar;
+	Gate<>            WhenAcceptRow;
+	Event<>           WhenUpdateRow;
+	Event<>           WhenArrayAction;
+	Event<>           WhenStartEdit;
+	Event<>           WhenAcceptEdit;
+	Event<>           WhenCtrlsAction;
+	Event<>           WhenScroll;
+	Event<>           WhenHeaderLayout;
+	Event<>           WhenColumnSorted;
+
+	Event<int, bool&> WhenLineEnabled;
+	Event<int, bool&> WhenLineVisible;
+
+	Event<>                     WhenDrag;
+	Event<int, int, PasteClip&> WhenDropCell;
+	Event<int, PasteClip&>      WhenDropInsert;
+	Event<int, PasteClip&>      WhenDropLine;
+	Event<PasteClip&>           WhenDrop;
 
 	//Deprecated - use WhenSel
-	Callback          WhenEnterRow;
-	Callback          WhenKillCursor;
-	Callback          WhenCursor;
-	Callback          WhenSelection;
+	Event<>           WhenEnterRow;
+	Event<>           WhenKillCursor;
+	Event<>           WhenCursor;
+	Event<>           WhenSelection;
 
 	IdInfo&    IndexInfo(int ii);
-	IdInfo&    IndexInfo(Id id);
-	IdInfo&    AddIndex(Id id);
+	IdInfo&    IndexInfo(const Id& id);
+	IdInfo&    AddIndex(const Id& id);
 	IdInfo&    AddIndex();
 	int        GetIndexCount() const        { return idx.GetCount(); }
 	Id         GetId(int ii) const          { return idx.GetKey(ii); }
-	int        GetPos(Id id) const          { return idx.Find(id); }
-	IdInfo&    SetId(int ii, Id id);
-	IdInfo&    AddKey(Id id)                { ASSERT(idx.GetCount() == 0); return AddIndex(id); }
+	int        GetPos(const Id& id) const   { return idx.Find(id); }
+	IdInfo&    SetId(int ii, const Id& id);
+	IdInfo&    AddKey(const Id& id)         { ASSERT(idx.GetCount() == 0); return AddIndex(id); }
 	IdInfo&    AddKey()                     { ASSERT(idx.GetCount() == 0); return AddIndex(); }
 	Id         GetKeyId() const             { return idx.GetKey(0); }
 
 	Column&    AddColumn(const char *text = NULL, int w = 0);
-	Column&    AddColumn(Id id, const char *text, int w = 0);
+	Column&    AddColumn(const Id& id, const char *text, int w = 0);
 	Column&    AddColumnAt(int ii, const char *text, int w = 0);
-	Column&    AddColumnAt(Id id, const char *text, int w = 0);
-	Column&    AddRowNumColumn(const char *text, int w = 0);
+	Column&    AddColumnAt(const Id& id, const char *text, int w = 0);
+	Column&    AddRowNumColumn(const char *text = NULL, int w = 0);
 
 	int                       GetColumnCount() const   { return column.GetCount(); }
 	int                       FindColumnWithPos(int pos) const;
-	int                       FindColumnWithId(Id id) const;
+	int                       FindColumnWithId(const Id& id) const;
 	Column&                   ColumnAt(int i)          { return column[i]; }
-	Column&                   ColumnAt(Id id)          { return column[FindColumnWithId(id)]; }
+	Column&                   ColumnAt(const Id& id)   { return column[FindColumnWithId(id)]; }
 	HeaderCtrl::Column&       HeaderTab(int i)         { return header.Tab(i); }
-	HeaderCtrl::Column&       HeaderTab(Id id)         { return header.Tab(FindColumnWithId(id)); }
+	HeaderCtrl::Column&       HeaderTab(const Id& id)  { return header.Tab(FindColumnWithId(id)); }
 	const Column&             ColumnAt(int i) const    { return column[i]; }
-	const Column&             ColumnAt(Id id) const    { return column[FindColumnWithId(id)]; }
+	const Column&             ColumnAt(const Id& id) const   { return column[FindColumnWithId(id)]; }
 	const HeaderCtrl::Column& HeaderTab(int i) const   { return header.Tab(i); }
-	const HeaderCtrl::Column& HeaderTab(Id id) const   { return header.Tab(FindColumnWithId(id)); }
+	const HeaderCtrl::Column& HeaderTab(const Id& id) const   { return header.Tab(FindColumnWithId(id)); }
 
 	const HeaderCtrl&         HeaderObject() const     { return header; }
 	HeaderCtrl&               HeaderObject()           { return header; }
@@ -381,9 +420,10 @@ public:
 	void       SerializeSettings(Stream& s);
 
 	IdInfo&    AddCtrl(Ctrl& ctrl);
-	IdInfo&    AddCtrl(Id id, Ctrl& ctrl);
+	IdInfo&    AddCtrl(const Id& id, Ctrl& ctrl);
+	IdInfo&    AddIdCtrl(Ctrl& ctrl)         { return AddCtrl(ctrl.GetLayoutId(), ctrl); }
 	void       AddCtrlAt(int ii, Ctrl& ctrl);
-	void       AddCtrlAt(Id id, Ctrl& ctrl);
+	void       AddCtrlAt(const Id& id, Ctrl& ctrl);
 	void       AddRowNumCtrl(Ctrl& ctrl);
 
 	void       SetCount(int c);
@@ -392,20 +432,20 @@ public:
 	void       Clear();
 	void       Shrink();
 	Value      Get(int i, int ii) const;
-	Value      Get(int i, Id id) const;
+	Value      Get(int i, const Id& id) const;
 	void       Set(int i, int ii, const Value& v);
-	void       Set(int i, Id id, const Value& v);
+	void       Set(int i, const Id& id, const Value& v);
 
 	Value      Get(int ii) const;
-	Value      Get(Id id) const;
+	Value      Get(const Id& id) const;
 	Value      GetOriginal(int ii) const;
-	Value      GetOriginal(Id id) const;
+	Value      GetOriginal(const Id& id) const;
 	bool       IsModified(int ii) const;
-	bool       IsModified(Id id) const;
+	bool       IsModified(const Id& id) const;
 	Value      GetKey() const;
 	Value      GetOriginalKey() const;
 	void       Set(int ii, const Value& v);
-	void       Set(Id id, const Value& v);
+	void       Set(const Id& id, const Value& v);
 
 	Value      GetColumn(int row, int col) const;
 	Value      GetConvertedColumn(int row, int col) const;
@@ -417,25 +457,42 @@ public:
 	bool       IsSelected(int i) const                          { return i < array.GetCount() && array[i].select; }
 	void       ClearSelection();
 	bool       IsSel(int i) const;
+	Vector<int> GetSelKeys() const;
 
 	void       EnableLine(int i, bool e);
 	void       DisableLine(int i)                               { EnableLine(i, false); }
 	bool       IsLineEnabled(int i) const;
-	bool       IsLineDisabled(int i) const                      { return IsLineEnabled(i); }
+	bool       IsLineDisabled(int i) const                      { return !IsLineEnabled(i); }
+
+	void       ShowLine(int i, bool e);
+	void       HideLine(int i)                                  { ShowLine(i, false); }
+	bool       IsLineVisible(int i) const;
 
 	Vector<Value> ReadRow(int i) const; // deprecated name
 	Vector<Value> GetLine(int i) const                          { return ReadRow(i); }
 
 	void       Set(int i, const Vector<Value>& v);
+	void       Set(int i, const VectorMap<String, Value>& m);
 
 	void       Add();
-	void       Add(const Vector<Value>& v);
 
 //$-void Add(const Value& [, const Value& ]...);
 #define  E__Add(I)      void Add(__List##I(E__Value));
 	__Expand(E__Add)
 #undef   E__Add
 //$+
+
+	void       Add(const Vector<Value>& v);
+	void       Add(const Nuller& null)                          { Add((Value)Null); }
+	void       Add(const VectorMap<String, Value>& m);
+
+	void       SetMap(int i, const ValueMap& m);
+	void       AddMap(const ValueMap& m);
+	ValueMap   GetMap(int i) const;
+
+	void       SetArray(int i, const ValueArray& va);
+	void       AddArray(const ValueArray& va);
+	ValueArray GetArray(int i) const;
 
 	void       AddSeparator();
 
@@ -450,7 +507,7 @@ public:
 
 	Image      GetDragSample();
 
-	void       InsertDrop(int line, const Vector< Vector<Value> >& data, PasteClip& d, bool self);
+	void       InsertDrop(int line, const Vector<Vector<Value>>& data, PasteClip& d, bool self);
 	void       InsertDrop(int line, const Vector<Value>& data, PasteClip& d, bool self);
 	void       InsertDrop(int line, const Value& data, PasteClip& d, bool self);
 	void       InsertDrop(int line, const ArrayCtrl& src, PasteClip& d);
@@ -472,17 +529,22 @@ public:
 	int        GetScroll() const;
 	void       ScrollTo(int sc);
 	void       ShowAppendLine();
+	bool       AcceptRow();
 
 	void       Move(int d);
 	void       SwapUp();
 	void       SwapDown();
 
 	int        Find(const Value& v, int ii = 0, int from = 0) const;
-	int        Find(const Value& v, Id id, int from = 0) const;
+	int        Find(const Value& v, const Id& id, int from = 0) const;
 
 	bool       FindSetCursor(const Value& val, int ii = 0, int from = 0);
-	bool       FindSetCursor(const Value& val, Id id, int from = 0);
+	bool       FindSetCursor(const Value& val, const Id& id, int from = 0);
 
+	void       ReArrange(const Vector<int>& order);
+
+	void       Sort(int from, int count, Gate<int, int> order);
+	void       Sort(Gate<int, int> order);
 	void       Sort(const ArrayCtrl::Order& order);
 	void       Sort(int from, int count, const ArrayCtrl::Order& order);
 	void       Sort(int (*compare)(const Vector<Value>& v1, const Vector<Value>& v2));
@@ -490,11 +552,13 @@ public:
 	                int (*compare)(const Vector<Value>& v1, const Vector<Value>& v2));
 	void       Sort(int ii, int (*compare)(const Value& v1, const Value& v2)
 	                = StdValueCompare);
-	void       Sort(Id id, int (*compare)(const Value& v1, const Value& v2)
+	void       Sort(const Id& id, int (*compare)(const Value& v1, const Value& v2)
 	                = StdValueCompare);
 	void       Sort()                                  { Sort(0); }
 
+	void       ColumnSort(int column, Gate<int, int> order);
 	void       ColumnSort(int column, const ValueOrder& order);
+	void       ColumnSort(int column, int (*compare)(const Value& a, const Value& b) = StdValueCompare);
 
 	void       SetSortColumn(int ii, bool descending = false);
 	void       ToggleSortColumn(int ii);
@@ -505,6 +569,8 @@ public:
 	bool       IsInsert() const                        { return insertmode; }
 
 	void            SetDisplay(int i, int col, const Display& d);
+	void            SetRowDisplay(int i, const Display& d);
+	void            SetColumnDisplay(int j, const Display& d);
 	const Display&  GetDisplay(int row, int col);
 	const Display&  GetDisplay(int col);
 
@@ -512,6 +578,8 @@ public:
 
 	void       SetCtrl(int i, int col, Ctrl& ctrl, bool value = true);
 	Ctrl      *GetCtrl(int i, int col);
+	template <class T>
+	T&         CreateCtrl(int i, int col, bool value = true) { T *c = new T; SetCtrl(i, col, c, true, value); SyncLineCtrls(i); return *c; }
 
 	ArrayCtrl& SetLineCy(int cy);
 	void       SetLineCy(int i, int cy);
@@ -520,7 +588,11 @@ public:
 	int        GetLineCy(int i) const;
 	int        GetTotalCy() const;
 	int        GetLineAt(int y) const;
+	
+	void       SetLineColor(int i, Color c);
 
+	Rect       GetCellRect(int i, int col) const;
+	Rect       GetCellRectM(int i, int col) const;
 	Rect       GetScreenCellRect(int i, int col) const;
 	Rect       GetScreenCellRectM(int i, int col) const;
 
@@ -616,7 +688,7 @@ public:
 	ArrayCtrl& MultiSelect(bool b = true)              { multiselect = b; return *this; }
 	bool       IsMultiSelect() const                   { return multiselect; }
 	ArrayCtrl& NoBackground(bool b = true)             { nobg = b; Transparent(); Refresh(); return *this; }
-	ArrayCtrl& PopUpEx(bool b = true)                  { popupex = b; return *this; }
+	ArrayCtrl& PopUpEx(bool b = true)                  { popupex = b; SyncInfo(); return *this; }
 	ArrayCtrl& NoPopUpEx()                             { return PopUpEx(false); }
 	ArrayCtrl& NoFocusSetCursor()                      { focussetcursor = false; return *this; }
 	ArrayCtrl& MovingHeader(bool b)                    { header.Moving(b); return *this; }
@@ -625,12 +697,18 @@ public:
 	ArrayCtrl& AllSorting();
 	ArrayCtrl& ColumnSortSecondary(const Order& order) { columnsortsecondary = &order; return *this; }
 	ArrayCtrl& NoColumnSortSecondary()                 { columnsortsecondary = NULL; return *this; }
+	ArrayCtrl& SortingFrom(int from)                   { sorting_from = from; return *this; }
 
 	ArrayCtrl& ColumnWidths(const char *s);
+	String     GetColumnWidths();
 
 	ArrayCtrl& SetScrollBarStyle(const ScrollBar::Style& s)   { sb.SetStyle(s); header.SetScrollBarStyle(s); return *this; }
 	ArrayCtrl& SetHeaderCtrlStyle(const HeaderCtrl::Style& s) { header.SetStyle(s); return *this; }
 
+	ArrayCtrl& CursorOverride(const Image& arrow)             { cursor_override = arrow; return *this; }
+	ArrayCtrl& NoCursorOverride()                             { return CursorOverride(Null); }
+	
+	ArrayCtrl& SpanWideCells(bool b = true)                   { spanwidecells = b; Refresh(); return *this; }
 
 	void Reset();
 
@@ -649,12 +727,12 @@ public:
 	virtual void       Paint(Draw& w, const Rect& r, const Value& q, Color ink, Color paper, dword style) const;
 
 	void               Connect(ArrayCtrl& ac, int ii = 0);
-	void               Connect(ArrayCtrl& ac, Id id)               { Connect(ac, ac.GetPos(id)); }
+	void               Connect(ArrayCtrl& ac, const Id& id)        { Connect(ac, ac.GetPos(id)); }
 
 	void               Disconnect();
 
 	ArrayCtrl::Column& AddColumn(ArrayCtrl& ac, const char *text = NULL, int w = 0);
-	ArrayCtrl::Column& AddColumn(ArrayCtrl& ac, Id id, const char *text, int w = 0);
+	ArrayCtrl::Column& AddColumn(ArrayCtrl& ac, const Id& id, const char *text, int w = 0);
 
 	ArrayOption&       TrueFalse(Value _t, Value _f)               { t = _t; f = _f; return *this; }
 	Value              GetFalse() const                            { return f; }
@@ -678,9 +756,9 @@ public:
 	void               Click();
 
 public:
-	Callback           WhenAction;
+	Event<>            WhenAction;
 
-	Callback           operator <<= (Callback cb)                  { return WhenAction = cb; }
+	Event<>            operator <<= (Event<>  cb)                  { return WhenAction = cb; }
 
 private:
 	Vector<int>        index;

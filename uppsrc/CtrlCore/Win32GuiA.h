@@ -21,9 +21,9 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE, LPTSTR lpCmdLine, int nCmdS
 	UPP::Ctrl::InitWin32(hInstance); \
 	UPP::coreCmdLine__() = UPP::SplitCmdLine__(UPP::FromSystemCharset(lpCmdLine)); \
 	UPP::AppInitEnvironment__(); \
-	GuiMainFn_(); \
-	UPP::UsrLog("---------- About to delete this log..."); \
-	UPP::DeleteUsrLog(); \
+	try { \
+		GuiMainFn_(); \
+	} \
 	UPP::Ctrl::ExitWin32(); \
 	UPP::AppExit__(); \
 	return UPP::GetExitCode(); \
@@ -41,10 +41,8 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR lpCmdLine, int nCmdSh
 	UPP::Ctrl::InitWin32(hInstance); \
 	UPP::coreCmdLine__() = UPP::SplitCmdLine__(UPP::FromSystemCharset(lpCmdLine)); \
 	UPP::AppInitEnvironment__(); \
-	GuiMainFn_(); \
+	UPP::AppExecute__(GuiMainFn_); \
 	UPP::Ctrl::CloseTopCtrls(); \
-	UPP::UsrLog("---------- About to delete this log..."); \
-	UPP::DeleteUsrLog(); \
 	UPP::Ctrl::ExitWin32(); \
 	UPP::AppExit__(); \
 	return UPP::GetExitCode(); \
@@ -60,7 +58,7 @@ BOOL WINAPI DllMain(HINSTANCE hinstDll, DWORD fdwReason, LPVOID lpReserved) \
 	if(fdwReason == DLL_PROCESS_ATTACH) { \
 		Ctrl::InitWin32(AppGetHandle()); \
 		AppInitEnvironment__(); \
-		_DllMainAppInit(); \
+		UPP::AppExecute__(_DllMainAppInit); \
 	} \
 	else \
 	if(fdwReason == DLL_PROCESS_DETACH) { \
@@ -81,11 +79,20 @@ public:
 	virtual LRESULT WindowProc(UINT message, WPARAM wParam, LPARAM lParam);
 	virtual void    NcCreate(HWND hwnd);
 	virtual void    NcDestroy();
+	virtual bool    PreprocessMessage(MSG& msg);
 
 private:
 	void OpenHWND();
 	void SyncHWND();
 	
+	void RemoveActive();
+
+	static Vector<DHCtrl *> all_active;
+
+	static bool PreprocessMessageAll(MSG& msg);
+	
+	friend class Ctrl;
+
 protected:
 	void CloseHWND();
 	HWND   hwnd;

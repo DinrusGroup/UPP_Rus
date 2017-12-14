@@ -1,22 +1,42 @@
 #include "Draw.h"
 
-NAMESPACE_UPP
+namespace Upp {
 
+void Fill(RGBA *t, RGBA c, int len)
+{
+	while(len >= 16) {
+		t[0] = c; t[1] = c; t[2] = c; t[3] = c;
+		t[4] = c; t[5] = c; t[6] = c; t[7] = c;
+		t[8] = c; t[9] = c; t[10] = c; t[11] = c;
+		t[12] = c; t[13] = c; t[14] = c; t[15] = c;
+		t += 16;
+		len -= 16;
+	}
+	switch(len) {
+	case 15: t[14] = c;
+	case 14: t[13] = c;
+	case 13: t[12] = c;
+	case 12: t[11] = c;
+	case 11: t[10] = c;
+	case 10: t[9] = c;
+	case 9: t[8] = c;
+	case 8: t[7] = c;
+	case 7: t[6] = c;
+	case 6: t[5] = c;
+	case 5: t[4] = c;
+	case 4: t[3] = c;
+	case 3: t[2] = c;
+	case 2: t[1] = c;
+	case 1: t[0] = c;
+	}
+}
+/*
 void Fill(RGBA *t, const RGBA& src, int n)
 {
 	while(n--)
 		*t++ = src;
 }
-
-void FillColor(RGBA *t, const RGBA& src, int n)
-{
-	while(n--) {
-		t->r = src.r;
-		t->g = src.g;
-		t->b = src.b;
-		t++;
-	}
-}
+*/
 
 void Copy(RGBA *t, const RGBA *s, int n)
 {
@@ -363,39 +383,6 @@ int GetChMaskPos32(dword mask)
 	return 0;
 }
 
-Vector<Image> UnpackImlData(const void *ptr, int len)
-{
-	Vector<Image> img;
-	String data = ZDecompress(ptr, len);
-	const char *s = data;
-	while(s + 6 * 2 + 1 <= data.End()) {
-		ImageBuffer ib(Peek16le(s + 1), Peek16le(s + 3));
-		ib.SetHotSpot(Point(Peek16le(s + 5), Peek16le(s + 7)));
-		ib.Set2ndSpot(Point(Peek16le(s + 9), Peek16le(s + 11)));
-		s += 13;
-		int len = ib.GetLength();
-		RGBA *t = ib;
-		const RGBA *e = t + len;
-		if(s + 4 * len > data.End())
-			break;
-		while(t < e) {
-			t->a = s[3];
-			t->r = s[0];
-			t->g = s[1];
-			t->b = s[2];
-			s += 4;
-			t++;
-		}
-		img.Add() = ib;
-	}
-	return img;
-}
-
-Vector<Image> UnpackImlData(const String& d)
-{
-	return UnpackImlData(~d, d.GetLength());
-}
-
 void TransformComponents(RGBA *t, const RGBA *s, int len,
 	const byte r[], const byte g[], const byte b[], const byte a[])
 {
@@ -417,4 +404,4 @@ void MultiplyComponents(RGBA *t, const RGBA *s, int len, int num, int den)
 	TransformComponents(t, s, len, trans, trans, trans, trans);
 }
 
-END_UPP_NAMESPACE
+}

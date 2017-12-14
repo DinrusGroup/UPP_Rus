@@ -3,9 +3,11 @@
 
 #include <Draw/Draw.h>
 
-#define PAINTER_TIMING(x)   // RTIMING(x)
+#define PAINTER_TIMING(x)  // RTIMING(x)
 
-NAMESPACE_UPP
+namespace Upp {
+
+INITIALIZE(PaintPainting)
 
 struct Xform2D {
 	Pointf x, y, t;
@@ -29,7 +31,7 @@ struct Xform2D {
 Xform2D operator*(const Xform2D& a, const Xform2D& b);
 Xform2D Inverse(const Xform2D& m);
 
-enum {
+enum PainterOptions {
 	LINECAP_BUTT,
 	LINECAP_SQUARE,
 	LINECAP_ROUND,
@@ -107,6 +109,10 @@ protected:
 	virtual void   FillOp(const Pointf& f, const RGBA& color1, 
 	                      const Pointf& c, double r, const RGBA& color2,
 	                      int style) = 0;
+	virtual void   FillOp(const RGBA& color1, const RGBA& color2, const Xform2D& transsrc,
+	                      int style) = 0;
+	virtual void   FillOp(const Pointf& f, const RGBA& color1, const RGBA& color2,
+	                      const Xform2D& transsrc, int style) = 0;
 
 	virtual void   StrokeOp(double width, const RGBA& rgba) = 0;
 	virtual void   StrokeOp(double width, const Image& image, const Xform2D& transsrc,
@@ -114,15 +120,20 @@ protected:
 	virtual void   StrokeOp(double width, const Pointf& p1, const RGBA& color1,
 	                        const Pointf& p2, const RGBA& color2,
 	                        int style) = 0;
-	virtual void   StrokeOp(double width, const Pointf& f, const RGBA& color1, 
+	virtual void   StrokeOp(double width, const RGBA& color1, const RGBA& color2,
+	                        const Xform2D& transsrc, int style) = 0;
+	virtual void   StrokeOp(double width, const Pointf& f, const RGBA& color1,
 	                        const Pointf& c, double r, const RGBA& color2,
 	                        int style) = 0;
+	virtual void   StrokeOp(double width, const Pointf& f,
+	                        const RGBA& color1, const RGBA& color2,
+	                        const Xform2D& transsrc, int style) = 0;
 
 	virtual void   ClipOp() = 0;
 
 	virtual void   CharacterOp(const Pointf& p, int ch, Font fnt) = 0;
-	virtual void   TextOp(const Pointf& p, const wchar *text, Font fnt, int n = -1, 
-	                      double *dx = NULL);
+	virtual void   TextOp(const Pointf& p, const wchar *text, Font fnt, int n = -1,
+	                      const double *dx = NULL);
 
 	virtual void   ColorStopOp(double pos, const RGBA& color) = 0;
 	virtual void   ClearStopsOp() = 0;
@@ -146,7 +157,7 @@ protected:
 protected:
 	static bool   ReadBool(CParser& p);
 	static double ReadDouble(CParser& p);
-	static Pointf ReadPoint(CParser& p);
+	static Pointf ReadPoint(CParser& p, Pointf current, bool rel);
 	void   DoArc0(double theta, double th_sweep, const Xform2D& m);
 	void   DoArc(const Pointf& c, const Pointf& r, double angle, double sweep, double xangle);
 	void   DoSvgArc(const Pointf& rr, double xangle, int large, int sweep,
@@ -237,6 +248,8 @@ public:
 	              const Pointf& p2, const RGBA& color2, int style = GRADIENT_PAD);
 	Painter& Fill(double x1, double y1, const RGBA& color1,
 	              double x2, double y2, const RGBA& color2, int style = GRADIENT_PAD);
+	Painter& Fill(const RGBA& color1, const RGBA& color2, const Xform2D& transsrc,
+	              dword flags = 0);
 	Painter& Fill(const Pointf& f, const RGBA& color1,
 	              const Pointf& c, double r, const RGBA& color2, int style = GRADIENT_PAD);
 	Painter& Fill(double fx, double fy, const RGBA& color1,
@@ -245,6 +258,8 @@ public:
 	              double r, const RGBA& color2, int style = GRADIENT_PAD);
 	Painter& Fill(double x, double y, const RGBA& color1,
 	              double r, const RGBA& color2, int style = GRADIENT_PAD);
+	Painter& Fill(const Pointf& f, const RGBA& color1, const RGBA& color2,
+	              const Xform2D& transsrc, int style = GRADIENT_PAD);
 
 	Painter& Stroke(double width, const RGBA& color);
 	Painter& Stroke(double width, const Image& image, const Xform2D& transsrc, dword flags = 0);
@@ -256,6 +271,8 @@ public:
 	                const Pointf& p2, const RGBA& color2, int style = GRADIENT_PAD);
 	Painter& Stroke(double width, double x1, double y1, const RGBA& color1,
 	                double x2, double y2, const RGBA& color2, int style = GRADIENT_PAD);
+	Painter& Stroke(double width, const RGBA& color1, const RGBA& color2, const Xform2D& transsrc,
+	                dword flags = 0);
 	Painter& Stroke(double width, const Pointf& f, const RGBA& color1,
 	                const Pointf& c, double r, const RGBA& color2, int style = GRADIENT_PAD);
 	Painter& Stroke(double width, double fx, double fy, const RGBA& color1,
@@ -264,19 +281,24 @@ public:
 	                double r, const RGBA& color2, int style = GRADIENT_PAD);
 	Painter& Stroke(double width, double x, double y, const RGBA& color1,
 	                double r, const RGBA& color2, int style = GRADIENT_PAD);
+	Painter& Stroke(double width, const Pointf& f,
+	                const RGBA& color1, const RGBA& color2,
+	                const Xform2D& transsrc, int style = GRADIENT_PAD);
 
 	Painter& Clip();
 
 	Painter& Character(const Pointf& p, int ch, Font fnt);
 	Painter& Character(double x, double y, int ch, Font fnt);
-	Painter& Text(const Pointf& p, const wchar *text, Font fnt, int n = -1, double *dx = NULL);
-	Painter& Text(double x, double y, const wchar *text, Font fnt, int n = -1, double *dx = NULL);
-	Painter& Text(const Pointf& p, const WString& s, Font fnt, double *dx = NULL);
-	Painter& Text(double x, double y, const WString& s, Font fnt, double *dx = NULL);
-	Painter& Text(const Pointf& p, const String& s, Font fnt, double *dx = NULL);
-	Painter& Text(double x, double y, const String& s, Font fnt, double *dx = NULL);
-	Painter& Text(const Pointf& p, const char *text, Font fnt, int n = -1, double *dx = NULL);
-	Painter& Text(double x, double y, const char *text, Font fnt, int n = -1, double *dx = NULL);
+	Painter& Text(const Pointf& p, const wchar *text, Font fnt, int n = -1, const double *dx = NULL);
+	Painter& Text(double x, double y, const wchar *text, Font fnt, int n = -1, const double *dx = NULL);
+	Painter& Text(const Pointf& p, const WString& s, Font fnt, const double *dx = NULL);
+	Painter& Text(double x, double y, const WString& s, Font fnt, const double *dx = NULL);
+	Painter& Text(const Pointf& p, const String& s, Font fnt, const double *dx = NULL);
+	Painter& Text(double x, double y, const String& s, Font fnt, const double *dx = NULL);
+	Painter& Text(const Pointf& p, const char *text, Font fnt, int n = -1, const double *dx = NULL);
+	Painter& Text(double x, double y, const char *text, Font fnt, int n = -1, const double *dx = NULL);
+	
+	void EndPath()                                                    { Stroke(0, RGBAZero()); }
 
 	void Begin();
 	void End();
@@ -306,6 +328,7 @@ public:
 
 	Painter& Rectangle(double x, double y, double cx, double cy);
 	Painter& RoundedRectangle(double x, double y, double cx, double cy, double r);
+	Painter& RoundedRectangle(double x, double y, double cx, double cy, double r1, double r2);
 	Painter& Ellipse(double x, double y, double rx, double ry);
 	Painter& Circle(double x, double y, double r);
 	
@@ -313,7 +336,6 @@ public:
 	Painter& RectPath(const Rect& r);
 };
 
-void PaintCharacterSys(Painter& sw, double x, double y, int ch, Font fnt);
 void PaintCharacter(Painter& sw, const Pointf& p, int ch, Font fnt);
 
 #include "Painter.hpp"
@@ -366,9 +388,13 @@ protected:
 	virtual void   FillOp(const Pointf& p1, const RGBA& color1,
 	                      const Pointf& p2, const RGBA& color2,
 	                      int style);
+	virtual void   FillOp(const RGBA& color1, const RGBA& color2, const Xform2D& transsrc,
+	                      int style);
 	virtual void   FillOp(const Pointf& f, const RGBA& color1, 
 	                      const Pointf& c, double r, const RGBA& color2,
 	                      int style);
+	virtual void   FillOp(const Pointf& f, const RGBA& color1, const RGBA& color2,
+	                      const Xform2D& transsrc, int style);
 
 	virtual void   StrokeOp(double width, const RGBA& rgba);
 	virtual void   StrokeOp(double width, const Image& image, const Xform2D& transsrc,
@@ -376,15 +402,21 @@ protected:
 	virtual void   StrokeOp(double width, const Pointf& p1, const RGBA& color1,
 	                        const Pointf& p2, const RGBA& color2,
 	                        int style);
+	virtual void   StrokeOp(double width, const RGBA& color1, const RGBA& color2,
+	                        const Xform2D& transsrc,	
+	                        int style);
 	virtual void   StrokeOp(double width, const Pointf& f, const RGBA& color1, 
 	                        const Pointf& c, double r, const RGBA& color2,
 	                        int style);
+	virtual void   StrokeOp(double width, const Pointf& f,
+	                        const RGBA& color1, const RGBA& color2,
+	                        const Xform2D& transsrc, int style);
 
 	virtual void   ClipOp();
 
 	virtual void   CharacterOp(const Pointf& p, int ch, Font fnt);
 	virtual void   TextOp(const Pointf& p, const wchar *text, Font fnt, int n = -1, 
-	                      double *dx = NULL);
+	                      const double *dx = NULL);
 
 	virtual void   ColorStopOp(double pos, const RGBA& color);
 	virtual void   ClearStopsOp();
@@ -406,6 +438,15 @@ protected:
 	virtual void   BeginOnPathOp(double q, bool abs);
 };
 
-END_UPP_NAMESPACE
+bool  RenderSVG(Painter& p, const char *svg, Event<String, String&> resloader);
+bool  RenderSVG(Painter& p, const char *svg);
+
+void  GetSVGDimensions(const char *svg, Sizef& sz, Rectf& viewbox);
+Rectf GetSVGBoundingBox(const char *svg);
+
+Image RenderSVGImage(Size sz, const char *svg, Event<String, String&> resloader);
+Image RenderSVGImage(Size sz, const char *svg);
+
+}
 
 #endif

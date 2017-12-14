@@ -37,33 +37,40 @@ struct TFile : Moveable<TFile> {
 		Sort(ls);
 	}
 
+	rval_default(TFile);
 	TFile() { dirty = false; }
 };
 
 void t_error(CParser& p)
 {
-	PutConsole(p.GetFileName() + Format("(%d): t_/tt_ работает только с литералами в простом тексте", p.GetLine()));
+	PutConsole(p.GetFileName() + Format("(%d): t_/tt_ works only with plain text literals", p.GetLine()));
 }
 
 void LngParseCFile(const String& fn, VectorMap<String, LngEntry>& lng)
 {
 	String data = LoadFile(fn);
 	CParser p(data, fn);
-	while(!p.IsEof()) {
-		if((p.Id("t_") || p.Id("tt_")) && p.Char('('))
-			if(p.IsString()) {
-				String tid = p.ReadString();
-				LngEntry& le = lng.GetAdd(tid);
-				le.text.GetAdd(LNG_enUS) = GetENUS(tid);
-				le.AddFileLine(p);
-				le.added = true;
-				if(!p.Char(')'))
+	try {
+		while(!p.IsEof()) {
+			if((p.Id("t_") || p.Id("tt_")) && p.Char('('))
+				if(p.IsString()) {
+					String tid = p.ReadString();
+					LngEntry& le = lng.GetAdd(tid);
+					le.text.GetAdd(LNG_enUS) = GetENUS(tid);
+					le.AddFileLine(p);
+					le.added = true;
+					if(!p.Char(')'))
+						t_error(p);
+				}
+				else
 					t_error(p);
-			}
 			else
-				t_error(p);
-		else
-			p.SkipTerm();
+				p.SkipTerm();
+		}
+	}
+	catch(CParser::Error e) {
+		PutConsole(e);
+		ShowConsole();
 	}
 }
 
@@ -84,11 +91,12 @@ bool LngParseTFile(const String& fn, VectorMap<String, LngEntry>& lng)
 	CParser p(data, fn);
 	try {
 		if(p.Char('#'))
-			while(!p.IsEof())
+			while(!p.IsEof()) {
 				if(p.IsChar2('T', '_'))
 					break;
 				else
 					p.SkipTerm();
+			}
 		String id;
 		while(!p.IsEof()) {
 			if(p.Id("T_")) {
@@ -102,7 +110,7 @@ bool LngParseTFile(const String& fn, VectorMap<String, LngEntry>& lng)
 			}
 			else {
 				if(IsNull(id))
-					p.ThrowError("отсутствует T_");
+					p.ThrowError("missing T_");
 				String lngs = p.ReadId();
 				p.PassChar('(');
 				if(lngs.GetLength() == 4) {
@@ -117,12 +125,13 @@ bool LngParseTFile(const String& fn, VectorMap<String, LngEntry>& lng)
 						continue;
 					}
 				}
-				p.ThrowError("неверный язык");
+				p.ThrowError("invalid language");
 			}
 		}
 	}
-	catch(CParser::Error& e) {
+	catch(CParser::Error e) {
 		PutConsole(e);
+		ShowConsole();
 		return false;
 	}
 	return true;
@@ -130,9 +139,13 @@ bool LngParseTFile(const String& fn, VectorMap<String, LngEntry>& lng)
 
 String CreateTFile(const VectorMap<String, LngEntry>& map, const Vector<int>& lngset, bool rep, bool obsolete, bool java)
 {
+	const char *linepfx = (java ? "   + " : "     ");
+	int ascflags = (java ? 0 : ASCSTRING_OCTALHI) | ASCSTRING_SMART;
+
 	String out;
 	String cfile;
 	out << "#ifdef _MSC_VER\r\n#pragma setlocale(\"C\")\r\n#endif";
+
 	for(int i = 0; i < map.GetCount(); i++) {
 		if(i) out << "\r\n";
 		const LngEntry& e = map[i];
@@ -144,14 +157,11 @@ String CreateTFile(const VectorMap<String, LngEntry>& map, const Vector<int>& ln
 			if(!IsNull(cfile) && !rep)
 				out << "\r\n// " << GetFileName(cfile) << "\r\n\r\n";
 			if(IsNull(cfile) && obsolete)
-				out << "\r\n// Устарело\r\n\r\n";
+				out << "\r\n// Obsolete\r\n\r\n";
 		}
 		if(!IsNull(cfile) || rep || obsolete) {
 			String id = map.GetKey(i);
-			out << "T_(" << AsCString(id, 70,
-				java ? "   + " : "     ",
-				ASCSTRING_OCTALHI | ASCSTRING_SMART)
-			    << ")\r\n";
+			out << "T_(" << AsCString(id, 70, linepfx, ascflags) << ")\r\n";
 			for(int j = 0; j < lngset.GetCount(); j++) {
 				int lang = lngset[j];
 				if(rep || lang != LNG_enUS) {
@@ -172,8 +182,7 @@ String CreateTFile(const VectorMap<String, LngEntry>& map, const Vector<int>& ln
 							}
 						}
 						out << '(' << AsCString(q >= 0 ? e.text[q] : String(), 70,
-							java ? "   + " : "     ",
-							ASCSTRING_OCTALHI | ASCSTRING_SMART) << ")\r\n";
+							linepfx, ascflags) << ")\r\n";
 					}
 				}
 			}
@@ -223,7 +232,7 @@ void LangDlg::AddLang()
 	if(!file.IsCursor())
 		return;
 	WithAddLangLayout<TopWindow> dlg;
-	CtrlLayoutOKCancel(dlg, "Добавить язык");
+	CtrlLayoutOKCancel(dlg, "Add language");
 	dlg.lang <<= dlg.Breaker(999);
 	TFile& tf = tfile[file.GetCursor()];
 	Vector<int>& ls = tf.ls;
@@ -251,7 +260,7 @@ void LangDlg::AddLang()
 void LangDlg::AddLangAll()
 {
 	WithAddLangLayout<TopWindow> dlg;
-	CtrlLayoutOKCancel(dlg, "Добавить во все");
+	CtrlLayoutOKCancel(dlg, "Add to all");
 	if(dlg.Run() != IDOK)
 		return;
 	int l = ~dlg.lang;
@@ -271,7 +280,7 @@ void LangDlg::AddLangAll()
 void LangDlg::RemoveLang()
 {
 	if(file.IsCursor() && lang.IsCursor() && (int)lang.GetKey() != LNG_enUS
-	   && PromptOKCancel("Удалить выбранную версию языка?")) {
+	   && PromptOKCancel("Remove selected language version?")) {
 		TFile& tf = tfile[file.GetCursor()];
 		tf.ls.Remove(lang.GetCursor());
 		tf.dirty = true;
@@ -282,7 +291,7 @@ void LangDlg::RemoveLang()
 void LangDlg::RemoveLangAll()
 {
 	WithAddLangLayout<TopWindow> dlg;
-	CtrlLayoutOKCancel(dlg, "Удалить из всех");
+	CtrlLayoutOKCancel(dlg, "Remove from all");
 	if(file.IsCursor() && lang.IsCursor())
 		dlg.lang <<= tfile[file.GetCursor()].ls[lang.GetCursor()];
 	if(dlg.Run() != IDOK)
@@ -304,11 +313,11 @@ void LangDlg::RemoveLangAll()
 
 void LangDlg::LangMenu(Bar& bar)
 {
-	bar.Add(file.IsCursor(), "Добавить..", THISBACK(AddLang));
-	bar.Add(lang.IsCursor(), "Удалить", THISBACK(RemoveLang));
+	bar.Add(file.IsCursor(), "Add..", THISBACK(AddLang));
+	bar.Add(lang.IsCursor(), "Remove", THISBACK(RemoveLang));
 	bar.Separator();
-	bar.Add(file.IsCursor(), "Добавить во все..", THISBACK(AddLangAll));
-	bar.Add(lang.IsCursor(), "Удалить из всех..", THISBACK(RemoveLangAll));
+	bar.Add(file.IsCursor(), "Add to all..", THISBACK(AddLangAll));
+	bar.Add(lang.IsCursor(), "Remove from all..", THISBACK(RemoveLangAll));
 }
 
 struct FontAndColorDisplay : Display {
@@ -389,8 +398,8 @@ void LangDlg::ToggleWork()
 LangDlg::LangDlg(Vector<TFile>& tfile)
 :	tfile(tfile)
 {
-	CtrlLayoutOKCancel(*this, "Файлы переводов");
-	file.AddColumn("Файл");
+	CtrlLayoutOKCancel(*this, "Translation files");
+	file.AddColumn("File");
 	HeaderCtrl::Column& m = file.AddColumn().Ctrls<Option>().HeaderTab();
 	m.SetImage(IdeImg::work());
 	m.WhenAction = THISBACK(ToggleWork);
@@ -398,15 +407,15 @@ LangDlg::LangDlg(Vector<TFile>& tfile)
 	file.ColumnWidths("144 27");
 
 	lang.AddIndex();
-	lang.AddColumn("Версии");
+	lang.AddColumn("Versions");
 	lang.WhenBar = THISBACK(LangMenu);
 
-	text.AddColumn("Текст");
+	text.AddColumn("Text");
 	text.WhenEnterRow = THISBACK(EnterText);
 
 	source.AddIndex();
 	source.AddIndex();
-	source.AddColumn("Источник");
+	source.AddColumn("Source");
 	source.WhenLeftDouble = Breaker(IDYES);
 
 	for(int i = 0; i < tfile.GetCount(); i++)
@@ -427,7 +436,7 @@ public:
 
 ExportTrDlg::ExportTrDlg()
 {
-	CtrlLayoutOKCancel(*this, "Экспортировать файл .tr");
+	CtrlLayoutOKCancel(*this, "Export .tr file");
 
 	DlCharsetD(charset);
 	of.Attach(folder);
@@ -449,7 +458,7 @@ String ExportTr(const Vector<TFile>& tfile, int& cs)
 	String fn = AppendFileName(~dlg.folder, LNGAsText(lng) + "." + CharsetName(cs) + ".tr");
 	FileOut out(fn);
 	if(!out) {
-		Exclamation("Не удаётся открыть файл вывода:&[* \1" + fn);
+		Exclamation("Unable to open the output file:&[* \1" + fn);
 		return Null;
 	}
 	out << "LANGUAGE " << AsCString(LNGAsText(SetLNGCharset(lng, cs))) << ";\r\n";
@@ -477,10 +486,10 @@ void Ide::SyncT(int kind)
 	if(kind == 1) {
 		FileSel fs;
 		fs.ActiveDir(AnySourceFs().GetActiveDir());
-		fs.Type("Рантаймный файл перевода (*.tr)", "*.tr");
+		fs.Type("Runtime translation file (*.tr)", "*.tr");
 		fs.AllFilesType();
 		LoadFromGlobal(fs, "fs-tr");
-		bool b = fs.ExecuteOpen("Импортировать файл перевода");
+		bool b = fs.ExecuteOpen("Import translation file");
 		StoreToGlobal(fs, "fs-tr");
 		if(!b) return;
 		String tr = LoadFile(~fs);
@@ -490,7 +499,7 @@ void Ide::SyncT(int kind)
 				p.PassId("LANGUAGE");
 				int lang = LNGFromText(p.ReadString());
 				if(!lang)
-					p.ThrowError("Неверный язык");
+					p.ThrowError("Invalid language");
 				p.PassChar(';');
 				byte cs = GetLNGCharset(lang);
 				lang &= LNGC_(255, 255, 255, 255, 0);
@@ -504,27 +513,30 @@ void Ide::SyncT(int kind)
 		}
 		catch(CParser::Error& e) {
 			PutConsole(e);
+			Exclamation("Failed: \1" + e);
 			return;
 		}
 	}
 
 	Vector<TFile> tfile;
+	Vector<int> mainsT;
 
 	Progress pi;
 	const Workspace& wspc = IdeWorkspace();
 	pi.SetTotal(wspc.GetCount());
-	for(int i = 0; i < wspc.GetCount(); i++) {
-		const Package& pk = wspc.GetPackage(i);
-		String n = wspc[i];
-		pi.SetText("Сканируется " + n);
+	for(int iPackage = 0; iPackage < wspc.GetCount(); iPackage++) {
+		const Package& pk = wspc.GetPackage(iPackage);
+		String n = wspc[iPackage];
+		pi.SetText("Scanning " + n);
 		if(pi.StepCanceled()) return;
 		VectorMap<String, LngEntry> pmap;
-		for(int i = 0; i < pk.file.GetCount(); i++) {
-			String file = SourcePath(n, pk.file[i]);
+		for(int iFile = 0; iFile < pk.file.GetCount(); iFile++) {
+			String file = SourcePath(n, pk.file[iFile]);
 			LngParseCFile(SourcePath(GetActivePackage(), file), pmap);
 		}
-		for(int i = 0; i < pk.file.GetCount(); i++) {
-			String file = SourcePath(n, pk.file[i]);
+		bool localT = false;
+		for(int iFile = 0; iFile < pk.file.GetCount(); iFile++) {
+			String file = SourcePath(n, pk.file[iFile]);
 			String ext = GetFileExt(file);
 			if(ext == ".t" || ext == ".jt") {
 				VectorMap<String, LngEntry> tmap(pmap, 0);
@@ -532,9 +544,46 @@ void Ide::SyncT(int kind)
 					TFile& tf = tfile.Add();
 					tf.java = (ext == ".jt");
 					tf.package = n;
-					tf.file = pk.file[i];
-					tf.map = tmap;
+					tf.file = pk.file[iFile];
+					tf.map = pick(tmap);
 					tf.MakeLS();
+					// mark that we've found a local translation file
+					localT = true;
+					
+					// store index of main package translation(s) file(s)
+					if(iPackage == 0)
+						mainsT.Add(tfile.GetCount() - 1);
+				}
+			}
+		}
+		// if no local translation file(s), we append translation to
+		// main package one(s), if any
+		if(!localT && iPackage > 0)
+		{
+			for(int i = 0; i < mainsT.GetCount(); i++)
+			{
+				VectorMap<String, LngEntry> &map = tfile[mainsT[i]].map;
+				for(int iEntry = 0; iEntry < pmap.GetCount(); iEntry++)
+				{
+					int idx = map.Find(pmap.GetKey(iEntry));
+					if(idx < 0)
+					{
+						map.Add(pmap.GetKey(iEntry), pmap[iEntry]);
+						idx = map.GetCount() - 1;
+					}
+					LngEntry &entry = map[idx];
+					if(!entry.fileline.GetCount())
+					{
+						LngEntry &pEntry = pmap[iEntry];
+						for(int iLc = 0; iLc < pEntry.fileline.GetCount(); iLc++)
+						{
+							FileLine &fl = entry.fileline.Add();
+							String file = GetFileName(pEntry.fileline[iLc].file);
+							file = "PACKAGE '" + GetFileName(n) + "' FILE '" + file + "'";
+							fl.file = file;
+							fl.line = pEntry.fileline[iLc].line;
+						}
+					}
 				}
 			}
 		}
@@ -608,7 +657,7 @@ void Ide::SyncT(int kind)
 		TFile& tf = tfile[i];
 		String td = CreateTFile(tf.map, tf.ls, false, !dlg.remove, tf.java);
 		String fp = SourcePath(tf.package, tf.file);
-		pi.SetText("Сохраняется " + tf.package + '/' + tf.file);
+		pi.SetText("Storing " + tf.package + '/' + tf.file);
 		if(pi.StepCanceled())
 			break;
 		if(dlg.ShouldWrite(i) && LoadFile(fp) != td)
@@ -622,7 +671,7 @@ void Ide::SyncT(int kind)
 
 void Ide::ConvertST()
 {
-	if(!PromptYesNo("Преобразовать проект в t_ переводы?"))
+	if(!PromptYesNo("Convert project to t_ translations?"))
 		return;
 
 	FlushFile();
@@ -636,7 +685,7 @@ void Ide::ConvertST()
 	for(int i = 0; i < wspc.GetCount(); i++) {
 		const Package& pk = wspc.GetPackage(i);
 		String n = wspc[i];
-		pi.SetText("Преобразуется " + n);
+		pi.SetText("Converting " + n);
 		if(pi.StepCanceled()) return;
 		VectorMap<String, LngEntry> pmap;
 		for(int i = 0; i < pk.file.GetCount(); i++) {

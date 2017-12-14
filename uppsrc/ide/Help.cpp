@@ -22,7 +22,7 @@ void GatherLinks(Index<String>& link, const char *topic)
 			return;
 		link.Add(topic);
 		RichText txt = ParseQTF(p.text);
-		SyncTopicFile(txt, topic, ":RusIDE:", p.title);
+		SyncTopicFile(txt, topic, ":ide:", p.title);
 		GatherLinksIterator ti;
 		txt.Iterate(ti);
 		for(int i = 0; i < ti.link.GetCount(); i++)
@@ -78,26 +78,26 @@ void TopicCtrl::LoadMap()
 	Sort(l);
 	String lng = ~lang;
 	lang.Clear();
-	lang.Add("Все");
+	lang.Add("All");
 	for(int i = 0; i < l.GetCount(); i++)
 		lang.Add(l[i]);
 	if(lng.GetCount() && lang.Find(lng))
 		lang <<= lng;
 	else
-	if(lang.Find("RU-RU"))
-		lang <<= "RU-RU";
+	if(lang.Find("EN-US"))
+		lang <<= "EN-US";
 	else
 	if(lang.GetCount())
 		lang.SetIndex(0);
 }
 
 static String sTopicHome = "\3topic://ide/app/index$en-us";
-static String s_idehelp = "Справка RusIDE";
-static String s_usedpackages = "Используемые пакеты";
-static String s_otherpackages = "Прочие пакеты";
-static String s_documents = "Документы";
-static String s_reference = "Ссылка";
-static String s_implementation = "Реализация";
+static String s_idehelp = "TheIDE help";
+static String s_usedpackages = "Used packages";
+static String s_otherpackages = "Other packages";
+static String s_documents = "Documents";
+static String s_reference = "Reference";
+static String s_implementation = "Implementation";
 
 inline int sFindN(const String& s)
 {
@@ -133,6 +133,12 @@ void TopicCtrl::SyncDocTree()
 	}
 	
 	Vector<String> ss = Split((String)~search, ' ');
+	
+	if(ss.GetCount() && !SyncRefsFinished) {
+		SyncRefsShowProgress = true;
+		return;
+	}
+	
 	Vector<String> sdx;
 	for(int i = 0; i < ss.GetCount(); i++)
 		sdx.Add(ToUtf8(ToLower(FromUtf8(ss[i]))));
@@ -142,7 +148,7 @@ void TopicCtrl::SyncDocTree()
 	String hdx = sTopicHome.Mid(1);
 	if(idelink.GetCount() == 0)
 		GatherLinks(idelink, hdx);
-	int ide;
+	int ide = 0;
 	bool idefirst = true;
 	if(MatchTopicLink(hdx, sdx)) {
 		ide = AddTree(0, IdeImg::Package(), "\3" + hdx, s_idehelp);
@@ -163,9 +169,9 @@ void TopicCtrl::SyncDocTree()
 	for(int i = 0; i < wspc.GetCount(); i++)
 		used.Add(wspc[i]);
 
-	int usid;
+	int usid = 0;
 	bool usedfirst = true;
-	int otid;
+	int otid = 0;
 	bool otherfirst = true;
 
 	String lng = ~lang;
@@ -173,7 +179,7 @@ void TopicCtrl::SyncDocTree()
 		TopicLink tl;
 		tl.package = map.GetKey(i);
 		bool packagefirst = true;
-		int pid;
+		int pid = 0;
 		VectorMap<String, Index<String> >& group = map[i];
 		for(int i = 0; i < group.GetCount(); i++) {
 			tl.group = group.GetKey(i);
@@ -185,7 +191,7 @@ void TopicCtrl::SyncDocTree()
 					n = s_documents;
 				if(n == "srcimp")
 					n = s_implementation;
-				int gid;
+				int gid = 0;
 				bool groupfirst = true;
 				const Index<String>& topic = group[i];
 				for(int i = 0; i < topic.GetCount(); i++) {
@@ -266,9 +272,9 @@ Topic TopicCtrl::AcquireTopic(const String& t)
 			topic = link[0];
 		else {
 			WithSimpleListLayout<TopWindow> dlg;
-			CtrlLayoutOKCancel(dlg, "Выберите одну или более цель ссылки");
+			CtrlLayoutOKCancel(dlg, "Choose one of more link targets");
 			dlg.list.AddKey();
-			dlg.list.AddColumn("Тематика");
+			dlg.list.AddColumn("Topic");
 			for(int i = 0; i < link.GetCount(); i++)
 				dlg.list.Add(link[i], GetTopicTitle(link[i]));
 			dlg.list.SetCursor(0);
@@ -340,7 +346,7 @@ void TopicCtrl::FinishText(RichText& text)
 	if(ss.GetCount() == 0)
 		return;
 	HighlightWords hw;
-	hw.words = ss;
+	hw.words = pick(ss);
 	text.Iterate(hw);
 	RichText::FormatInfo fi;
 	fi.charvalid = RichText::PAPER|RichText::INK;
@@ -509,12 +515,12 @@ void  TopicCtrl::BarEx(Bar& bar)
 {
 	bar.Gap();
 	bar.Add(lang, HorzLayoutZoom(60));
-	bar.Add("Все тематики", IdeImg::HelpAll(), THISBACK(All))
+	bar.Add("All topics", IdeImg::HelpAll(), THISBACK(All))
 	   .Check(all);
 	bar.Gap(HorzLayoutZoom(30));
 	bar.Add(search, HorzLayoutZoom(300));
-	bar.Add(search.GetLength(), "Предш", IdeImg::GoPrev(), THISBACK(Prev));
-	bar.Add(search.GetLength(), "Следщ", IdeImg::GoNext(), THISBACK(Next));
+	bar.Add(search.GetLength(), "Prev", IdeImg::GoPrev(), THISBACK(Prev));
+	bar.Add(search.GetLength(), "Next", IdeImg::GoNext(), THISBACK(Next));
 	
 	bar.AddKey(K_CTRL_F, THISBACK(FocusSearch));
 /*	bar.Add("Highlight search keywords in topic", IdeImg::ShowWords(), THISBACK(ShowWords))
@@ -559,6 +565,7 @@ bool IsHelpName(const char *path)
 }
 
 struct HelpModule : public IdeModule {
+	virtual String       GetID() { return "HelpModule"; }
 	virtual Image FileIcon(const char *path) {
 		return IsHelpName(path) ? IdeImg::help() : Null;
 	}
@@ -572,7 +579,7 @@ struct HelpModule : public IdeModule {
 			d->topic = &ide->doc;
 			return d;
 		}
-		return false;
+		return NULL;
 	}
 	virtual void Serialize(Stream& s) {
 		s % recent_topic;
@@ -595,9 +602,9 @@ TopicCtrl::TopicCtrl()
 	showwords = true;
 	all = false;
 	lang <<= THISBACK(Lang);
-	lang.Tip("Язык"),
-	search.NullText("Поиск", StdFont().Italic(), SColorDisabled());
-	search.Tip("Полнотекстный поиск");
+	lang.Tip("Language"),
+	search.NullText("Search", StdFont().Italic(), SColorDisabled());
+	search.Tip("Full text search");
 	search <<= THISBACK(Search);
 	search.SetFilter(CharFilterTopicSearch);
 	internal = true;
@@ -619,6 +626,18 @@ void Ide::ShowTopics()
 	EditFile(HELPNAME);
 }
 
+void Ide::ShowTopicsWin()
+{
+	windoc.Icon(IdeImg::help_win(), IdeImg::help_win_large());
+	if(windoc.IsOpen())
+		windoc.SetForeground();
+	else {
+		windoc.SyncDocTree();
+		windoc.GoTo(sTopicHome);
+		windoc.OpenMain();
+	}
+}
+
 void Ide::SearchTopics()
 {
 	String s = editor.GetWord();
@@ -634,4 +653,9 @@ void Ide::RefreshBrowser()
 {
 	editor.SyncNavigator();
 	doc.SyncDocTree();
+}
+
+void Ide::ViewIdeLogFile()
+{
+	OpenLog(GetIdeLogPath());
 }

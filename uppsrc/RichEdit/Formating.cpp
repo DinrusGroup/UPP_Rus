@@ -1,6 +1,6 @@
 #include "RichEdit.h"
 
-NAMESPACE_UPP
+namespace Upp {
 
 void RichEdit::ApplyFormat(dword charvalid, dword paravalid)
 {
@@ -151,7 +151,7 @@ void RichEdit::Language()
 		for(int i = 0; i < language.GetCount(); i++)
 			h.Add(language.GetKey(i));
 		h.Add(~d.lang);
-		SetupLanguage(h);
+		SetupLanguage(pick(h));
 	}
 }
 
@@ -347,8 +347,11 @@ void RichEdit::Label()
 
 void RichEdit::IndexEntry()
 {
-	if(EditText(formatinfo.indexentry, t_("Index Entry"), t_("Index entry"))) {
-		indexentry <<= formatinfo.indexentry;
+	String s = formatinfo.indexentry.ToString();
+	String s0 = s;
+	WhenIndexEntry(s);
+	if(s != s0) {
+		formatinfo.indexentry = s.ToWString();
 		ApplyFormat(RichText::INDEXENTRY);
 		NextUndo();
 		SetFocus();
@@ -553,7 +556,7 @@ void RichEdit::AdjustObjectSize()
 	WithObjectSizeLayout<TopWindow> d;
 	CtrlLayoutOKCancel(d, t_("Object position"));
 	Size sz = obj.GetSize();
-	Size psz = obj.GetPhysicalSize();
+	Size psz = GetPhysicalSize(obj);
 	if(psz.cx == 0) psz.cx = 2000;
 	if(psz.cy == 0) psz.cy = 2000;
 	d.width.Set(unit, sz.cx);
@@ -610,9 +613,9 @@ void RichEdit::AdjustObjectSize()
 			}
 			break;
 		case IDOK:
-			if(!IsNull(d.width) && (int)~d.width >= 0)
+			if(!IsNull(d.width) && (int)~d.width > 0)
 				sz.cx = ~d.width;
-			if(!IsNull(d.height) && (int)~d.height >= 0)
+			if(!IsNull(d.height) && (int)~d.height > 0)
 				sz.cy = ~d.height;
 			obj.SetSize(sz);
 			if(!IsNull(d.ydelta))
@@ -624,4 +627,4 @@ void RichEdit::AdjustObjectSize()
 	}
 }
 
-END_UPP_NAMESPACE
+}

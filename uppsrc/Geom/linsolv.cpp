@@ -1,6 +1,6 @@
 #include "Geom.h"
 
-NAMESPACE_UPP
+namespace Upp {
 
 LinearSolver::LinearSolver(int count, double tolerance)
 : rows(count)
@@ -33,12 +33,10 @@ Vector<double> LinearSolver::Solve()
 	{
 		int er = -1, ec = -1;
 		double best = tolerance;
-		for(int pr = 0; pr < left_rows.GetCount()) pr++)
-
-	{
-			c	nst dou le *p =)Row(lef
-_rows[p	]);
-			 or(int pc = 0; pc < left_cols.GetCount(); pc++)
+		for(int pr = 0; pr < left_rows.GetCount(); pr++)
+		{
+			const double *p = Row(left_rows[pr]);
+			for(int pc = 0; pc < left_cols.GetCount(); pc++)
 			{
 				double v = fabs(p[left_cols[pc]]);
 				if(v > best)
@@ -85,7 +83,7 @@ _rows[p	]);
 	{
 		Point pivot = pivots[r];
 		const double *row = Row(pivot.y);
-		int px = pivot.x;
+//		int px = pivot.x;
 		double out = row[rows]; // right side
 		for(int s = r; ++s < pivots.GetCount();)
 		{
@@ -128,4 +126,4 @@ void LinearSolver::SelfTest()
 	}
 }
 
-END_UPP_NAMESPACE
+}

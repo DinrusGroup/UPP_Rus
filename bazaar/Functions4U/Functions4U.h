@@ -4,141 +4,135 @@
 #include <float.h>
 #include <Draw/Draw.h>
 #ifdef flagGUI
-#include <ide/Browser/Browser.h>
+///#include <ide/Browser/Browser.h>
 #include <Web/Web.h>
 #include "GatherTpp.h"
 #endif
+
 #include <Functions4U/SvgColors.h>
 #include "StaticPlugin.h"
+#include "LocalProcess2.h"
+#include <random>
 
-enum EXT_FILE_FLAGS {USE_TRASH_BIN = 1,
+NAMESPACE_UPP
+
+enum EXT_FILE_FLAGS {NO_FLAG = 0, 
+					 USE_TRASH_BIN = 1,
 					 BROWSE_LINKS = 2,
-					 DELETE_READ_ONLY = 4,
-					 ASK_BEFORE_DELETE = 8
+					 DELETE_READ_ONLY = 4//,
+					 //ASK_BEFORE_DELETE = 8
 };
 
-bool LaunchFile(const char *file);
+String GetDesktopManagerNew();
+
+bool LaunchFile(const char *file, const char *params = 0, const char *directory = ".");
 
 bool FileCat(const char *file, const char *appendFile);
 
 int FileCompare(const char *path1, const char *path2);
 
-Upp::int64 FindStringInFile(const char *file, const String text, Upp::int64 pos0 = 0);
+int64 FindStringInFile(const char *file, const String text, int64 pos0 = 0);
 
 bool FileStrAppend(const char *file, const char *str);
 bool AppendFile(const char *filename, const char *str);
 
 String AppendFileName(const String& path1, const char *path2, const char *path3);
 	
-inline String Trim(const String& s) {return TrimBoth(s);};
+inline String Trim(const String& s) {return TrimBoth(s);}
 
 String FitFileName(String fileName, int len);
 
-String Tokenize(const String &str, const String &token, int &pos);
+Vector<String> Tokenize(const String &str, const String &token, int pos = 0);
+void Tokenize(const String &str, const String &token, Vector<String> &ret, int pos = 0);
+String Tokenize2(const String &str, const String &token, int &pos);
+String Tokenize2(const String &str, const String &token);
+//String Tokenize(const String &str, const String &token, int &pos);
+//String Tokenize(const String &str, const String &token);
 	
 /////////
-bool DirectoryExistsX(const char *path, int flags = 0); 
-///////////////////////////////
-bool DirectoryDeleteX(const char *path, int flags = 0);
-bool DirectoryDeleteDeepX(const char *path, int flags = 0);
-bool DeleteFolderDeepX(const char *dir, int flags = 0);
-bool DirectoryCopyX(const char *dir, const char *newPlace);
-bool DeleteFolderDeepWildcards(const char *dir, int flags = 0);
-///////////////////////////////
+bool DirectoryExistsX(const char *path, EXT_FILE_FLAGS flags = NO_FLAG); 
+bool DirectoryCopyX(const char *dir, const char *newPlace, bool replaceOnlyNew = false, String filesToExclude = "");
+bool DirectoryMove(const char *dir, const char *newPlace);
+bool DeleteDeepWildcardsX(const char *path, bool filefolder, EXT_FILE_FLAGS flags = NO_FLAG);
+bool DeleteDeepWildcardsX(const char *pathwc, const char *namewc, bool filefolder, EXT_FILE_FLAGS flags = NO_FLAG);
+bool DeleteFolderDeepWildcardsX(const char *path, EXT_FILE_FLAGS flags = NO_FLAG);
+bool DeleteFileDeepWildcardsX(const char *path, EXT_FILE_FLAGS flags = NO_FLAG);
+bool DeleteFolderDeepX(const char *path, EXT_FILE_FLAGS flags = NO_FLAG);
+bool RenameDeepWildcardsX(const char *path, const char *namewc, const char *newname, bool forfile, bool forfolder, EXT_FILE_FLAGS flags = NO_FLAG);
+bool FolderIsEmpty(const char *path);
 
-bool UpperFolder(const char *folderName);
+bool FileMoveX(const char *oldpath, const char *newpath, EXT_FILE_FLAGS flags = NO_FLAG);
+bool FileDeleteX(const char *path, EXT_FILE_FLAGS flags = NO_FLAG);
+
+bool IsRootFolder(const char *folderName);
 String GetUpperFolder(const String &folderName);
 String GetNextFolder(const String &folder, const String &lastFolder);
 String FileRealName(const char *fileName);
-
-//bool GetSymLinkPath(const char *linkPath, String &filePath);
+bool IsFile(const char *fileName);
+bool IsFolder(const char *fileName);
+bool GetRelativePath(String& from, String& path, String& ret);
+	
 bool IsSymLink(const char *path);
 
-bool CreateFolderDeep(const char *dir);
-
-/////////
-bool FileMoveX(const char *oldpath, const char *newpath, int flags = 0);
-bool FileDeleteX(const char *path, int flags = 0);
-/////////
-
-
 bool SetReadOnly(const char *path, bool readOnly);
-bool ReadOnly(const char *path, bool readOnly)
-#if defined(__MINGW32__)
-	__attribute__ ((deprecated));
-#else
-	;
-#endif
-
 bool SetReadOnly(const char *path, bool usr, bool grp, bool oth);
-bool ReadOnly(const char *path, bool usr, bool grp, bool oth)
-#if defined(__MINGW32__)
-	__attribute__ ((deprecated));
-#else
-	;
-#endif
 bool IsReadOnly(const char *path, bool &usr, bool &grp, bool &oth);
 
-String LoadFile_Safe(String fileName);
+String LoadFile_Safe(const String fileName);
+String LoadFile(const char *fileName, off_t from, size_t len = 0);
 
-Upp::int64 GetLength(const char *fileDirName);
-Upp::int64 GetDirectoryLength(const char *directoryName);
+int64 GetLength(const char *fileDirName); 
+int64 GetDirectoryLength(const char *directoryName);
 
 ///////////////////////////////
-Upp::Array<String> SearchFile(String dir, const Upp::Array<String> &condFiles, const Upp::Array<String> &condFolders, 
-								 const Upp::Array<String> &extFiles,  const Upp::Array<String> &extFolders, 
-								 const String &text, Upp::Array<String> &errorList);
-Upp::Array<String> SearchFile(String dir, String condFile, String text, Upp::Array<String> &errorList);//, int flags = 0);
-Upp::Array<String> SearchFile(String dir, String condFile, String text = "");//, int flags = 0);
+Vector<String> SearchFile(String dir, const Vector<String> &condFiles, const Vector<String> &condFolders, 
+								 const Vector<String> &extFiles,  const Vector<String> &extFolders, 
+								 const String text, Vector<String> &errorList);
+Vector<String> SearchFile(String dir, String condFile, String text, Vector<String> &errorList);//, int flags = 0);
+Vector<String> SearchFile(String dir, String condFile = "*.*", String text = "");//, int flags = 0);
 ///////////////////////////////
 
 bool FileToTrashBin(const char *path);
-Upp::int64 TrashBinGetCount();
+int64 TrashBinGetCount();
 bool TrashBinClear();
 
-//String GetDesktopFolder();
-//String GetProgramsFolder();
-//String GetAppDataFolder();
-//String GetMusicFolder();
-//String GetPicturesFolder();
-//String GetVideoFolder();
 String GetPersonalFolder();
-//String GetTemplatesFolder();
-//String GetDownloadFolder();
 String GetRootFolder();
 String GetTempFolder();
 String GetOsFolder();
 String GetSystemFolder();
-
+#ifdef PLATFORM_WIN32
+String GetCommonAppDataFolder();
+#endif
+bool SetEnv(const char *id, const char *val);
 
 struct FileData : Moveable<FileData> {
 	bool isFolder;
 	String fileName;
 	String relFilename;
-	Upp::int64 length;
+	int64 length;
 	struct Upp::Time t;
-	Upp::int64 id;
+	int64 id;
 	
 	String ToString() const { return Format("%s %0n", fileName, length); }
 
-	FileData(bool isFolder, String fileName, String relFilename, Upp::int64 length, 
-		struct Upp::Time t, Upp::uint64 id) : isFolder(isFolder), fileName(fileName), 
+	FileData(bool isFolder, String fileName, String relFilename, int64 length, 
+		struct Upp::Time t, uint64 id) : isFolder(isFolder), fileName(fileName), 
 		relFilename(relFilename), length(length), t(t), id(id) {}
 	FileData() {}
 };
 
-struct FileDiff {
+struct FileDiffData {
 	char action;	// 'n': New, 'u': Update, 'd': Delete, 'p': Problem
 	bool isFolder;
 	String relPath;
 	String fileName;
-	Upp::uint64 idMaster, idSecondary;
+	uint64 idMaster, idSecondary;
 	struct Upp::Time tMaster, tSecondary;
-	Upp::uint64 lengthMaster, lengthSecondary;
+	uint64 lengthMaster, lengthSecondary;
 };
 
-class ErrorHandling
-{
+class ErrorHandling {
 public:
 	void SetLastError(String _lastError)	{lastError = _lastError;};
 	String GetLastError()					{return lastError;};
@@ -149,8 +143,7 @@ private:
 
 class FileDiffArray;
 
-class FileDataArray : public ErrorHandling
-{
+class FileDataArray : public ErrorHandling {
 public:
 	FileDataArray(bool use = false, int fileFlags = 0);
 	bool Init(String folder, FileDataArray &orig, FileDiffArray &diff);
@@ -160,12 +153,12 @@ public:
 	long GetFileCount()				{return fileCount;};
 	long GetFolderCount()			{return folderCount;};
 	long GetCount() 				{return fileCount + folderCount;};
-	Upp::int64 GetSize()			{return fileSize;};
+	int64 GetSize()					{return fileSize;};
 	inline bool UseId() 			{return useId;};
 	void SortByName(bool ascending = true);
 	void SortByDate(bool ascending = true);
 	void SortBySize(bool ascending = true);
-	Upp::Array<String> &GetLastError()	{return errorList;};
+	Vector<String> &GetLastError()	{return errorList;};
 	int Find(String &relFileName, String &fileName, bool isFolder);
 	int Find(FileDataArray &data, int id);
 	String FullFileName(int i)		{return AppendFileName(basePath, fileList[i].fileName);};
@@ -175,35 +168,34 @@ public:
 
 private:
 	void Search_Each(String dir, String condFile, bool recurse, String text);
-	Upp::int64 GetFileId(String fileName);
+	int64 GetFileId(String fileName);
 	String GetRelativePath(const String &fullPath);
 	String GetFileText();
 	
 	Upp::Array<FileData> fileList;
-	Upp::Array<String> errorList;
+	Vector<String> errorList;
 	String basePath;
 	long fileCount, folderCount;
-	Upp::int64 fileSize;
+	int64 fileSize;
 	bool useId;
 	int fileFlags;
 };
 
-class FileDiffArray : public ErrorHandling
-{
+class FileDiffArray : public ErrorHandling {
 public:
 	FileDiffArray();
 	void Clear();
-	FileDiff& operator[](long i)	{return diffList[i];}
+	FileDiffData& operator[](long i)	{return diffList[i];}
 	bool Compare(FileDataArray &master, FileDataArray &secondary, const String folderFrom, 
-		Upp::Array<String> &excepFolders, Upp::Array<String> &excepFiles, int sensSecs = 0);
-	bool Apply(String toFolder, String fromFolder, int flags = 0);
+		Vector<String> &excepFolders, Vector<String> &excepFiles, int sensSecs = 0);
+	bool Apply(String toFolder, String fromFolder, EXT_FILE_FLAGS flags = NO_FLAG);
 	long GetCount()				{return diffList.GetCount();};
 	bool SaveFile(const char *fileName);
 	bool LoadFile(const char *fileName);
 	String ToString();
 	
 private:
-	Upp::Array<FileDiff> diffList;
+	Upp::Array<FileDiffData> diffList;
 };
 
 String Replace(String str, String find, String replace); 
@@ -212,23 +204,27 @@ String Replace(String str, char find, char replace);
 int ReverseFind(const String& s, const String& toFind, int from = 0);
 
 String FormatLong(long a); 
-
+	
 // const char *StrToTime(struct Upp::Time& d, const char *s);	Now included in TimeDate
-::Time StrToTime(const char *s);
-::Date StrToDate(const char *s);
+Time StrToTime(const char *s);
+Date StrToDate(const char *s);
 
-String BytesToString(Upp::uint64 bytes, bool units = true);
+String BytesToString(uint64 bytes, bool units = true);
 
-String SecondsToString(double seconds, bool units = false);
-String HMSToString(int hour, int min, double seconds, bool units = false); 
-double StringToSeconds(String str);		// The opposite
+String SecondsToString(double seconds, bool units = false, int dec = 2);
+String HMSToString(int hour, int min, double seconds, bool units = false, int dec = 2); 
+double StringToSeconds(String str);		
 void StringToHMS(String durat, int &hour, int &min, double &seconds); 
 
+String SeasonName(int iseason);
+int GetSeason(Date &date);
+	
 String FormatDoubleAdjust(double d, double range);
 
 String RemoveAccents(String str);
 String RemoveAccent(wchar c);
 bool IsPunctuation(wchar c);
+String RemovePunctuation(String str);
 	
 inline double ToRad(double angle)	{return angle*M_PI/180.;}
 inline double ToDeg(double angle)	{return angle*180./M_PI;}
@@ -245,41 +241,77 @@ inline T Average(T a, T b, T c)		{return T(a+b+c)/3;}
 template<class T>
 inline T Average(T a, T b, T c, T d){return T(a+b+c+d)/4;}
 template<class T>
-inline T pow2(T a) {return (a*a);}
+inline T pow2(T a) {return a*a;}
 template<class T>
-inline T pow3(T a) {return (a*a*a);}
+inline T pow3(T a) {return a*a*a;}
 template<class T>
 inline T pow4(T a) {return pow2(pow2(a));}
 template <class T> 
-inline const T& min(const T& a, const T& b, const T& c) { 
-	return a < b ? (a < c ? a : c) : ((b < c) ? b : c); }
-template <class T> 
-inline const T& min(const T& a, const T& b, const T& c, const T& d) { 
-	T ab = min(a, b);
-	T cd = min(c, d);
-	return ab < cd ? ab : cd;
+inline bool Between(const T& val, const T& min, const T& max) { 
+	return val >= min && val <= max;
 }
 template <class T> 
-inline const T& max(const T& a, const T& b, const T& c)  { 
-	return a > b ? (a > c ? a : c) : ((b > c) ? b : c); }
-template <class T> 
-inline const T& max(const T& a, const T& b, const T& c, const T& d) { 
-	T ab = max(a, b);
-	T cd = max(c, d);
-	return ab > cd ? ab : cd;
+inline T BetweenVal(const T& val, const T& _min, const T& _max) { 
+	return max(_min, min(_max, val));
 }
 
-double Random(double min, double max);
+template <class T> 
+inline bool IsNAN(T val) {return std::isnan(val);}
+
+template <class T> 
+inline T FixFloat(T val) {
+	if(std::isnan(val) || std::isinf(val) || val == HUGE_VAL || val == -HUGE_VAL)
+		return Null;
+	return val;
+}
+
+template <class T> 
+T AngleAdd360(T ang, T val) {
+	ang += val;
+	while (ang >= 360)
+		ang -= 360;
+	while (ang < 0)
+		ang += 360;
+	return ang;
+}
+
+template <class T> 
+inline const T Distance(const T& x1, const T& y1, const T& x2, const T& y2)  { 
+	return sqrt(pow2(x1-x2) + pow2(y1-y2)); }
+
+template <class T> 
+inline const T Distance(const Point_<T>& p1, const Point_<T>& p2)  { 
+	return Distance<T>(p1.x, p1.y, p2.x, p2.y); }
+
+template <class T> 
+inline const T Distance(const T& x1, const T& y1, const T& z1, const T& x2, const T& y2, const T& z2)  { 
+	return sqrt(pow2(x1-x2) + pow2(y1-y2) + pow2(z1-z2)); }
+	
+template <class T> 
+inline const double Angle(const T& x1, const T& y1, const T& x2, const T& y2)  { 
+	return atan2(y2-y1, x2-x1);
+}
+
+template <class T> 
+inline const double Angle(const Point_<T>& p1, const Point_<T>& p2)  { 
+	return Angle<T>(p1.x, p1.y, p2.x, p2.y);
+}
 
 
+Vector<Vector <Value> > ReadCSV(const String strFile, char separator = ',', bool bycols = true, bool removeRepeated = true, char decimalSign = '.', bool onlyStrings = false, int fromRow = 0);
+Vector<Vector <Value> > ReadCSVFile(const String fileName, char separator = ',', bool bycols = true, bool removeRepeated = true, char decimalSign = '.', bool onlyStrings = false, int fromRow = 0);
+bool ReadCSVFileByLine(const String fileName, Gate2<int, Vector<Value>&> WhenRow, char separator = ',', char decimalSign = '.', bool onlyStrings = false, int fromRow = 0);
+String WriteCSV(Vector<Vector <Value> > &data, char separator = ',', bool bycols = true, char decimalSign = '.');
+bool WriteCSVFile(const String fileName, Vector<Vector <Value> > &data, char separator = ',', bool bycols = true, char decimalSign = '.');
+
+	
 // A String based class to parse into
-class StringParse :  public String {
+class StringParse : public String {
 public:
 	void GoInit()	{pos = 0; lastSeparator='\0';};
 	StringParse():String("") {GoInit();};
 	StringParse(String s): String(s) {GoInit();};
-	bool GoBefore(const String text)
-	{
+	bool GoBefore(const String text) {
 		if (pos >= GetLength()) {
 			pos = GetLength()-1;
 			return false;
@@ -290,23 +322,20 @@ public:
 		pos = newpos;
 		return true;
 	};	
-	bool GoAfter(const String text)
-	{
+	bool GoAfter(const String text) {
 		if(!GoBefore(text))
 			return false;
-		pos += strlen(text);
+		pos += int(strlen(text));
 		return true;
 	};
-	bool GoAfter(const String text, const String text2)
-	{
+	bool GoAfter(const String text, const String text2) {
 		if(!GoAfter(text))
 			return false;
 		if(!GoAfter(text2))
 			return false;
 		return true;
 	};
-	bool GoAfter(const String text, const String text2, const String text3)
-	{
+	bool GoAfter(const String text, const String text2, const String text3) {
 		if(!GoAfter(text))
 			return false;
 		if(!GoAfter(text2))
@@ -319,23 +348,20 @@ public:
 	bool GoAfter_Init(const String text, const String text2) {GoInit();	return GoAfter(text, text2);};
 	bool GoAfter_Init(const String text, const String text2, const String text3) {GoInit();	return GoAfter(text, text2, text3);};		
 	
-	void GoBeginLine()
-	{
+	void GoBeginLine() {
 		for (; pos >= 0; --pos) {
 			if ((ToString()[pos-1] == '\r') || (ToString()[pos-1] == '\n'))
 				return;
 		} 
 	}
-	bool IsBeginLine()
-	{
+	bool IsBeginLine() {
 		if (pos == 0)
 			return true;
 		if ((ToString()[pos-1] == '\r') || (ToString()[pos-1] == '\n'))
 			return true;
 		return false;
 	}
-	bool IsSpaceRN(int c)
-	{
+	bool IsSpaceRN(int c) {
 		if (IsSpace(c))
 			return true;
 		if ((c == '\r') || (c == '\n'))
@@ -345,10 +371,9 @@ public:
 	// Gets text between "" or just a word until an space
 	// It considers special characters with \ if between ""
 	// If not between "" it gets the word when it finds one of the separator characters
-	String GetText(String separators = "")	
-	{
+	String GetText(String separators = "") {
 		String ret = "";
-		if (pos > GetCount())
+		if (pos > GetCount() || pos == -1)
 			return ret;
 		int newpos = pos;
 		
@@ -400,25 +425,32 @@ public:
 		pos = ++newpos;		// After the separator: ", space or separator
 		return ret;
 	}
-	String GetLine()
-	{
-		return GetText("\r\n");
+	String GetLine() {
+		String ret;
+		if (pos > GetCount() || pos == -1)
+			return String();
+		while (ToString()[pos] != '\0') {
+			if (ToString()[pos] == '\n') {
+				pos++;
+				return ret;
+			}
+			if (ToString()[pos] == '\r' && ToString()[pos+1] == '\n') {
+				pos += 2;
+				return ret;
+			}
+			ret.Cat(ToString()[pos]);
+			pos++;
+		}
+		return ret;
 	}
-	double GetDouble(String separators = "")  	{return atof(GetText(separators));};
-	int GetInt(String separators = "")			{return atoi(GetText(separators));};
-	long GetLong(String separators = "")		{return atol(GetText(separators));};
-	Upp::uint64 GetUInt64(String separators = "")	
-#if defined(PLATFORM_WIN32) 
-	{return _atoi64(GetText(separators));};
-#endif
-#ifdef PLATFORM_POSIX
-	{return atoll(GetText(separators));};
-#endif
+	double GetDouble(String separators = "")  	{return FixFloat(atof(GetText(separators)));};
+	int GetInt(String separators = "")			{return int(FixFloat(atof(GetText(separators))));};
+	long GetLong(String separators = "")		{return long(FixFloat(atof(GetText(separators))));};
+	uint64 GetUInt64(String separators = "")	{return (uint64)(FixFloat(atof(GetText(separators))));};
 	
-	String Right() {return String::Mid(pos+1);}
-	int GetLastSeparator() {return lastSeparator;}
-	void MoveRel(int val)
-	{
+	String Right() 			{return String::Mid(pos+1);}
+	int GetLastSeparator() 	{return lastSeparator;}
+	void MoveRel(int val) {
 		pos += val;
 		if (pos < 0)
 			pos = 0;
@@ -464,14 +496,10 @@ String WideToString(LPCWSTR wcs, int len = -1);
 	#include "Functions4U/Functions4U_Gui.h"
 #endif
 
-String GetExtExecutable(String ext);
+String GetExtExecutable(const String ext);
 
-Upp::Array<String> GetDriveList();
+Vector<String> GetDriveList();
 
-String Getcwd();
-bool Chdir (const String &folder);
-
-//String Format(Time time, const char*fmt = "%2d:%2d");
 
 class Dl {
 public:
@@ -517,6 +545,12 @@ Color RandomColor();
 
 Image GetRect(const Image& orig, const Rect &r);
 
+double tmGetTimeX();
+
+int SysX(const char *cmd, String& out, String& err, double timeOut = Null, 
+			Gate3<double, String&, String&> progress = false, bool convertcharset = true);
+			
+	
 class _NRFuse {
 public:
 	_NRFuse(bool *_inside) {inside = _inside; failed = true;}
@@ -539,27 +573,256 @@ private:
 							} else 												\
 								return v
 
-#ifdef flagAES
 
-#include <openssl/aes.h>
-#include <AESStream/AESStream.h>
-
-bool LoadFromXMLFileAES(Callback1<XmlIO> xmlize, const char *file, const char *key);
-template <class T>
-bool LoadFromXMLFileAES(T& data, const char *file, const char *key)
-{
-	ParamHelper__<T> p(data);
-	return LoadFromXMLFileAES(callback(&p, &ParamHelper__<T>::Invoke), file, key);
-}
-
-bool StoreAsXMLFileAES(Callback1<XmlIO> xmlize, const char *name, const char *file, const char *key);
-template <class T>
-bool StoreAsXMLFileAES(T& data, const char *name, const char *file, const char *key)
-{
-	ParamHelper__<T> p(data);
-	return StoreAsXMLFileAES(callback(&p, &ParamHelper__<T>::Invoke), name, file, key);
-}
-
+class RealTimeStop {
+public:
+	RealTimeStop() {
+#ifdef CTRLLIB_H	
+		callbackOn = false;
+		lastTick = -1;
+#endif 
+		Start();
+	}
+	void Reset() {
+		timeElapsed = 0;
+#ifdef CTRLLIB_H
+		if (!callbackOn) {
+			SetTimeCallback(-5*1000, callback(this, &RealTimeStop::Tick), this);
+			callbackOn = true;
+		}
 #endif
+		isPaused = true;
+		Continue();
+	}
+	void Start() {Reset();}
+	void Pause(bool pause) {
+		if (pause)
+			Pause();
+		else
+			Continue();
+	}
+	void Pause() {
+		if (!isPaused) { 		
+			timeElapsed += (tmGetTimeX() - time0);
+			isPaused = true;
+		}
+	}
+	void Continue() {
+		if (isPaused) {
+			time0 = tmGetTimeX();
+			isPaused = false;
+		}
+	}
+	double Seconds() {
+		if (isPaused)
+			return timeElapsed;
+		else
+			return timeElapsed + (tmGetTimeX() - time0);
+	}
+	void SetBack(double secs) {
+		timeElapsed -= secs;
+	}
+	bool IsPaused()		{return isPaused;}
+		
+private:
+	double timeElapsed;				// Time elapsed
+	double time0;					// Time of last Continue()
+	bool isPaused;
+#ifdef CTRLLIB_H
+	bool callbackOn;
+	double lastTick;
+	void Tick() {
+		double tActual = tmGetTimeX();
+		if (!isPaused && lastTick > -1) {
+			double deltaLastTick = tActual - lastTick;
+			if (deltaLastTick > 5*10) 	// Some external issue has stopped normal running
+				SetBack(deltaLastTick);	// Timeout timer is fixed accordingly
+		}
+		lastTick = tActual;
+	}
+#endif
+};
+
+class LocalProcessX {
+public:
+	LocalProcessX() : status(STOP_OK), callbackOn(false) {}
+	~LocalProcessX() 				  {Stop();}
+	enum ProcessStatus {RUNNING = 1, STOP_OK = 0, STOP_TIMEOUT = -1, STOP_USER = -2};
+	bool Start(const char *cmd, const char *envptr = 0, const char *dir = 0, double refreshTime = -1, 
+		double maxTimeWithoutOutput = -1, double maxRunTime = -1, bool convertcharset = true) {
+		status = STOP_OK;
+		p.ConvertCharset(convertcharset);
+		timeElapsed.Start();
+		timeWithoutOutput.Start();
+		if(!p.Start(cmd, envptr, dir))
+			return false;
+		status = RUNNING;
+		this->maxTimeWithoutOutput = maxTimeWithoutOutput;
+		this->maxRunTime = maxRunTime;
+		this->refreshTime = refreshTime;
+	
+#ifdef CTRLLIB_H
+		if (refreshTime > 0) {
+			if (!callbackOn) {
+				SetTimeCallback(-int(refreshTime*1000), callback(this, &LocalProcessX::Perform), this);
+				callbackOn = true;
+			}
+		}
+#endif
+		return true;
+	}
+	void Perform() {
+		if (status <= 0)
+			return;
+		String out;
+		p.Read(out);
+		if(p.IsRunning()) {
+#ifdef PLATFORM_WIN32			
+			if (!p.IsPaused()) {
+#endif
+				if (maxTimeWithoutOutput > 0 && timeWithoutOutput.Seconds() > maxTimeWithoutOutput) 
+					status = STOP_TIMEOUT;
+				else if (maxRunTime > 0 && timeElapsed.Seconds() > maxRunTime) 
+					status = STOP_TIMEOUT;
+#ifdef PLATFORM_WIN32				
+			}
+#endif
+		} else 
+			status = STOP_OK;
+		
+		bool resetTimeout = false;
+		if (!out.IsEmpty())
+			resetTimeout = true;
+		
+		if (!WhenTimer(timeElapsed.Seconds(), out, status <= 0, resetTimeout))
+			status = STOP_USER;
+		
+		if (resetTimeout)
+			timeWithoutOutput.Reset();
+		
+		if (status < 0)
+			p.Kill();
+
+#ifdef CTRLLIB_H		
+		if (callbackOn) {
+			KillTimeCallback(this);
+			callbackOn = false;
+		}
+#endif
+	}
+	void Stop(ProcessStatus status = STOP_USER) {
+		if (!IsRunning())
+			return;
+		this->status = status;
+		p.Kill();		
+#ifdef CTRLLIB_H		
+		if (callbackOn) {
+			KillTimeCallback(this);
+			callbackOn = false;
+		}
+#endif		
+	}
+#ifdef PLATFORM_WIN32
+	void Pause() {
+		p.Pause();
+		if (p.IsRunning()) {
+			timeElapsed.Pause(p.IsPaused());
+			timeWithoutOutput.Pause(p.IsPaused());
+		}
+	}
+	bool IsPaused()			{return p.IsPaused();}
+	double Seconds()		{return timeElapsed.Seconds();}
+#endif
+	void Write(String str) 	{p.Write(str);}
+	int GetStatus()  		{return status;}
+	bool IsRunning() 		{return status > 0;}
+	Gate4<double, String&, bool, bool&> WhenTimer;
+	#ifdef PLATFORM_WIN32
+	DWORD GetPid()	{return p.GetPid();}
+	#endif
+	
+private:
+	LocalProcess2 p;
+	RealTimeStop timeElapsed, timeWithoutOutput;
+	ProcessStatus status;
+	double maxTimeWithoutOutput, maxRunTime;
+	double refreshTime;
+	double lastPerform, lastPause;
+	bool callbackOn;
+};
+
+template <class T>
+class ThreadSafe {
+public:
+	inline ThreadSafe()    {val = Null;}
+	inline ThreadSafe(T v) {operator=(v);}
+	inline void operator=(T v) {
+		mutex.Enter();
+		val = v;
+		mutex.Leave();
+	}
+	inline void operator+=(T v) {
+		mutex.Enter();
+		val += v;
+		mutex.Leave();
+	}
+	inline void operator-=(T v) {
+		mutex.Enter();
+		val -= v;
+		mutex.Leave();
+	}
+	inline operator T() {
+		T ret;
+		mutex.Enter();
+		ret = val;
+		mutex.Leave();
+		return ret;
+	}
+	inline ThreadSafe& operator++() {
+		mutex.Enter();
+		val++;
+		mutex.Leave();
+		return *this;
+	}
+   	inline ThreadSafe operator++(int) {
+		ThreadSafe tmp = *this;
+   		++*this;
+   		return tmp;
+	}
+   
+private:
+	Mutex mutex;
+	T val;
+};
+
+template <class C>
+static void ShuffleAscending(C &data, std::default_random_engine &generator) {
+	for (int i = 0; i < data.GetCount() - 2; i++) {
+	  	std::uniform_int_distribution<int> distribution(i, data.GetCount() - 1);
+        Swap(data[i], data[distribution(generator)]);
+    }
+}
+
+template <class C>
+static void ShuffleDescending(C &data, std::default_random_engine &generator) {
+	for (int i = data.GetCount() - 1; i > 0; i--) {
+	  	std::uniform_int_distribution<int> distribution(0, i);
+        Swap(data[i], data[distribution(generator)]);
+    }
+}
+
+template <class C>
+void Shuffle(C &data, int randomSeed = Null) {
+	if (IsNull(randomSeed))	{
+		std::random_device rd;
+		randomSeed = rd();
+	}
+	std::mt19937 generator(randomSeed);
+  
+	ShuffleAscending(data, generator);
+	ShuffleDescending(data, generator);	
+}
+
+END_UPP_NAMESPACE
 
 #endif

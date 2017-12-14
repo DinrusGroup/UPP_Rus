@@ -1,239 +1,13 @@
 #include "Core.h"
 
-NAMESPACE_UPP
-
-#define LTIMING(x) // TIMING(x)
-
-int msecs(int from) { return (int)GetTickCount() - from; }
-
 #ifdef PLATFORM_WIN32
 #include <mmsystem.h>
 #endif
 
-#ifdef PLATFORM_WIN32
-static void sLogFile(char *fn, const char *app = ".log")
-{
-#ifdef PLATFORM_WINCE
-	wchar wfn[256];
-	::GetModuleFileName(NULL, wfn, 512);
-	strcpy(fn, FromSysChrSet(wfn));
-#else
-	::GetModuleFileName(NULL, fn, 512);
-#endif
-	char *e = fn + strlen(fn), *s = e;
-	while(s > fn && *--s != '\\' && *s != '.')
-		;
-	strcpy(*s == '.' ? s : e, app);
-}
-#endif
 
-#ifdef PLATFORM_POSIX
-const char *procexepath_();
-extern char Argv0__[_MAX_PATH + 1];
+namespace Upp {
 
-static void sLogFile(char *fn, const char *app = ".log")
-{
-	char *path = fn;
-	const char *ehome = getenv("HOME");
-	strcpy(fn, ehome ? ehome : "/root");
-	if(!*fn || (fn += strlen(fn))[-1] != '/')
-		*fn++ = '/';
-	*fn = '\0';
-	strcat(path, ".upp/");
-	const char *exe = procexepath_();
-	if(!*exe)
-		exe = Argv0__;
-	const char *q = strrchr(exe, '/');
-	if(q)
-		exe = q + 1;
-	if(!*exe)
-		exe = "upp";
-	strcat(path, exe);
-	mkdir(path, 0755);
-	strcat(path, "/");
-	strcat(path, exe);
-	strcat(path, app);
-}
-#endif
-
-static Stream *__logstream;
-static char    __logfilename[512];
-static int     __logfilesizelimit = 10000000;
-static bool    __logfilenodeleteonstartup = false;
-
-void SetVppLogSizeLimit(int limit) { __logfilesizelimit = limit; }
-void SetVppLogNoDeleteOnStartup()  { __logfilenodeleteonstartup = true; }
-
-static void sOpenVppLog(LogStream *s)
-{
-	if(!*__logfilename)
-		sLogFile(__logfilename);
-	s->Create(__logfilename, __logfilenodeleteonstartup);
-	s->SetLimit(__logfilesizelimit);
-}
-
-LogStream& StdLogStream()
-{
-	static LogStream *s;
-	ReadMemoryBarrier();
-	if(!s) {
-		static StaticCriticalSection lock;
-		lock.Enter();
-		if(!s) {
-			static byte lb[sizeof(LogStream)];
-			LogStream *strm = new(lb) LogStream;
-			if(!*__logfilename)
-				sOpenVppLog(strm);
-			WriteMemoryBarrier();
-			s = strm;
-		}
-		lock.Leave();
-	}
-	return *s;
-}
-
-void CloseStdLog()
-{
-	StdLogStream().Close();
-}
-
-void StdLogSetup(dword options)
-{
-	StdLogStream().SetOptions(options);
-}
-
-Stream& StdLog()
-{
-	return StdLogStream();
-}
-
-void SetVppLog(Stream& log) {
-	__logstream = &log;
-}
-
-Stream& VppLog() {
-	if(!__logstream) __logstream = &StdLog();
-	return *__logstream;
-}
-
-void SetVppLogName(const String& file) {
-	strcpy(__logfilename, file);
-	sOpenVppLog(&StdLogStream());
-}
-
-void sTime(char *h, const char *ext)
-{
-	Time t = GetSysTime();
-	char th[200];
-	sprintf(th, ".%d-%02d-%02d-%02d-%02d-%02d", t.year, t.month, t.day, t.hour, t.minute, t.second);
-	strcat(th, ext);
-	sLogFile(h, th);
-}
-
-bool snobuglog;
-
-void DeactivateBugLog()
-{
-	snobuglog = true;
-}
-
-Stream&  BugLog()
-{
-	if(snobuglog)
-		return NilStream();
-	static LogStream *s;
-	if(!s) {
-		INTERLOCKED
-			if(!s) {
-				static byte lb[sizeof(LogStream)];
-				s = new(lb) LogStream;
-				char h[200];
-				sTime(h, ".buglog");
-				s->Create(h, false);
-			}
-	}
-	return *s;
-}
-
-LogStream&  UsrLogStream()
-{
-	static LogStream *s;
-	if(!s) {
-		INTERLOCKED
-			if(!s) {
-				static byte lb[sizeof(LogStream)];
-				s = new(lb) LogStream;
-				char h[200];
-				sTime(h, ".usrlog");
-				s->Create(h, false);
-			}
-	}
-	return *s;
-}
-
-bool susrlog;
-bool susrlogpersistent;
-
-void ActivateUsrLog()
-{
-	UsrLogStream();
-	susrlog = true;
-}
-
-void ActivatePersistentUsrLog()
-{
-	ActivateUsrLog();
-	susrlogpersistent = true;
-}
-
-Stream& UsrLog()
-{
-	return susrlog ? (Stream&)UsrLogStream() : NilStream();
-}
-
-Stream&  UsrLog(const char *line)
-{
-	if(!susrlog)
-		return NilStream();
-	return UsrLogStream() << line << "\r\n";
-}
-
-Stream&  UsrLogT(int indent, const char *line)
-{
-	if(!susrlog)
-		return NilStream();
-	Time tm = GetSysTime();
-	char h[256];
-	sprintf(h, "%02d:%02d:%02d ", tm.hour, tm.minute, tm.second);
-	Stream& s = UsrLogStream() << h;
-	while(indent--)
-		s << " ";
-	s << line << "\r\n";
-	return s;
-}
-
-Stream&  UsrLogT(const char *line)
-{
-	return UsrLogT(0, line);
-}
-
-bool IsUsrLog()
-{
-	return susrlog;
-}
-
-void DeleteUsrLog()
-{
-	if(susrlogpersistent) {
-		if(susrlog)
-			UsrLogStream() << "log is persistent";
-	}
-	else {
-		if(susrlog && !UsrLogStream().Delete())
-			LOG("Unable to delete UsrLog, " << GetLastErrorMessage());
-		susrlog = false;
-	}
-}
+#define LTIMING(x) // TIMING(x)
 
 void __LOGF__(const char *fmt, ...) {
 	char buffer[1024];
@@ -349,33 +123,30 @@ String TimingInspector::Dump() {
 
 HitCountInspector::~HitCountInspector()
 {
-	Mutex::Lock __(mutex);
 	RLOG("HITCOUNT " << name << ": hit count = " << hitcount);
 }
 
-void  HexDump(Stream& s, const void *ptr, int size, int maxsize) {
+void  HexDumpData(Stream& s, const void *ptr, int size, bool adr, int maxsize) {
 	char h[256];
-	sprintf(h, "Memory at %p, size 0x%X = %d\n", ptr, size, size);
-	s.Put(h);
-#ifdef PLATFORM_WIN32
-	if(IsBadReadPtr(ptr, size)) {
-		s.Put("   <MEMORY ACCESS VIOLATION>\n");
-		return;
-	}
-#endif
 	int a, b;
 	byte *q = (byte *)ptr;
 	a = 0;
 	if(size > maxsize) size = maxsize;
 	while(a < size) {
-	#ifdef CPU_64
-		uint64 aa = a + (uint64)ptr;
-		sprintf(h, "%+6d 0x%08X%08X ", a, (int)(aa >> 32), (int)aa);
-		s.Put(h);
-	#else
-		sprintf(h, "%+6d 0x%08X ", a, a + dword(ptr));
-		s.Put(h);
-	#endif
+		if(adr) {
+		#ifdef CPU_64
+			uint64 aa = a + (uint64)ptr;
+			sprintf(h, "%+6d 0x%08X%08X ", a, (int)(aa >> 32), (int)aa);
+			s.Put(h);
+		#else
+			sprintf(h, "%+6d 0x%08X ", a, a + dword(ptr));
+			s.Put(h);
+		#endif
+		}
+		else {
+			sprintf(h, "%+6d ", a);
+			s.Put(h);
+		}
 		for(b = 0; b < 16; b++)
 			if(a + b < size) {
 				sprintf(h, "%02X ", q[a + b]);
@@ -385,13 +156,61 @@ void  HexDump(Stream& s, const void *ptr, int size, int maxsize) {
 				s.Put("   ");
 		s.Put("    ");
 		for(b = 0; b < 16; b++)
-			if(a + b < size)
-				s.Put(q[a + b] < ' ' ? '.' : q[a + b]);
+			if(a + b < size) {
+				int c = q[a + b];
+				s.Put(c >= 32 && c < 128 ? c : '.');
+			}
 			else
 				s.Put(' ');
 		a += 16;
 		s << '\n';
 	}
+}
+
+void  HexDump(Stream& s, const void *ptr, int size, int maxsize) {
+	char h[256];
+	sprintf(h, "Memory at 0x%p, size 0x%X = %d\n", ptr, size, size);
+	s.Put(h);
+#ifdef PLATFORM_WIN32
+	if(IsBadReadPtr(ptr, size)) {
+		s.Put("   <MEMORY ACCESS VIOLATION>\n");
+		return;
+	}
+#endif
+	HexDumpData(s, ptr, size, true, maxsize);
+}
+
+void LogHex(const String& s)
+{
+	HexDump(VppLog(), ~s, s.GetLength());
+}
+
+void LogHex(const WString& s)
+{
+	HexDump(VppLog(), ~s, sizeof(wchar) * s.GetLength());
+}
+
+void LogHex(uint64 i)
+{
+	VppLog() << "0x" << Format64Hex(i) << '\n';
+}
+
+void LogHex(void *p)
+{
+	VppLog() << p << '\n';
+}
+
+void SetMagic(byte *t, int count)
+{
+	for(int i = 0; i < count; i++)
+		t[i] = i;
+}
+
+void CheckMagic(byte *t, int count)
+{
+	for(int i = 0; i < count; i++)
+		if(t[i] != i)
+			Panic("Failed magic area!");
 }
 
 #if defined(PLATFORM_WIN32) && !defined(PLATFORM_WINCE)
@@ -453,9 +272,8 @@ LONG __stdcall sDumpHandler(LPEXCEPTION_POINTERS ep) {
 	sprintf(h, "CRASH: %d-%02d-%02d %02d:%02d:%02d code: 0x%X  address: 0x%p",
 	        st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond,
 	        er->ExceptionCode, er->ExceptionAddress);
-	UsrLogT("============ CRASH ================================================");
-	UsrLogT(h);
-	BugLog() << h << "\r\n";
+	RLOG("============ CRASH ================================================");
+	RLOG(h);
 	return sPrev ? (*sPrev)(ep) : 0 /*EXCEPTION_CONTINUE_SEARCH*/;
 }
 
@@ -480,4 +298,44 @@ void InstallCrashDump(const char *info) {
 
 #endif
 
-END_UPP_NAMESPACE
+#ifdef _DEBUG
+// value inspectors for Gdb_MI2 frontend
+dword   _DBG_Value_GetType(Value const &v)	{ return v.GetType(); }
+String  _DBG_Value_AsString(Value const &v)	{ return AsString(v); }
+#endif
+
+}
+
+#if defined(__GNUG__) && defined(PLATFORM_POSIX)
+#include <cstdlib>
+#include <memory>
+#include <cxxabi.h>
+
+namespace Upp {
+
+struct cpp_demangle_handle__ {
+    char* p;
+    cpp_demangle_handle__(char* ptr) : p(ptr) { }
+    ~cpp_demangle_handle__() { std::free(p); }
+};
+
+String CppDemangle(const char* name) {
+    int status = -4;
+    cpp_demangle_handle__ result( abi::__cxa_demangle(name, NULL, NULL, &status) );
+    return (status==0) ? result.p : name ;
+}
+
+}
+
+#else
+
+namespace Upp {
+
+String CppDemangle(const char* name) {
+    return TrimLeft("struct ", TrimLeft("class ", name));
+}
+
+}
+
+#endif
+

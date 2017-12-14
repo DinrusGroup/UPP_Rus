@@ -2,9 +2,15 @@
 
 void Ide::RunArgs() {
 	WithRunLayout<TopWindow> dlg;
-	CtrlLayoutOKCancel(dlg, "Запустить опции");
+	CtrlLayoutOKCancel(dlg, "Run options");
+	dlg.Sizeable().Zoomable();
+	
+#ifndef PLATFORM_POSIX
+	dlg.consolemode.Hide();
+	dlg.console_lable.Hide();
+#endif
 
-	SelectDirButton dir_browse("Выполнить в папке");
+	SelectDirButton dir_browse("Run in folder");
 	dir_browse.Attach(dlg.dir);
 	dlg.dir = rundir.ToWString();
 
@@ -15,8 +21,8 @@ void Ide::RunArgs() {
 		dlg.arg.SerializeList(ss);
 	}
 
-	SaveFileButton stdout_browse("Сохранить STDOUT как");
-	stdout_browse.Type("Текстовые файлы (*.txt)", "*.txt").AllFilesType();
+	SaveFileButton stdout_browse("Save STDOUT as");
+	stdout_browse.Type("Text files (*.txt)", "*.txt").AllFilesType();
 	stdout_browse.Attach(dlg.stdout_file);
 
 	{
@@ -27,17 +33,25 @@ void Ide::RunArgs() {
 
 	dlg.runmode <<= runmode;
 	dlg.external = runexternal;
+	dlg.consolemode = consolemode;
+	dlg.utf8 <<= console_utf8;
 	dlg.runmode <<= dlg.Breaker(222);
-
+	
 	for(;;) {
+		bool b = ~dlg.runmode == RUN_FILE;
+		dlg.stdout_file_lbl.Enable(b);
+		dlg.stdout_file.Enable(b);
 		int rm = ~dlg.runmode;
 		dlg.stdout_file.Enable(rm == RUN_FILE || rm == RUN_FILE_CONSOLE);
+		dlg.utf8.Enable(rm != RUN_WINDOW);
 		switch(dlg.Run()) {
 		case IDOK:
-			rundir  = dlg.dir;
+			rundir  = ~dlg.dir;
 			runarg  = ~dlg.arg;
 			runmode = ~dlg.runmode;
 			runexternal = dlg.external;
+			consolemode = dlg.consolemode;
+			console_utf8 = ~dlg.utf8;
 			stdout_file = ~dlg.stdout_file;
 			dlg.arg.AddHistory();
 			{
@@ -68,48 +82,147 @@ One<Host> Ide::CreateHostRunDir()
 	return h;
 }
 
+bool Ide::ShouldHaveConsole()
+{
+	return decode(consolemode, 0, FindIndex(SplitFlags(mainconfigparam, true), "GUI") < 0,
+	                           1, true, false);
+}
+
 void Ide::BuildAndExecute()
 {
 	if(Build()) {
-		int time = msecs();
-		One<Host> h = CreateHostRunDir();
-		h->ChDir(Nvl(rundir, GetFileFolder(target)));
-		String cmdline;
-		if(!runexternal)
-			cmdline << '\"' << h->GetHostPath(target) << "\" ";
-		cmdline << ToSystemCharset(runarg);
-		int exitcode;
-		switch(runmode) {
-		case RUN_WINDOW:
+		String targetExt = GetFileExt(target);
+		if(targetExt == ".apk")
+			ExecuteApk();
+		else
+			ExecuteBinary();
+	}
+}
+
+void Ide::ExecuteBinary()
+{
+	int time = msecs();
+	One<Host> h = CreateHostRunDir();
+	h->ChDir(Nvl(rundir, GetFileFolder(target)));
+	String cmdline;
+	if(!runexternal)
+		cmdline << '\"' << h->GetHostPath(target) << "\" ";
+	cmdline << ToSystemCharset(runarg);
+		
+	int exitcode;
+	switch(runmode) {
+	case RUN_WINDOW:
+		HideBottom();
+		h->Launch(cmdline, ShouldHaveConsole());
+		break;
+	case RUN_CONSOLE:
+		ShowConsole();
+		PutConsole(String().Cat() << "Executing: " << cmdline);
+		console.Sync();
+		exitcode = h->ExecuteWithInput(cmdline, console_utf8);
+		PutConsole("Finished in " + GetPrintTime(time) + ", exit code: " + AsString(exitcode));
+		break;
+	case RUN_FILE: {
 			HideBottom();
-			h->Launch(cmdline, FindIndex(SplitFlags(mainconfigparam, true), "GUI") < 0);
-			break;
-		case RUN_CONSOLE:
-			ShowConsole();
-			PutConsole(String().Cat() << "Выполняется: " << cmdline);
-			console.Sync();
-			exitcode = h->ExecuteWithInput(cmdline);
-			PutConsole("Завершено за " + GetPrintTime(time) + ", код выхода: " + AsString(exitcode));
-			break;
-		case RUN_FILE: {
-				HideBottom();
-				String fn;
-				if(IsNull(stdout_file))
-					fn = ForceExt(target, ".ol");
-				else
-					fn = stdout_file;
-				FileOut out(fn);
-				if(!out) {
-					PromptOK("Не удаётся открыть файл вывода [* " + DeQtf(stdout_file) + "] !");
-					return;
-				}
-				if(h->Execute(cmdline, out) >= 0) {
-					out.Close();
-					EditFile(fn);
-				}
+			String fn;
+			if(IsNull(stdout_file))
+				fn = ForceExt(target, ".ol");
+			else
+				fn = stdout_file;
+			FileOut out(fn);
+			if(!out) {
+				PromptOK("Unable to open output file [* " + DeQtf(stdout_file) + "] !");
+				return;
+			}
+			if(h->Execute(cmdline, out, console_utf8) >= 0) {
+				out.Close();
+				EditFile(fn);
 			}
 		}
 	}
+}
+
+class SelectAndroidDeviceDlg : public WithSelectAndroidDeviceLayout<TopWindow> {
+	typedef SelectAndroidDeviceDlg CLASSNAME;
+	
+public:
+	SelectAndroidDeviceDlg(AndroidSDK* sdk);
+	
+	int    GetDeviceCount() const    { return devicesArray.GetCount(); }
+	String GetSelectedSerial() const;
+	
+private:
+	void LoadDevices();
+	
+	void OnRefresh();
+	
+private:
+	AndroidSDK* sdk;
+};
+
+SelectAndroidDeviceDlg::SelectAndroidDeviceDlg(AndroidSDK* sdk) :
+	sdk(sdk)
+{
+	CtrlLayoutOKCancel(*this, "Android device selection");
+	
+	devicesArray.AddColumn("Serial Number");
+	devicesArray.AddColumn("State");
+	
+	refresh <<= THISBACK(OnRefresh);
+	
+	LoadDevices();
+}
+
+String SelectAndroidDeviceDlg::GetSelectedSerial() const
+{
+	int row = devicesArray.IsCursor() ? devicesArray.GetCursor() : 0;
+	return devicesArray.GetCount() ? devicesArray.Get(row, 0) : "";
+}
+
+void SelectAndroidDeviceDlg::LoadDevices()
+{
+	Vector<AndroidDevice> devices = sdk->FindDevices();
+	for(int i = 0; i < devices.GetCount(); i++) {
+		devicesArray.Add(devices[i].GetSerial(), devices[i].GetState());
+	}
+	
+	if(devicesArray.GetCount()) {
+		devicesArray.GoBegin();
+		ok.Enable();
+	}
+	else
+		ok.Disable();
+}
+
+void SelectAndroidDeviceDlg::OnRefresh()
+{
+	devicesArray.Clear();
+	LoadDevices();
+}
+
+void Ide::ExecuteApk()
+{
+	AndroidSDK sdk(GetAndroidSdkPath(), true);
+	if(!sdk.Validate())
+		return;
+	
+	SelectAndroidDeviceDlg select(&sdk);
+	if(select.GetDeviceCount() != 1 && select.Run() != IDOK)
+		return;
+	if(!select.GetDeviceCount())
+		return;
+	
+	One<Host> host = CreateHost(false);
+	Apk apk(target, sdk);
+	String packageName = apk.FindPackageName();
+	String activityName = apk.FindLaunchableActivity();
+	
+	Adb adb = sdk.MakeAdb();
+	adb.SetSerial(select.GetSelectedSerial());
+	host->Execute(adb.MakeInstallCmd(target));
+	
+	if(!packageName.IsEmpty() && !activityName.IsEmpty())
+		host->Execute(adb.MakeLaunchOnDeviceCmd(packageName, activityName));
 }
 
 void Ide::BuildAndDebug0(const String& srcfile)
@@ -152,32 +265,54 @@ void Ide::BuildAndExtDebugFile()
 	BuildAndDebug0(editfile);
 }
 
-One<Debugger> GdbCreate(One<Host> host, const String& exefile, const String& cmdline);
+One<Debugger> GdbCreate(One<Host>&& host, const String& exefile, const String& cmdline, bool console);
+One<Debugger> Gdb_MI2Create(One<Host>&& host, const String& exefile, const String& cmdline, bool console);
 #ifdef PLATFORM_WIN32
-One<Debugger> CdbCreate(One<Host> host, const String& exefile, const String& cmdline);
-One<Debugger> PdbCreate(One<Host> host, const String& exefile, const String& cmdline);
+One<Debugger> CdbCreate(One<Host>&& host, const String& exefile, const String& cmdline);
+One<Debugger> PdbCreate(One<Host>&& host, const String& exefile, const String& cmdline);
 #endif
 
 void Ide::BuildAndDebug(bool runto)
 {
 	VectorMap<String, String> bm = GetMethodVars(method);
 	String builder = bm.Get("BUILDER", "");
+	
+	// TODO: implement debugging on android
+	if(builder == "ANDROID") {
+		BuildAndExecute();
+		return;
+	}
+	
 	if(!Build())
 		return;
 	if(!FileExists(target))
 		return;
-	if(designer)
+	if(designer && !editfile_isfolder)
 		EditAsText();
 	One<Host> host = CreateHostRunDir();
 	host->ChDir(Nvl(rundir, GetFileFolder(target)));
 	HideBottom();
 	editor.Disable();
-#ifdef COMPILER_MSC
-	debugger = builder == "GCC" ? GdbCreate(host, target, runarg) : PdbCreate(host, target, runarg);
-#else
-	debugger = GdbCreate(host, target, runarg);
+
+	bool console = ShouldHaveConsole();
+
+	if(findarg(builder, "GCC", "CLANG") >= 0) {
+		if(gdbSelector)
+			debugger = Gdb_MI2Create(pick(host), target, runarg, console);
+		else
+			debugger = GdbCreate(pick(host), target, runarg, console);
+	}
+#ifdef PLATFORM_WIN32
+	else
+		debugger = PdbCreate(pick(host), target, runarg);
 #endif
-	if(!debugger) return;
+
+	if(!debugger) {
+		IdeEndDebug();
+		SetBar();
+		editor.Enable();
+		return;
+	}
 	debuglock = 0;
 	const Workspace& wspc = IdeWorkspace();
 	for(int i = 0; i < wspc.GetCount(); i++) {
@@ -257,7 +392,19 @@ void Ide::ConditionalBreak()
 		return;
 	int ln = editor.GetCursorLine();
 	String brk = editor.GetBreakpoint(ln);
-	if(EditText(brk, "Условный останов", "Условие"))
+	if(brk == "\xe")
+		brk = "1";
+
+	Index<String> cfg = PackageConfig(IdeWorkspace(), 0, GetMethodVars(method), mainconfigparam,
+	                                  *CreateHost(true), *CreateBuilder(~CreateHostRunDir()));
+#ifdef PLATFORM_WIN32
+	if(cfg.Find("MSC") >= 0) {
+		if(EditPDBExpression("Conditional breakpoint", brk, NULL))
+			editor.SetBreakpoint(ln, brk);
+	}
+	else
+#endif
+	if(EditText(brk, "Conditional breakpoint", "Condition"))
 		editor.SetBreakpoint(ln, brk);
 	editor.RefreshFrame();
 }
@@ -270,26 +417,37 @@ void Ide::StopDebug()
 	PosSync();
 }
 
-String Ide::GetLogPath()
-{
-	if(target.GetCount() == 0)
-		return Null;
-#ifdef PLATFORM_WIN32
-	return ForceExt(target, ".log");
-#else
-	String p = GetFileTitle(target);
-	return GetHomeDirFile(".upp/" + p + "/" + p + ".log");
-#endif
-}
-
-void Ide::OpenLog()
-{
-	String p = GetLogPath();
-	if(FileExists(p))
-		EditFile(p);
-}
-
 bool Ide::EditorTip(CodeEditor::MouseTip& mt)
 {
-	return debugger && debugger->Tip(editor.ReadIdBack(mt.pos), mt);
+	if(!debugger)
+		return false;
+	DR_LOG("EditorTip");
+	int pos = mt.pos;
+	String e;
+	String sep;
+	while(pos >= 0) {
+		String b = editor.ReadIdBackPos(pos, false);
+		if(b.GetCount() == 0)
+			break;
+		e = b + sep + e;
+		sep = ".";
+		while(pos > 0 && editor.GetChar(pos - 1) == ' ')
+			pos--;
+		if(pos > 0 && editor.GetChar(pos - 1) == '.')
+			--pos;
+		else
+		if(pos >= 2 && editor.GetChar(pos - 1) == ':' && editor.GetChar(pos - 2) == ':') {
+			pos -= 2;
+			sep = "::";
+		}
+		else
+		if(pos >= 2 && editor.GetChar(pos - 1) == '>' && editor.GetChar(pos - 2) == '-')
+			pos -= 2;
+		else
+			break;
+		while(pos > 0 && editor.GetChar(pos - 1) == ' ')
+			pos--;
+	}
+	DR_LOG("debugger->Tip");
+	return debugger->Tip(e, mt);
 }

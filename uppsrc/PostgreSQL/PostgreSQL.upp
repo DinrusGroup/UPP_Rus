@@ -2,14 +2,13 @@ acceptflags
 	NOPOSTGRESQL;
 
 uses
-	Sql,
-	Web;
+	Sql;
 
 library(WIN32 !NOPOSTGRESQL MSC) libpq;
 
 library(WIN32 !NOPOSTGRESQL GCC) pq;
 
-library(LINUX !NOPOSTGRESQL) pq;
+library(POSIX !NOPOSTGRESQL) pq;
 
 file
 	PostgreSQL.h,

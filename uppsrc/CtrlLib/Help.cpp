@@ -1,6 +1,6 @@
 #include "CtrlLib.h"
 
-NAMESPACE_UPP
+namespace Upp {
 
 Topic HelpWindow::AcquireTopic(const String& topic)
 {
@@ -25,7 +25,7 @@ bool HelpWindow::GoTo0(const String& link)
 		Title(FromUtf8(t.title));
 		RichText txt = ParseQTF(t.text);
 		FinishText(txt);
-		view.Pick(txt, zoom);
+		view.Pick(pick(txt), zoom);
 		view.GotoLabel(label, true);
 		current_link = link;
 		tree.FindSetCursor(topic);
@@ -88,7 +88,7 @@ void HelpWindow::Forward()
 
 void HelpWindow::SetZoom()
 {
-	zoom.d = 1000;
+	zoom.d = 1000000 / Zy(800);
 	current_link = Null;
 	GoTo0(topic);
 	Refresh();
@@ -115,15 +115,15 @@ void HelpWindow::Print()
 
 void HelpWindow::Tools(Bar& bar)
 {
-	bar.Add(back.GetCount(), t_("Назад"), CtrlImg::go_back(), THISBACK(Back))
+	bar.Add(back.GetCount(), t_("Go Back"), CtrlImg::go_back(), THISBACK(Back))
 	   .Key(K_ALT_LEFT);
-	bar.Add(forward.GetCount(), t_("Вперёд"), CtrlImg::go_forward(), THISBACK(Forward))
+	bar.Add(forward.GetCount(), t_("Go Forward"), CtrlImg::go_forward(), THISBACK(Forward))
 	   .Key(K_ALT_RIGHT);
 	bar.Gap();
-	bar.Add(t_("Размер шрифта"), CtrlImg::font_size(), THISBACK(FontSize));
-	bar.Gap();//Размер шрифта
+	bar.Add(t_("Font size"), CtrlImg::font_size(), THISBACK(FontSize));
+	bar.Gap();
 #ifndef PLATFORM_PDA
-	bar.Add(t_("Печать"), CtrlImg::print(), THISBACK(Print));
+	bar.Add(t_("Print"), CtrlImg::print(), THISBACK(Print));
 #endif
 	BarEx(bar);
 }
@@ -299,14 +299,14 @@ HelpWindow::HelpWindow()
 	Add(tree_view.SizePos());
 	tree_view.Zoom(1);
 	Sizeable().Zoomable();
-	Title(t_("Помощь"));
+	Title(t_("Help"));
 	BackPaint();
 	view.WhenLink = THISBACK(GoTo);
 	AddFrame(toolbar);
 	view.SetZoom(Zoom(1, 1));
 	zoom.m = 160;
 	SetZoom();
-	view.Margins(Rect(12, 12, 2, 2));
+	view.Margins(Rect(12, 0, 12, 0));
 	SetRect(Ctrl::GetWorkArea().Deflated(80));
 	tree.WhenSel = THISBACK(TreeCursor);
 	tree.NoRoot();
@@ -316,4 +316,4 @@ HelpWindow::HelpWindow()
 	view.BackPaintHint();
 }
 
-END_UPP_NAMESPACE
+}

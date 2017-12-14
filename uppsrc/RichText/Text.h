@@ -1,9 +1,13 @@
 class RichText : public RichTxt, public DeepCopyOption<RichText> {
-	RichStyles style;
-	String     footer; // ugly hack
-	bool       nolinks;
+	mutable Mutex mutex; // To cover all those laze evaluation scenarios
+	RichStyles    style;
+	String        footer_hack; // ugly hack
+	bool          nolinks; // another ugly hack
 
 	void       Init();
+
+	void       PaintHeaderFooter(PageDraw& pw, const Rect& page, PageY py, const PaintInfo& pi,
+	                             int from_page, int to_page) const;
 
 	struct StyleChangeOp;
 	struct SetStylesOp;
@@ -32,10 +36,12 @@ public:
 
 	RichPara              Get(int i) const                     { return RichTxt::Get(i, style); }
 	void                  Cat(const RichPara& p)               { RichTxt::Cat(p, style); }
-	void                  CatPick(pick_ RichText& p);
+	void                  CatPick(RichText&& p);
 	using                 RichTxt::CatPick;
 
-	RichContext           Context(const Rect& page) const;
+	RichContext           Context(const Rect& page, PageY py, RichText *header, RichText *footer) const;
+	RichContext           Context(const Rect& page, PageY py) const { return Context(page, py, ~header, ~footer); }
+//	RichContext           Context(const Rect& page) const { return Context(page, PageY(0, 0)); }
 
 	RichPos               GetRichPos(int pos, int maxlevel = INT_MAX) const;
 	int                   operator[](int pos) const            { return GetRichPos(pos).chr; }
@@ -98,7 +104,8 @@ public:
 	void                  SplitCell(int table, Point cell, Size sz);
 	void                  JoinCell(int table, const Rect& sel);
 	RichCell::Format      GetCellFormat(int table, const Rect& sel) const;
-	void                  SetCellFormat(int table, const Rect& sel, const RichCell::Format& fmt, bool setkeep);
+	void                  SetCellFormat(int table, const Rect& sel, const RichCell::Format& fmt,
+	                                    bool setkeep, bool setround);
 	FormatInfo            GetTableFormatInfo(int table, const Rect& sel) const;
 	void                  ApplyTableFormatInfo(int table, const Rect& sel, const RichText::FormatInfo& fi);
 	void                  AdjustTableSel(int table, Rect& sel) const        { return GetConstTable(table).AdjustSel(sel); }
@@ -123,14 +130,17 @@ public:
 	};
 
 	static void           Register(ClipboardType& type);
-
+	
 	//Ugly hacks
-	void                  SetFooter(const String& s)                          { footer = s; }
-	String                GetFooter() const                                   { return footer; }
+	void                  SetFooter(const String& s)                          { footer_hack = s; }
+	String                GetFooter() const                                   { return footer_hack; }
 	void                  PrintNoLinks(bool b = true)                         { nolinks = b; }
 	bool                  IsPrintNoLinks() const                              { return nolinks; }
 
 	RichText()            { Init(); }
 	RichText(const RichText& x, int);
-	RichText(pick_ RichTxt& x, pick_ RichStyles& st);
+	RichText(RichText&& x);
+	RichText(RichTxt&& x, RichStyles&& st);
+	
+	RichText& operator=(RichText&& x);
 };

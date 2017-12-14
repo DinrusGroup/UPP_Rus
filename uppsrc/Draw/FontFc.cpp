@@ -1,23 +1,27 @@
 #include "Draw.h"
 
-#ifdef PLATFORM_POSIX
-#include <fontconfig/fontconfig.h>
-#include <fontconfig/fcfreetype.h>
-#endif
-
-NAMESPACE_UPP
-
-#ifdef PLATFORM_POSIX
-
 #define LLOG(x)     //  LOG(x)
 #define LTIMING(x)  //  TIMING(x)
 
-void GetStdFontSys(String& name, int& height)
-{
-	name = "xxxx";
-}
+#ifndef CUSTOM_FONTSYS
+
+#ifdef PLATFORM_POSIX
+
+#include <fontconfig/fontconfig.h>
+#include <fontconfig/fcfreetype.h>
+
+// #include <ftxf86.h> // The only function required from that header:
+FT_EXPORT( const char* ) FT_Get_X11_Font_Format( FT_Face  face ); // Put here to avoid include path issues...
+
+namespace Upp {
 
 static FT_Library sFTlib;
+
+EXITBLOCK
+{
+	if(sFTlib)
+		FT_Done_FreeType(sFTlib);
+}
 
 bool sInitFt(void)
 {
@@ -29,15 +33,14 @@ bool sInitFt(void)
 FcPattern *CreateFcPattern(Font font)
 {
 	LTIMING("CreateXftFont");
-	double sina, cosa;
 	int hg = abs(font.GetHeight());
 	if(hg == 0) hg = 10;
 	String face = font.GetFaceName();
 	FcPattern *p = FcPatternCreate();
 	FcPatternAddString(p, FC_FAMILY, (FcChar8*)~face);
-	FcPatternAddInteger(p, FC_SLANT, font.IsItalic() ? 110 : 0);
+	FcPatternAddInteger(p, FC_SLANT, font.IsItalic() ? FC_SLANT_ITALIC : FC_SLANT_ROMAN);
 	FcPatternAddInteger(p, FC_PIXEL_SIZE, hg);
-	FcPatternAddInteger(p, FC_WEIGHT, font.IsBold() ? 200 : 100);
+	FcPatternAddInteger(p, FC_WEIGHT, font.IsBold() ? FC_WEIGHT_BOLD : FC_WEIGHT_NORMAL);
 	FcPatternAddBool(p, FC_MINSPACE, 1);
 	FcConfigSubstitute(0, p, FcMatchPattern);
 	FcDefaultSubstitute(p);
@@ -50,7 +53,6 @@ FcPattern *CreateFcPattern(Font font)
 FT_Face CreateFTFace(const FcPattern *pattern, String *rpath) {
 	FT_Face	    face = NULL;
 
-	int		    id;
 	double	    dsize;
 	double	    aspect;
 	FcChar8    *filename;
@@ -87,14 +89,6 @@ struct FtFaceEntry {
 	String  path;
 };
 
-static FtFaceEntry ft_cache[FONTCACHE];
-
-void ClearFtFaceCache()
-{
-	for(int i = 0; i < FONTCACHE; i++)
-		ft_cache[i].font.Height(-30000);
-}
-
 FT_Face (*FTFaceXft)(Font fnt, String *rpath);
 
 FT_Face FTFace(Font fnt, String *rpath = NULL)
@@ -102,8 +96,10 @@ FT_Face FTFace(Font fnt, String *rpath = NULL)
 	LTIMING("FTFace");
 	if(FTFaceXft)
 		return (*FTFaceXft)(fnt, rpath);
+	static FtFaceEntry ft_cache[FONTCACHE];
 	ONCELOCK {
-		ClearFtFaceCache();
+		for(int i = 0; i < FONTCACHE; i++)
+			ft_cache[i].font.Height(-30000);
 	}
 	FtFaceEntry be;
 	be = ft_cache[0];
@@ -157,6 +153,7 @@ CommonFontInfo GetFontInfoSys(Font font)
 		fi.avewidth = fi.maxwidth;
 		fi.default_char = '?';
 		fi.fixedpitch = font.GetFaceInfo() & Font::FIXEDPITCH;
+		fi.ttf = strcmp(FT_Get_X11_Font_Format(face), "TrueType") == 0;
 		if(path.GetCount() < 250)
 			strcpy(fi.path, ~path);
 		else
@@ -172,6 +169,21 @@ CommonFontInfo GetFontInfoSys(Font font)
 
 GlyphInfo (*GetGlyphInfoSysXft)(Font font, int chr);
 
+#ifdef flagLINUXGL
+#include <LinuxGl/FontGl.h>
+#include <LinuxGl/ResGl.h>
+GlyphInfo  GetGlyphInfoSys(Font font, int chr)
+{
+	static GlyphInfo gi;
+	const OpenGLFont& fi = resources.GetFont(font);
+	gi.width = chr < fi.chars.GetCount() 
+		? int(fi.chars[chr].xadvance * fi.scale + 0.5f)
+		: 0;
+	gi.lspc = 0;
+	gi.rspc = 0;
+	return gi;
+}
+#else
 GlyphInfo  GetGlyphInfoSys(Font font, int chr)
 {
 	LTIMING("GetGlyphInfoSys");
@@ -179,12 +191,13 @@ GlyphInfo  GetGlyphInfoSys(Font font, int chr)
 	FT_Face face = FTFace(font, NULL);
 	gi.lspc = gi.rspc = 0;
 	gi.width = 0x8000;
+	LLOG("GetGlyphInfoSys " << font << " " << (char)chr << " " << FormatIntHex(chr));
 	if(face) {
 		LTIMING("GetGlyphInfoSys 2");
 		int glyph_index = FT_Get_Char_Index(face, chr);
 		if(glyph_index) {
-			if(GetGlyphInfoSysXft)
-				return (*GetGlyphInfoSysXft)(font, chr);
+//			if(GetGlyphInfoSysXft)
+//				return (*GetGlyphInfoSysXft)(font, chr);
 			if(FT_Load_Glyph(face, glyph_index, FT_LOAD_DEFAULT|FT_LOAD_NO_BITMAP) == 0 ||
 			   FT_Load_Glyph(face, glyph_index, FT_LOAD_DEFAULT) == 0) {
 				FT_Glyph_Metrics& m = face->glyph->metrics;
@@ -193,11 +206,13 @@ GlyphInfo  GetGlyphInfoSys(Font font, int chr)
 				gi.width = TRUNC(ROUND(face->glyph->advance.x));
 				gi.lspc = TRUNC(left);
 				gi.rspc = gi.width - width - gi.lspc;
+				gi.glyphi = glyph_index;
 			}
 		}
 	}
 	return gi;
 }
+#endif
 
 Vector<FaceInfo> GetAllFacesSys()
 {
@@ -221,15 +236,16 @@ Vector<FaceInfo> GetAllFacesSys()
 	FcObjectSetDestroy(os);
 	for(int i = 0; i < fs->nfont; i++) {
 		FcChar8 *family = NULL;
-		if(FcPatternGetString(fs->fonts[i], FC_FAMILY, 0, &family) == 0 && family) {
+		FcPattern *pt = fs->fonts[i];
+		if(FcPatternGetString(pt, FC_FAMILY, 0, &family) == 0 && family) {
 			FaceInfo& fi = list.Add();
 			fi.name = (const char *)family;
 			fi.info = 0;
 			int iv;
-			if(FcPatternGetInteger(fs->fonts[i], FC_SPACING, 0, &iv) == 0 && iv == FC_MONO)
+			if(FcPatternGetInteger(pt, FC_SPACING, 0, &iv) == 0 && iv == FC_MONO)
 				fi.info |= Font::FIXEDPITCH;
 			FcBool bv;
-			if(FcPatternGetBool(fs->fonts[i], FC_SCALABLE, 0, &bv) == 0 && bv)
+			if(FcPatternGetBool(pt, FC_SCALABLE, 0, &bv) == 0 && bv)
 				fi.info |= Font::SCALEABLE;
 		}
 	}
@@ -237,6 +253,145 @@ Vector<FaceInfo> GetAllFacesSys()
 	return list;
 }
 
+String GetFontDataSys(Font font)
+{
+	return LoadFile(font.Fi().path);
+}
+
+static inline double ft_dbl(int p)
+{
+    return double(p) / 64.0;
+}
+
+struct ConvertOutlinePoint {
+	bool sheer;
+	double xx;
+	double yy;
+	
+	Pointf operator()(int x, int y) {
+		double fy = ft_dbl(y);
+		return Pointf(ft_dbl(x) + xx + (sheer ? 0.2 * fy : 0), yy - fy);
+	}
+};
+
+bool RenderOutline(const FT_Outline& outline, FontGlyphConsumer& path, double xx, double yy, bool sheer)
+{
+	ConvertOutlinePoint cp;
+	cp.xx = xx;
+	cp.yy = yy;
+	cp.sheer = sheer;
+	
+	FT_Vector   v_last;
+	FT_Vector   v_control;
+	FT_Vector   v_start;
+	FT_Vector*  point;
+	FT_Vector*  limit;
+	char*       tags;
+	int   n;         // index of contour in outline
+	char  tag;       // current point's state
+	int   first = 0; // index of first point in contour
+	for(n = 0; n < outline.n_contours; n++) {
+		int  last = outline.contours[n];
+		limit = outline.points + last;
+		v_start = outline.points[first];
+		v_last  = outline.points[last];
+		v_control = v_start;
+		point = outline.points + first;
+		tags  = outline.tags  + first;
+		tag   = FT_CURVE_TAG(tags[0]);
+		if(tag == FT_CURVE_TAG_CUBIC) return false;
+		if(tag == FT_CURVE_TAG_CONIC) {
+			if(FT_CURVE_TAG(outline.tags[last]) == FT_CURVE_TAG_ON) {
+				// start at last point if it is on the curve
+				v_start = v_last;
+				limit--;
+			}
+			else {
+				// if both first and last points are conic,
+				// start at their middle and record its position
+				// for closure
+				v_start.x = (v_start.x + v_last.x) / 2;
+				v_start.y = (v_start.y + v_last.y) / 2;
+				v_last = v_start;
+			}
+			point--;
+			tags--;
+		}
+		path.Move(cp(v_start.x, v_start.y));
+		while(point < limit) {
+			point++;
+			tags++;
+
+			tag = FT_CURVE_TAG(tags[0]);
+			switch(tag) {
+			case FT_CURVE_TAG_ON:
+				path.Line(cp(point->x, point->y));
+				continue;
+			case FT_CURVE_TAG_CONIC:
+				v_control.x = point->x;
+				v_control.y = point->y;
+			Do_Conic:
+				if(point < limit) {
+					FT_Vector vec;
+					FT_Vector v_middle;
+					point++;
+					tags++;
+					tag = FT_CURVE_TAG(tags[0]);
+					vec.x = point->x;
+					vec.y = point->y;
+					if(tag == FT_CURVE_TAG_ON) {
+						path.Quadratic(cp(v_control.x, v_control.y), cp(vec.x, vec.y));
+						continue;
+					}
+					if(tag != FT_CURVE_TAG_CONIC) return false;
+					v_middle.x = (v_control.x + vec.x) / 2;
+					v_middle.y = (v_control.y + vec.y) / 2;
+					path.Quadratic(cp(v_control.x, v_control.y), cp(v_middle.x, v_middle.y));
+					v_control = vec;
+					goto Do_Conic;
+				}
+				path.Quadratic(cp(v_control.x, v_control.y), cp(v_start.x, v_start.y));
+				goto Close;
+
+			default:
+				FT_Vector vec1, vec2;
+				if(point + 1 > limit || FT_CURVE_TAG(tags[1]) != FT_CURVE_TAG_CUBIC)
+				    return false;
+				vec1.x = point[0].x; 
+				vec1.y = point[0].y;
+				vec2.x = point[1].x; 
+				vec2.y = point[1].y;
+				point += 2;
+				tags  += 2;
+				if(point <= limit) {
+					FT_Vector vec;
+					vec.x = point->x;
+					vec.y = point->y;
+					path.Cubic(cp(vec1.x, vec1.y), cp(vec2.x, vec2.y), cp(vec.x, vec.y));
+					continue;
+				}
+				path.Cubic(cp(vec1.x, vec1.y), cp(vec2.x, vec2.y), cp(v_start.x, v_start.y));
+				goto Close;
+			}
+		}
+	Close:
+		path.Close();
+		first = last + 1; 
+    }
+	return true;
+}
+
+void RenderCharacterSys(FontGlyphConsumer& sw, double x, double y, int ch, Font fnt)
+{
+	FT_Face face = FTFace(fnt, NULL);
+	int glyph_index = FT_Get_Char_Index(face, ch);
+	if(glyph_index && FT_Load_Glyph(face, glyph_index, FT_LOAD_DEFAULT) == 0)
+		RenderOutline(face->glyph->outline, sw, x, y + fnt.GetAscent(),
+		              fnt.IsItalic() && !(face->style_flags & FT_STYLE_FLAG_ITALIC));
+}
+
+}
+
 #endif
 
-END_UPP_NAMESPACE
+#endif

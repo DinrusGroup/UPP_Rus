@@ -2,8 +2,8 @@
 
 void PutCompileTime(int time, int count)
 {
-	PutConsole(String().Cat() << count << " файл(-ы) скомпилированы за " << GetPrintTime(time)
-	           << " " << int(GetTickCount() - time) / count << " мсек/файл");
+	PutConsole(String().Cat() << count << " file(s) compiled in " << GetPrintTime(time)
+	           << " " << int(GetTickCount() - time) / count << " msec/file");
 }
 
 String CppBuilder::GetTargetExt() const
@@ -14,82 +14,89 @@ String CppBuilder::GetTargetExt() const
 		return HasFlag("DLL") ? ".dll" : ".exe";
 }
 
+void CppBuilder::CleanPackage(const String& package, const String& outdir)
+{
+	DeleteFolderDeep(outdir);
+}
+
+// POSIX lib files have names in form of libXXXXXX.so.ver.minver(.rel)
+// so we can't simply get file extension
+String CppBuilder::GetSrcType(String fn) const
+{
+	fn = ToLower(fn);
+	String ext = GetFileExt(fn);
+	if(!HasFlag("POSIX") || ext == ".so")
+		return ext;
+	int soPos = fn.ReverseFind(".so");
+	if(soPos < 0)
+		return ext;
+	fn = fn.Mid(soPos + 3);
+	const char *c = ~fn;
+	while(*c)
+	{
+		if(*c != '.' && !IsDigit(*c))
+			return ext;
+		c++;
+	}
+	return ".so";
+}
+
+// from complete lib name/path (libXXX.so.ver.minVer) gets the soname (libXXX.so.ver)
+String CppBuilder::GetSoname(String libName) const
+{
+	
+	String soname = GetFileName(libName);
+	int soLen = soname.GetCount();
+	int soPos = ToLower(soname).ReverseFind(".so");
+	if(soPos < 0)
+		soPos = soLen;
+	else
+		soPos += 3;
+	if(soname.Mid(soPos, 1) == ".")
+	{
+		soPos++;
+		while(soPos < soLen && IsDigit(soname[soPos]))
+			soPos++;
+	}
+	return soname.Left(soPos);
+}
+
+// from complete lib name/path (libXXX.so.ver.minVer) gets the link name (libXXX.so)
+String CppBuilder::GetSoLinkName(String libName) const
+{
+	
+	String linkName = GetFileName(libName);
+	int soPos = ToLower(linkName).ReverseFind(".so");
+	if(soPos < 0)
+		soPos = linkName.GetCount();
+	else
+		soPos += 3;
+	return linkName.Left(soPos);
+}
+
 String CppBuilder::GetSharedLibPath(const String& package) const
 {
 	String outfn;
+	if(HasFlag("POSIX"))
+	   outfn << "lib";
 	for(const char *p = package; *p; p++)
 		outfn.Cat(IsAlNum(*p) || *p == '-' ? *p : '_');
-	if(!IsNull(version))
+	if(!IsNull(version) && !HasFlag("POSIX"))
 		outfn << version;
 	outfn << (HasFlag("WIN32") || HasFlag("WINCE") ? ".dll" : ".so");
+	if(HasFlag("POSIX"))
+	{
+		Point p = ExtractVersion();
+		int ver = IsNull(p.x) ? 1 : p.x;
+		int minver = IsNull(p.y) ? 0 : p.y;
+		outfn << '.' << ver << '.' << minver;
+	}
 	return CatAnyPath(GetFileFolder(target), outfn);
-}
-
-String CppBuilder::GetHostPath(const String& path) const
-{
-	return host->GetHostPath(path);
-}
-
-String CppBuilder::GetHostPathShort(const String& path) const
-{
-#ifdef PLATFORM_WIN32
-	const dword SHORT_PATH_LENGTH = 2048;
-	char short_path[SHORT_PATH_LENGTH];
-	dword length = ::GetShortPathName((LPCTSTR) path, (LPTSTR) short_path, SHORT_PATH_LENGTH);
-	if(length > 0)
-		return String(short_path, length);
-#endif
-	return path;
-}
-
-String CppBuilder::GetHostPathQ(const String& path) const
-{
-	return '\"' + GetHostPath(path) + '\"';
-}
-
-String CppBuilder::GetHostPathShortQ(const String& path) const
-{
-	return '\"' + GetHostPathShort(path) + '\"';
 }
 
 String CppBuilder::GetLocalPath(const String& path) const
 {
 	return host->GetLocalPath(path);
-}
-
-Vector<Host::FileInfo> CppBuilder::GetFileInfo(const Vector<String>& path) const
-{
-	return host->GetFileInfo(path);
-}
-
-Host::FileInfo CppBuilder::GetFileInfo(const String& path) const
-{
-	return GetFileInfo(Vector<String>() << path)[0];
-}
-
-Time CppBuilder::GetFileTime(const String& path) const
-{
-	return GetFileInfo(path);
-}
-
-void CppBuilder::DeleteFile(const Vector<String>& path)
-{
-	host->DeleteFile(path);
-}
-
-void CppBuilder::DeleteFile(const String& path)
-{
-	host->DeleteFile(Vector<String>() << path);
-}
-
-int CppBuilder::Execute(const char *cmdline)
-{
-	return host->Execute(cmdline);
-}
-
-int CppBuilder::Execute(const char *cl, Stream& out)
-{
-	return host->Execute(cl, out);
 }
 
 int CppBuilder::AllocSlot()
@@ -112,24 +119,14 @@ bool CppBuilder::Wait()
 	return host->Wait();
 }
 
-void CppBuilder::ChDir(const String& path)
+bool CppBuilder::Wait(int slot)
 {
-	host->ChDir(path);
+	return host->Wait(slot);
 }
 
-void CppBuilder::SaveFile(const String& path, const String& data)
+void CppBuilder::OnFinish(Event<>  cb)
 {
-	host->SaveFile(path, data);
-}
-
-String CppBuilder::LoadFile(const String& path)
-{
-	return host->LoadFile(path);
-}
-
-bool CppBuilder::FileExists(const String& path) const
-{
-	return !IsNull(GetFileInfo(path).length);
+	host->OnFinish(cb);
 }
 
 int CasFilter(int c) {
@@ -184,17 +181,37 @@ Vector<String> Cuprep(const String& m, const VectorMap<String, String>& mac,
 		}
 		else
 			r.Cat(*s++);
-	return Split(r, CharFilterTextTest(CharFilterEol));
+	return Split(r, CharFilterEol);
 }
 
-bool IsCd(const String& cmd) {
+bool CppBuilder::Cd(const String& cmd) {
 	if(cmd.GetLength() > 2 && ToLower(cmd.Mid(0, 3)) == "cd ") {
+		String path = cmd.Mid(3);
 	#ifdef PLATFOTM_POSIX
 		chdir(path);
 	#endif
 	#ifdef PLATFORM_WIN32
-		SetCurrentDirectory(cmd.Mid(3));
+		SetCurrentDirectory(path);
 	#endif
+		return true;
+	}
+	return false;
+}
+
+bool CppBuilder::Cp(const String& cmd, const String& package, bool& error) {
+	if(cmd.GetLength() > 2 && ToLower(cmd.Mid(0, 3)) == "cp ") {
+		Vector<String> path = Split(cmd.Mid(3), ' ');
+		if(path.GetCount() == 2) {
+			String p = GetFileFolder(PackagePath(package));
+			String p1 = NormalizePath(path[0], p);
+			String p2 = NormalizePath(path[1], p);
+			RealizePath(p2);
+			if(!FileExists(p1)) {
+				PutConsole("FAILED: " + cmd);
+				error = true;
+			}
+			SaveFile(p2, LoadFile(p1));
+		}
 		return true;
 	}
 	return false;
@@ -207,10 +224,124 @@ static void AddPath(VectorMap<String, String>& out, String key, String path)
 	out.Add(key + "_UNIX", UnixPath(path));
 }
 
-Vector<String> CppBuilder::CustomStep(const String& path)
+void sGatherAllExt(Vector<String>& files, Vector<String>& dirs, const String& pp, const String& p)
 {
+	dirs.Add(p);
+	FindFile ff(pp + "/" + p + "/*.*");
+	while(ff) {
+		String n = Merge("/", p, ff.GetName());
+		if(ff.IsFile())
+			files.Add(n);
+		else
+		if(ff.IsFolder()) {
+			sGatherAllExt(files, dirs, pp, n);
+		}
+		ff.Next();
+	}
+}
+
+Vector<String> ReadPatterns(CParser& p)
+{
+	Vector<String> out;
+	while(!p.IsEof() && !p.Char(';')) {
+		out << ReadValue(p);
+		p.Char(',');
+	}
+	return out;
+}
+
+void ExtExclude(CParser& p, Index<String>& x)
+{
+	Vector<String> e = ReadPatterns(p);
+	Vector<int> remove;
+	for(int i = 0; i < x.GetCount(); i++)
+		for(int j = 0; j < e.GetCount(); j++) {
+			if(PatternMatch(e[j], x[i])) {
+				remove.Add(i);
+				break;
+			}
+		}
+	x.Remove(remove);
+}
+
+Vector<String> CppBuilder::CustomStep(const String& pf, const String& package_, bool& error)
+{
+	String package = Nvl(package_, mainpackage);
+	String path = (*pf == '.' && pf[1] != '.') ? target : SourcePath(package, pf);
 	String file = GetHostPath(path);
-	String ext = ToLower(GetFileExt(file));
+	String ext = ToLower(GetFileExt(pf));
+	if(ext == ".ext") {
+		Vector<String> files;
+		Vector<String> dirs;
+		sGatherAllExt(files, dirs, GetFileFolder(path), "");
+		
+		Index<String> pkg_files;
+		Package pkg;
+		pkg.Load(PackagePath(package));
+		for(int i = 0; i < pkg.GetCount(); i++)
+			pkg_files.Add(pkg[i]);
+		
+		Index<String> out;
+		Index<String> include_path;
+		String f = LoadFile(path);
+		try {
+			CParser p(f);
+			while(!p.IsEof()) {
+				if(p.Id("files")) {
+					Vector<String> e = ReadPatterns(p);
+					for(int i = 0; i < files.GetCount(); i++)
+						for(int j = 0; j < e.GetCount(); j++) {
+							String f = files[i];
+							if(PatternMatch(e[j], f) && pkg_files.Find(f) < 0)
+								out.FindAdd(f);
+						}
+				}
+				if(p.Id("exclude")) {
+					ExtExclude(p, out);
+				}
+				if(p.Id("include_path")) {
+					Vector<String> e = ReadPatterns(p);
+					for(int j = 0; j < e.GetCount(); j++) {
+						String ee = e[j];
+						if(ee.Find('*') >= 0)
+							for(int i = 0; i < dirs.GetCount(); i++) {
+								String d = dirs[i];
+								if(PatternMatch(e[j], d)) {
+									include_path.FindAdd(d);
+								}
+							}
+						else
+							include_path.Add(ee);
+					}
+				}
+				if(p.Id("exclude_path")) {
+					ExtExclude(p, include_path);
+				}
+				if(p.Id("includes")) {
+					Vector<String> e = ReadPatterns(p);
+					for(int i = 0; i < files.GetCount(); i++)
+						for(int j = 0; j < e.GetCount(); j++) {
+							String f = files[i];
+							if(PatternMatch(e[j], f) && pkg_files.Find(f) < 0)
+								include_path.FindAdd(GetFileFolder(f));
+						}
+				}
+			}
+		}
+		catch(CParser::Error) {
+			PutConsole("Invalid .ext file");
+			error = true;
+			return Vector<String>();
+		}
+		
+		for(int i = 0; i < include_path.GetCount(); i++)
+			include.Add(NormalizePath(include_path[i], GetFileFolder(path)));
+		
+		Vector<String> o;
+		for(int i = 0; i < out.GetCount(); i++)
+			o.Add(SourcePath(package, out[i]));
+		return o;
+	}
 	for(int i = 0; i < wspc.GetCount(); i++) {
 		const Array< ::CustomStep >& mv = wspc.GetPackage(i).custom;
 		for(int j = 0; j < mv.GetCount(); j++) {
@@ -218,14 +349,24 @@ Vector<String> CppBuilder::CustomStep(const String& path)
 			if(MatchWhen(m.when, config.GetKeys()) && m.MatchExt(ext)) {
 				VectorMap<String, String> mac;
 				AddPath(mac, "PATH", file);
-				AddPath(mac, "DIR", GetFileFolder(file));
+				AddPath(mac, "RELPATH", pf);
+				AddPath(mac, "DIR", GetFileFolder(PackagePath(package)));
+				AddPath(mac, "FILEDIR", GetFileFolder(file));
+				AddPath(mac, "PACKAGE", package);
 				mac.Add("FILE", GetFileName(file));
 				mac.Add("TITLE", GetFileTitle(file));
-				AddPath(mac, "OUTPATH", GetHostPath(target));
+				AddPath(mac, "EXEPATH", GetHostPath(target));
+				AddPath(mac, "EXEDIR", GetHostPath(GetFileFolder(target)));
+				mac.Add("EXEFILE", GetFileName(target));
+				mac.Add("EXETITLE", GetFileTitle(target));
 				AddPath(mac, "OUTDIR", GetHostPath(outdir));
-				mac.Add("OUTFILE", GetFileName(target));
-				mac.Add("OUTTITLE", GetFileTitle(target));
+				//BW
+				AddPath(mac, "OUTDIR", GetHostPath(GetFileFolder(target)));
+				AddPath(mac, "OUTFILE", GetHostPath(GetFileName(target)));
+				AddPath(mac, "OUTTITLE", GetHostPath(GetFileTitle(target)));
+
 				mac.Add("INCLUDE", Join(include, ";"));
+
 				Vector<String> out = Cuprep(m.output, mac, include);
 				bool dirty = out.IsEmpty();
 				for(int i = 0; !dirty && i < out.GetCount(); i++)
@@ -235,8 +376,9 @@ Vector<String> CppBuilder::CustomStep(const String& path)
 					PutConsole(GetFileName(file));
 					Vector<String> cmd = Cuprep(m.command, mac, include);
 					String cmdtext;
-					for(int c = 0; c < cmd.GetCount(); c++)
-						if(!IsCd(cmd[c])) {
+					for(int c = 0; c < cmd.GetCount(); c++) {
+						PutVerbose(cmd[c]);
+						if(!Cd(cmd[c]) && !Cp(cmd[c], package, error)) {
 							String ctext = cmd[c];
 							const char *cm = ctext;
 							if(*cm == '?')
@@ -244,9 +386,12 @@ Vector<String> CppBuilder::CustomStep(const String& path)
 							if(*ctext != '?' && Execute(cm)) {
 								for(int t = 0; t < out.GetCount(); t++)
 									DeleteFile(out[t]);
+								PutConsole("FAILED: " + ctext);
+								error = true;
 								return Vector<String>();
 							}
 						}
+					}
 				}
 				return out;
 			}
@@ -257,84 +402,12 @@ Vector<String> CppBuilder::CustomStep(const String& path)
 	return out;
 }
 
-static Time s_bb = Null;
-
-Time BlitzBaseTime()
-{
-	if(IsNull(s_bb))
-		s_bb = GetSysTime();
-	return max(GetSysTime() - 3600, s_bb);
-}
-
-Blitz CppBuilder::BlitzStep(Vector<String>& sfile, Vector<String>& soptions,
-                            Vector<String>& obj, const char *objext,
-                            Vector<bool>& optimize)
-{
-	Blitz b;
-	Time now = GetSysTime();
-	Vector<String> excluded;
-	Vector<String> excludedoptions;
-	Vector<bool>   excludedoptimize;
-	b.object = CatAnyPath(outdir, "$blitz" + String(objext));
-	Time blitztime = GetFileTime(b.object);
-	String blitz;
-	b.count = 0;
-	b.build = false;
-	if(!IdeGetOneFile().IsEmpty())
-		return b;
-	for(int i = 0; i < sfile.GetCount(); i++) {
-		String fn = sfile[i];
-		String ext = ToLower(GetFileExt(fn));
-		String objfile = CatAnyPath(outdir, GetFileTitle(fn) + objext);
-		Time fntime = GetFileTime(fn);
-		if((ext == ".cpp" || ext == ".cc" || ext == ".cxx")
-		   && HdependBlitzApproved(fn) && IsNull(soptions[i]) && !optimize[i]
-//		   && (fntime < blitztime || !blitzexists)
-//		   && (!FileExists(objfile) || now - fntime > 3600)) { // Causes a strage oscillation
-		   && fntime < BlitzBaseTime()) {
-			if(HdependFileTime(fn) > blitztime)
-				b.build = true;
-			blitz << "\r\n"
-			      << "#define BLITZ_INDEX__ F" << i << "\r\n"
-			      << "#include \"" << GetHostPath(fn) << "\"\r\n";
-			b.info << ' ' << GetFileName(fn);
-			const Vector<String>& d = HdependGetDefines(fn);
-			for(int i = 0; i < d.GetCount(); i++)
-				blitz << "#ifdef " << d[i] << "\r\n"
-				      << "#undef " << d[i] << "\r\n"
-				      << "#endif\r\n";
-			blitz << "#undef BLITZ_INDEX__\r\n";
-			b.count++;
-		}
-		else {
-			excluded.Add(fn);
-			excludedoptions.Add(soptions[i]);
-			excludedoptimize.Add(optimize[i]);
-		}
-	}
-	b.path = CatAnyPath(outdir, "$blitz.cpp");
-	if(b.count > 1) {
-		sfile = excluded;
-		soptions = excludedoptions;
-		optimize = excludedoptimize;
-		if(LoadFile(b.path) != blitz) {
-			SaveFile(b.path, blitz);
-			b.build = true;
-		}
-		obj.Add(b.object);
-	}
-	else {
-		DeleteFile(b.path);
-		b.build = false;
-	}
-	return b;
-}
-
 String CppBuilder::Includes(const char *sep, const String& package, const Package& pkg)
 {
 	String cc;
 	for(int i = 0; i < include.GetCount(); i++)
 		cc << sep << GetHostPathQ(include[i]);
+	cc << sep << GetHostPathQ(outdir);
 	return cc;
 }
 
@@ -343,119 +416,89 @@ String CppBuilder::IncludesShort(const char *sep, const String& package, const P
 	String cc;
 	for(int i = 0; i < include.GetCount(); i++)
 		cc << sep << GetHostPathShortQ(include[i]);
+	cc << sep << GetHostPathShortQ(outdir);
+	return cc;
+}
+
+bool IsSvnDir2(const String& p)
+{ // this is a cope of usvn/IsSvnDir to avoid modular issues
+	if(IsNull(p))
+		return false;
+	if(DirectoryExists(AppendFileName(p, ".svn")) || DirectoryExists(AppendFileName(p, "_svn")))
+		return true;
+	String path = p;
+	String path0;
+	while(path != path0) {
+		path0 = path;
+		path = GetFileFolder(path);
+		if(DirectoryExists(AppendFileName(path, ".svn")))
+			return true;
+	}
+	return false;
+}
+
+Vector<String> SvnInfo(const String& package)
+{
+	Vector<String> info;
+	String d = GetFileFolder(PackagePath(package));
+	if(IsSvnDir2(d)) {
+		String v = Sys("svnversion " + d);
+		if(IsDigit(*v))
+			info.Add("#define bmSVN_REVISION " + AsCString(TrimBoth(v)));
+		v = Sys("svn info " + d);
+		StringStream in(v);
+		while(!in.IsEof()) {
+			String l = in.GetLine();
+			if(l.StartsWith("URL: ")) {
+				info.Add("#define bmSVN_URL " + AsCString(TrimBoth(l.Mid(5))));
+				break;
+			}
+		}
+	}
+	return info;
+}
+
+void CppBuilder::SaveBuildInfo(const String& package)
+{
+	String path = AppendFileName(outdir, "build_info.h");
+	RealizePath(path);
+	FileOut info(path);
+	Time t = GetSysTime();
+	info << "#define bmYEAR   " << (int)t.year << "\r\n";
+	info << "#define bmMONTH  " << (int)t.month << "\r\n";
+	info << "#define bmDAY    " << (int)t.day << "\r\n";
+	info << "#define bmHOUR   " << (int)t.hour << "\r\n";
+	info << "#define bmMINUTE " << (int)t.minute << "\r\n";
+	info << "#define bmSECOND " << (int)t.second << "\r\n";
+	info << Format("#define bmTIME   Time(%d, %d, %d, %d, %d, %d)\r\n",
+	        (int)t.year, (int)t.month, (int)t.day, (int)t.hour, (int)t.minute, (int)t.second);
+	info << "#define bmMACHINE " << AsCString(GetComputerName()) << "\r\n";
+	info << "#define bmUSER    " << AsCString(GetUserName()) << "\r\n";
+
+	if(package == mainpackage)
+		info << Join(SvnInfo(package), "\r\n");
+}
+
+String CppBuilder::DefinesTargetTime(const char *sep, const String& package, const Package& pkg)
+{
+	String cc;
+	for(int i = 0; i < config.GetCount(); i++)
+		cc << sep << "flag" << config[i];
+	if(main_conf)
+		cc << sep << "MAIN_CONF";
+	targettime = GetFileTime(target);
+	
 	return cc;
 }
 
 String CppBuilder::IncludesDefinesTargetTime(const String& package, const Package& pkg)
 {
 	String cc = Includes(" -I", package, pkg);
-	for(int i = 0; i < config.GetCount(); i++)
-		cc << " -Dflag" << config[i];
-	Time t = GetSysTime();
-	cc << " -DbmYEAR=" << (int)t.year;
-	cc << " -DbmMONTH=" << (int)t.month;
-	cc << " -DbmDAY=" << (int)t.day;
-	cc << " -DbmHOUR=" << (int)t.hour;
-	cc << " -DbmMINUTE=" << (int)t.minute;
-	cc << " -DbmSECOND=" << (int)t.second;
-	targettime = GetFileTime(target);
+	cc << DefinesTargetTime(" -D", package, pkg);
 	return cc;
 }
 
-static void WriteByteArray(StringBuffer& fo, const String& data)
+bool CppBuilder::HasAnyDebug() const
 {
-	int pos = 0;
-	for(int p = 0; p < data.GetLength(); p++) {
-		if(pos >= 70) {
-			fo << '\n';
-			pos = 0;
-		}
-		if(pos == 0)
-			fo << '\t';
-		String part = FormatInt((byte)data[p]);
-		fo << part << ", ";
-		pos += part.GetLength() + 2;
-	}
-}
-
-String CppBuilder::BrcToC(String objfile, CParser& binscript, String basedir,
-                          const String& package, const Package& pkg)
-{
-	BinObjInfo info;
-	info.Parse(binscript, basedir);
-	StringBuffer fo;
-	for(int i = 0; i < info.blocks.GetCount(); i++) {
-		String ident = info.blocks.GetKey(i);
-		ArrayMap<int, BinObjInfo::Block>& belem = info.blocks[i];
-		if(belem[0].flags & (BinObjInfo::Block::FLG_ARRAY | BinObjInfo::Block::FLG_MASK)) {
-			int count = Max(belem.GetKeys()) + 1;
-			Vector<BinObjInfo::Block *> blockref;
-			blockref.SetCount(count, 0);
-			for(int a = 0; a < belem.GetCount(); a++) {
-				BinObjInfo::Block& b = belem[a];
-				blockref[b.index] = &b;
-			}
-			for(int i = 0; i < blockref.GetCount(); i++)
-				if(blockref[i]) {
-					BinObjInfo::Block& b = *blockref[i];
-					fo << "static char " << ident << "_" << i << "[] = {\n";
-					String data = ::LoadFile(b.file);
-					if(data.IsVoid())
-						throw Exc(NFormat("Ошибка при чтении файла '%s'", b.file));
-					if(data.GetLength() != b.length)
-						throw Exc(NFormat("длина файла '%s' изменена с (%d -> %d) при создании объекта",
-							b.file, b.length, data.GetLength()));
-					switch(b.encoding) {
-						case BinObjInfo::Block::ENC_BZ2: data = BZ2Compress(data); break;
-						case BinObjInfo::Block::ENC_ZIP: data = ZCompress(data); break;
-					}
-					b.length = data.GetLength();
-					data.Cat('\0');
-					WriteByteArray(fo, data);
-					fo << "\n};\n\n";
-//					fo << AsCString(data, 70, "\t", ASCSTRING_OCTALHI | ASCSTRING_SMART) << ";\n\n";
-				}
-
-			fo << "int " << ident << "_count = " << blockref.GetCount() << ";\n\n"
-			"int " << ident << "_length[] = {\n";
-			for(int i = 0; i < blockref.GetCount(); i++)
-				fo << '\t' << (blockref[i] ? blockref[i]->length : -1) << ",\n";
-			fo << "};\n\n"
-			"char *" << ident << "[] = {\n";
-			for(int i = 0; i < blockref.GetCount(); i++)
-				if(blockref[i])
-					fo << '\t' << ident << '_' << i << ",\n";
-				else
-					fo << "\t0,\n";
-			fo << "};\n\n";
-			if(belem[0].flags & BinObjInfo::Block::FLG_MASK) {
-				fo << "char *" << ident << "_files[] = {\n";
-				for(int i = 0; i < blockref.GetCount(); i++)
-					fo << '\t' << AsCString(blockref[i] ? GetFileName(blockref[i]->file) : String(Null)) << ",\n";
-				fo << "\n};\n\n";
-			}
-		}
-		else {
-			BinObjInfo::Block& b = belem[0];
-			fo << "static char " << ident << "_[] = {\n";
-			String data = ::LoadFile(b.file);
-			if(data.IsVoid())
-				throw Exc(NFormat("Ошибка при чтении файла '%s'", b.file));
-			if(data.GetLength() != b.length)
-				throw Exc(NFormat("длина файла '%s' измеена с (%d -> %d) при создании объекта",
-					b.file, b.length, data.GetLength()));
-			switch(b.encoding) {
-				case BinObjInfo::Block::ENC_BZ2: data = BZ2Compress(data); break;
-				case BinObjInfo::Block::ENC_ZIP: data = ZCompress(data); break;
-			}
-			int b_length = data.GetLength();
-			data.Cat('\0');
-			WriteByteArray(fo, data);
-			fo << "\n};\n\n"
-			"char *" << ident << " = " << ident << "_;\n\n"
-//			fo << AsCString(data, 70) << ";\n\n"
-			"int " << ident << "_length = " << b_length << ";\n\n";
-		}
-	}
-	return fo;
+	return HasFlag("DEBUG") || HasFlag("DEBUG_MINIMAL") || HasFlag("DEBUG_FULL");
 }

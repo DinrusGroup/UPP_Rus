@@ -1,27 +1,50 @@
 #include "Painter.h"
 
-NAMESPACE_UPP
+namespace Upp {
+
+struct PaintCharPath : FontGlyphConsumer {
+	Painter *sw;
+	
+	virtual void Move(Pointf p) {
+		sw->Move(p);
+	}
+	virtual void Line(Pointf p) {
+		sw->Line(p);
+	}
+	virtual void Quadratic(Pointf p1, Pointf p2) {
+		sw->Quadratic(p1, p2);
+	}
+	virtual void Cubic(Pointf p1, Pointf p2, Pointf p3) {
+		sw->Cubic(p1, p2, p3);
+	}
+	virtual void Close() {
+		sw->Close();
+	}
+};
 
 void PaintCharacter(Painter& sw, const Pointf& p, int chr, Font font)
 {
 	GlyphInfo gi = GetGlyphInfo(font, chr);
+	PaintCharPath pw;
+	pw.sw = &sw;
 	if(gi.IsNormal())
-		PaintCharacterSys(sw, p.x, p.y, chr, font);
+		font.Render(pw, p.x, p.y, chr);
 	else
 	if(gi.IsReplaced()) {
 		Font fnt = font;
 		fnt.Face(gi.lspc);
 		fnt.Height(gi.rspc);
-		PaintCharacterSys(sw, p.x, p.y + font.GetAscent() - fnt.GetAscent(), chr, fnt);
+		fnt.Render(pw, p.x, p.y + font.GetAscent() - fnt.GetAscent(), chr);
 	}
 	else
 	if(gi.IsComposed()) {
 		ComposedGlyph cg;
 		Compose(font, chr, cg);
-		PaintCharacterSys(sw, p.x, p.y, cg.basic_char, font);
+		font.Render(pw, p.x, p.y, cg.basic_char);
 		sw.Div();
-		PaintCharacterSys(sw, p.x + cg.mark_pos.x, p.y + cg.mark_pos.y, cg.mark_char, cg.mark_font);
+		cg.mark_font.Render(pw, p.x + cg.mark_pos.x, p.y + cg.mark_pos.y, cg.mark_char);
 	}
+	sw.EvenOdd(true);
 }
 
 Painter& Painter::Move(const Pointf& p)
@@ -339,6 +362,12 @@ Painter& Painter::Fill(double x1, double y1, const RGBA& color1, double x2, doub
 	return Fill(Pointf(x1, y1), color1, Pointf(x2, y2), color2, style);
 }
 
+Painter& Painter::Fill(const RGBA& color1, const RGBA& color2, const Xform2D& transsrc, dword flags)
+{
+	FillOp(color1, color2, transsrc, flags);
+	return *this;
+}
+
 Painter& Painter::Fill(double fx, double fy, const RGBA& color1, double cx, double cy, double r, const RGBA& color2, int style)
 {
 	return Fill(Pointf(fx, fy), color1, Pointf(cx, cy), r, color2, style);
@@ -352,6 +381,18 @@ Painter& Painter::Fill(const Pointf& c, const RGBA& color1, double r, const RGBA
 Painter& Painter::Fill(double x, double y, const RGBA& color1, double r, const RGBA& color2, int style)
 {
 	return Fill(Pointf(x, y), color1, r, color2, style);
+}
+
+Painter& Painter::Fill(const Pointf& f, const RGBA& color1, const RGBA& color2, const Xform2D& transsrc, int style)
+{
+	FillOp(f, color1, color2, transsrc, style);
+	return *this;
+}
+
+Painter& Painter::Stroke(double width, const Pointf& f, const RGBA& color1, const RGBA& color2, const Xform2D& transsrc, int style)
+{
+	StrokeOp(width, f, color1, color2, transsrc, style);
+	return *this;
 }
 
 Painter& Painter::Translate(double x, double y)
@@ -378,6 +419,12 @@ Painter& Painter::Stroke(double width, const Image& image, double x1, double y1,
 Painter& Painter::Stroke(double width, double x1, double y1, const RGBA& color1, double x2, double y2, const RGBA& color2, int style)
 {
 	return Stroke(width, Pointf(x1, y1), color1, Pointf(x2, y2), color2, style);
+}
+
+Painter& Painter::Stroke(double width, const RGBA& color1, const RGBA& color2, const Xform2D& transsrc, dword flags)
+{
+	StrokeOp(width, color1, color2, transsrc, flags);
+	return *this;
 }
 
 Painter& Painter::Stroke(double width, double fx, double fy, const RGBA& color1, double cx, double cy, double r, const RGBA& color2, int style)
@@ -434,7 +481,7 @@ Painter& Painter::Character(double x, double y, int ch, Font fnt)
 	return Character(Pointf(x, y), ch, fnt);
 }
 
-void Painter::TextOp(const Pointf& p, const wchar *text, Font fnt, int n, double *dx)
+void Painter::TextOp(const Pointf& p, const wchar *text, Font fnt, int n, const double *dx)
 {
 	if(n == 0) {
 		Move(0, 0);
@@ -452,41 +499,49 @@ void Painter::TextOp(const Pointf& p, const wchar *text, Font fnt, int n, double
 			x += fi[ch];
 		n--;
 	}
+	if(fnt.IsUnderline() || fnt.IsStrikeout()) {
+		double a = fnt.GetAscent();
+		double cy = max(a / 16, 1.0);
+		double cx = x - p.x;
+		if(fnt.IsUnderline())
+			Rectangle(p.x, p.y + a + cy, cx, cy);
+		if(fnt.IsStrikeout())
+			Rectangle(p.x, p.y + 2 * a / 3, cx, cy);
+	}
 }
 
-Painter& Painter::Text(double x, double y, const wchar *text, Font fnt, int n, double *dx)
+Painter& Painter::Text(double x, double y, const wchar *text, Font fnt, int n, const double *dx)
 {
 	return Text(Pointf(x, y), text, fnt, n < 0 ? wstrlen(text) : n, dx);
 }
 
-Painter& Painter::Text(const Pointf& p, const WString& s, Font fnt, double *dx)
+Painter& Painter::Text(const Pointf& p, const WString& s, Font fnt, const double *dx)
 {
 	return Text(p, ~s, fnt, s.GetLength(), dx);
 }
 
-Painter& Painter::Text(double x, double y, const WString& s, Font fnt, double *dx)
+Painter& Painter::Text(double x, double y, const WString& s, Font fnt, const double *dx)
 {
 	return Text(Pointf(x, y), s, fnt, dx);
 }
 
-Painter& Painter::Text(const Pointf& p, const String& s, Font fnt, double *dx)
+Painter& Painter::Text(const Pointf& p, const String& s, Font fnt, const double *dx)
 {
 	return Text(p, s.ToWString(), fnt, dx);
 }
 
-Painter& Painter::Text(double x, double y, const String& s, Font fnt, double *dx)
+Painter& Painter::Text(double x, double y, const String& s, Font fnt, const double *dx)
 {
 	return Text(Pointf(x, y), s, fnt, dx);
 }
 
-Painter& Painter::Text(const Pointf& p, const char *text, Font fnt, int n, double *dx)
+Painter& Painter::Text(const Pointf& p, const char *text, Font fnt, int n, const double *dx)
 {
-	if(n < 0)
-		n = strlen(text);
-	return Text(p, ToUnicode(text, n, CHARSET_DEFAULT), fnt, n, dx);
+	WString s = ToUnicode(text, CHARSET_DEFAULT);
+	return Text(p, s, fnt, n < 0 ? s.GetCount() : n, dx);
 }
 
-Painter& Painter::Text(double x, double y, const char *text, Font fnt, int n, double *dx)
+Painter& Painter::Text(double x, double y, const char *text, Font fnt, int n, const double *dx)
 {
 	return Text(Pointf(x, y), text, fnt, n, dx);
 }
@@ -500,13 +555,18 @@ Painter& Painter::Rectangle(double x, double y, double cx, double cy)
 
 Painter& Painter::RoundedRectangle(double x, double y, double cx, double cy, double r)
 {
-	ASSERT(r >= 0);
+	return RoundedRectangle(x, y, cx, cy, r, r);
+}
+
+Painter& Painter::RoundedRectangle(double x, double y, double cx, double cy, double rx, double ry)
+{
+	ASSERT(rx >= 0 && ry >= 0);
 	if (cx < 0) { x += cx; cx = -cx;}
 	if (cy < 0) { y += cy; cy = -cy;}
-	Move(x + r, y).Arc(x + r, y + r, r, r, -M_PI / 2, -M_PI / 2)
-	.Line(x, y + cy - r).Arc(x + r, y + cy - r, r, r, M_PI, -M_PI / 2)
-	.Line(x + cx - r, y + cy).Arc(x + cx - r, y + cy - r, r, r, M_PI / 2, -M_PI / 2)
-	.Line(x + cx, y + r).Arc(x + cx - r, y + r, r, r, 0, -M_PI / 2).Line(x + r, y);
+	Move(x + rx, y).Arc(x + rx, y + ry, rx, ry, -M_PI / 2, -M_PI / 2)
+	.Line(x, y + cy - ry).Arc(x + rx, y + cy - ry, rx, ry, M_PI, -M_PI / 2)
+	.Line(x + cx - rx, y + cy).Arc(x + cx - rx, y + cy - ry, rx, ry, M_PI / 2, -M_PI / 2)
+	.Line(x + cx, y + ry).Arc(x + cx - rx, y + ry, rx, ry, 0, -M_PI / 2).Line(x + rx, y);
 	return *this;
 }
 
@@ -533,15 +593,19 @@ void NilPainter::CloseOp() {}
 void NilPainter::DivOp() {}
 void NilPainter::FillOp(const RGBA& color) {}
 void NilPainter::FillOp(const Image& image, const Xform2D& transsrc, dword flags) {}
+void NilPainter::FillOp(const RGBA& color1, const RGBA& color2, const Xform2D& transsrc, int style) {}
 void NilPainter::FillOp(const Pointf& p1, const RGBA& color1, const Pointf& p2, const RGBA& color2, int style) {}
 void NilPainter::FillOp(const Pointf& f, const RGBA& color1, const Pointf& c, double r, const RGBA& color2, int style) {}
+void NilPainter::FillOp(const Pointf& f, const RGBA& color1, const RGBA& color2, const Xform2D& transsrc, int style) {}
 void NilPainter::StrokeOp(double width, const RGBA& rgba) {}
 void NilPainter::StrokeOp(double width, const Image& image, const Xform2D& transsrc, dword flags) {}
+void NilPainter::StrokeOp(double width, const RGBA& color1, const RGBA& color2, const Xform2D& transsrc, int style) {}
 void NilPainter::StrokeOp(double width, const Pointf& p1, const RGBA& color1, const Pointf& p2, const RGBA& color2, int style) {}
 void NilPainter::StrokeOp(double width, const Pointf& f, const RGBA& color1, const Pointf& c, double r, const RGBA& color2, int style) {}
+void NilPainter::StrokeOp(double width, const Pointf& f, const RGBA& color1, const RGBA& color2, const Xform2D& transsrc, int style) {}
 void NilPainter::ClipOp() {}
 void NilPainter::CharacterOp(const Pointf& p, int ch, Font fnt) {}
-void NilPainter::TextOp(const Pointf& p, const wchar *text, Font fnt, int n, double *dx) {}
+void NilPainter::TextOp(const Pointf& p, const wchar *text, Font fnt, int n, const double *dx) {}
 void NilPainter::ColorStopOp(double pos, const RGBA& color) {}
 void NilPainter::ClearStopsOp() {}
 void NilPainter::OpacityOp(double o) {}
@@ -574,4 +638,4 @@ DrawPainter::~DrawPainter()
 	w.DrawImage(0, 0, *this);
 }
 	
-END_UPP_NAMESPACE
+}

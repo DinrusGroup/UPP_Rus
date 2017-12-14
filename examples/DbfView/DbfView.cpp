@@ -40,7 +40,7 @@ void DbfView::Perform()
 	if(!fs.ExecuteOpen("DBF..")) return;
 	StoreToFile(fs);
 	if(!dbf.Open(~fs))
-		Exclamation("Не удаётся открыть вводный файл");
+		Exclamation("Can't open input file");
 	for(int i = 0; i < min(4, dbf.GetFieldCount()); i++)
 		table.AddColumn(FormatField(dbf.GetField(i)));
 	while(dbf.Fetch()) {
@@ -59,8 +59,8 @@ DbfView::DbfView()
 	Add(s.SizePos());
 	Sizeable().Zoomable();
 	table.WhenEnterRow = THISBACK(EnterRow);
-	row.AddColumn("Столбец");
-	row.AddColumn("Значение", 2);
+	row.AddColumn("Column");
+	row.AddColumn("Value", 2);
 }
 
 GUI_APP_MAIN

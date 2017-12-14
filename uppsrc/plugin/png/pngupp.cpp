@@ -7,7 +7,7 @@
 #include <Draw/Draw.h>
 #include "png.h"
 
-NAMESPACE_UPP
+namespace Upp {
 
 #define LLOG(x)  // LOG(x)
 
@@ -231,7 +231,7 @@ bool PNGRaster::Create()
 	}
 */
 
-	data->row_bytes = png_get_rowbytes(data->png_ptr, data->info_ptr);
+	data->row_bytes = (int)png_get_rowbytes(data->png_ptr, data->info_ptr);
 	data->next_row = 0;
 	data->preload = (interlace_type != PNG_INTERLACE_NONE);
 	data->loaded = false;
@@ -514,4 +514,8 @@ void PNGEncoder::WriteLineRaw(const byte *s)
 	data->WriteLineRaw(s);
 }
 
-END_UPP_NAMESPACE
+INITIALIZER(PNGRaster) {
+	StreamRaster::Register<PNGRaster>();
+}
+
+}

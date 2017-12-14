@@ -1,9 +1,7 @@
 template <class I>
 inline void IterSwap(I a, I b) { if(a != b) Swap(*a, *b); }
 
-class EmptyClass
-{
-};
+struct EmptyClass {};
 
 template <class T, class B = EmptyClass>
 class RelOps : public B
@@ -132,42 +130,6 @@ inline void Fill(unsigned char *t, const unsigned char *lim, const unsigned char
 inline void Copy(unsigned char *dst, const unsigned char *src, const unsigned char *lim)
 { memcpy(dst, src, size_t((byte *)lim - (byte *)src)); }
 
-template <class T>
-inline T& DeepCopyConstruct(void *p, const T& x) {
-	return *(::new(p) T(x));
-}
-
-template <class T>
-inline T *DeepCopyNew(const T& x) {
-	return new T(x);
-}
-
-template <class T>
-inline void ConstructArray(T *t, const T *lim) {
-	while(t < lim)
-		::new(t++) T;
-}
-
-template <class T>
-inline void DestroyArray(T *t, const T *lim) {
-	while(t < lim) {
-		t->T::~T();
-		t++;
-	}
-}
-
-template <class T>
-inline void DeepCopyConstructArray(T *t, const T *s, const T *lim) {
-	while(s < lim)
-		DeepCopyConstruct(t++, *s++);
-}
-
-template <class T>
-inline void DeepCopyConstructFill(T *t, const T *lim, const T& x) {
-	while(t < lim)
-		DeepCopyConstruct(t++, x);
-}
-
 #ifdef NO_MOVEABLE_CHECK
 
 template <class T>
@@ -178,6 +140,10 @@ inline void AssertMoveable(T *) {}
 template <class T, class B = EmptyClass>
 class Moveable : public B
 {
+};
+
+template <class T>
+struct Moveable_ {
 };
 
 #define NTL_MOVEABLE(T)
@@ -197,6 +163,11 @@ struct Moveable : public B {
 };
 
 template <class T>
+struct Moveable_ {
+	friend void AssertMoveable0(T *) {}
+};
+
+template <class T>
 inline void AssertMoveable(T *t = 0) { if(t) AssertMoveable0(t); }
 
 #if defined(COMPILER_MSC) || defined(COMPILER_GCC) && (__GNUC__ < 4 || __GNUC_MINOR__ < 1)
@@ -207,65 +178,160 @@ inline void AssertMoveable(T *t = 0) { if(t) AssertMoveable0(t); }
 
 #endif
 
-NTL_MOVEABLE(bool);
-NTL_MOVEABLE(char);
-NTL_MOVEABLE(signed char);
-NTL_MOVEABLE(unsigned char);
-NTL_MOVEABLE(short);
-NTL_MOVEABLE(unsigned short);
-NTL_MOVEABLE(int);
-NTL_MOVEABLE(unsigned int);
-NTL_MOVEABLE(long);
-NTL_MOVEABLE(unsigned long);
-NTL_MOVEABLE(int64);
-NTL_MOVEABLE(uint64);
-NTL_MOVEABLE(float);
-NTL_MOVEABLE(double);
-NTL_MOVEABLE(void *);
-NTL_MOVEABLE(const void *);
+NTL_MOVEABLE(bool)
+NTL_MOVEABLE(char)
+NTL_MOVEABLE(signed char)
+NTL_MOVEABLE(unsigned char)
+NTL_MOVEABLE(short)
+NTL_MOVEABLE(unsigned short)
+NTL_MOVEABLE(int)
+NTL_MOVEABLE(unsigned int)
+NTL_MOVEABLE(long)
+NTL_MOVEABLE(unsigned long)
+NTL_MOVEABLE(int64)
+NTL_MOVEABLE(uint64)
+NTL_MOVEABLE(float)
+NTL_MOVEABLE(double)
+NTL_MOVEABLE(void *)
+NTL_MOVEABLE(const void *)
 
 #if defined(_NATIVE_WCHAR_T_DEFINED) || defined(COMPILER_GCC)
-NTL_MOVEABLE(wchar_t);
+NTL_MOVEABLE(wchar_t)
 #endif
+
+template <class T, class B = EmptyClass>
+class WithClone : public B {
+public:
+	friend T do_clone(const T& src) { T c(src, 1); return c; }
+};
 
 template <class T, class B = EmptyClass>
 class DeepCopyOption : public B {
 public:
+#ifdef DEPRECATED
 	friend T& operator<<=(T& dest, const T& src)
 	{ if(&dest != &src) { (&dest)->T::~T(); ::new(&dest) T(src, 1); } return dest; }
-	friend T& DeepCopyConstruct(void *dest, const T& src)
-	{ return *(::new (dest) T(src, 0)); }
-	friend T *DeepCopyNew(const T& src)
-	{ return ::new T(src, 0); }
+#endif
+	friend T  do_clone(const T& src) { T c(src, 1); return c; }
 };
 
 template <class T, class B = EmptyClass>
-class MoveableAndDeepCopyOption : public Moveable< T, DeepCopyOption<T, B> > {};
-
-template <class T, class B = EmptyClass>
-class PolyDeepCopyNew : public B
-{
-public:
-	friend T *DeepCopyNew(const T& t)              { return t.Copy(); }
+class MoveableAndDeepCopyOption : public B {
+	friend void AssertMoveable0(T *) {}
+#ifdef DEPRECATED
+	friend T& operator<<=(T& dest, const T& src)
+	{ if(&dest != &src) { (&dest)->T::~T(); ::new(&dest) T(src, 1); } return dest; }
+#endif
+	friend T  clone(const T& src) { T c(src, 1); return c; }
 };
 
 template <class T>
 class WithDeepCopy : public T {
 public:
-	WithDeepCopy(const T& a) : T(a, 1)             {}
-	WithDeepCopy(const WithDeepCopy& a) : T(a, 1)  {}
-	WithDeepCopy& operator=(const WithDeepCopy& a) { (T&)*this <<= a; return *this; }
-	WithDeepCopy(int, pick_ T& a) : T(a)           {}
-	WithDeepCopy& operator^=(pick_ T& a)           { (T&)*this = a; return *this; }
-	WithDeepCopy()                                 {}
+	WithDeepCopy(const T& a) : T(a, 1)                 {}
+	WithDeepCopy(const T& a, int) : T(a, 1)            {}
+
+	WithDeepCopy(const WithDeepCopy& a) : T(a, 1)      {}
+	WithDeepCopy& operator=(const WithDeepCopy& a)     { (T&)*this = pick(T(a, 1)); return *this; }
+
+	WithDeepCopy(T&& a) : T(pick(a))                   {}
+	WithDeepCopy& operator=(T&& a)                     { (T&)*this = pick(a); return *this; }
+
+	WithDeepCopy(WithDeepCopy&& a) : T(pick(a))        {}
+	WithDeepCopy& operator=(WithDeepCopy&& a)          { (T&)*this = pick(a); return *this; }
+
+	WithDeepCopy()                                     {}
 };
+
+// compatibility hacks
+
+#define STL_ITERATOR_COMPATIBILITY \
+	typedef ptrdiff_t                        difference_type; \
+    typedef std::random_access_iterator_tag  iterator_category; \
+    typedef T                                value_type; \
+    typedef T                                pointer; \
+    typedef T                                reference; \
+
+#define STL_BI_COMPATIBILITY(C) \
+	typedef T             value_type; \
+	typedef ConstIterator const_iterator; \
+	typedef const T&      const_reference; \
+	typedef int           size_type; \
+	typedef int           difference_type; \
+	const_iterator        Begin() const          { return begin(); } \
+	const_iterator        End() const            { return end(); } \
+	void                  clear()                { Clear(); } \
+	size_type             size() const           { return GetCount(); } \
+	typedef Iterator      iterator; \
+	typedef T&            reference; \
+	bool                  empty() const          { return IsEmpty(); } \
+	iterator              Begin()                { return begin(); } \
+	iterator              End()                  { return end(); } \
+
+#define STL_MAP_COMPATIBILITY(C) \
+	typedef T             value_type; \
+	typedef ConstIterator const_iterator; \
+	typedef const T&      const_reference; \
+	typedef int           size_type; \
+	typedef int           difference_type; \
+	const_iterator        Begin() const          { return B::begin(); } \
+	const_iterator        End() const            { return B::end(); } \
+	void                  clear()                { B::Clear(); } \
+	size_type             size() const           { return B::GetCount(); } \
+	typedef Iterator      iterator; \
+	typedef T&            reference; \
+	bool                  empty() const          { return B::IsEmpty(); } \
+	iterator              Begin()                { return B::begin(); } \
+	iterator              End()                  { return B::end(); } \
+
+#define STL_SORTED_MAP_COMPATIBILITY(C) \
+	typedef T             value_type; \
+	typedef ConstIterator const_iterator; \
+	typedef const T&      const_reference; \
+	typedef int           size_type; \
+	typedef int           difference_type; \
+	const_iterator        Begin() const          { return begin(); } \
+	const_iterator        End() const            { return end(); } \
+	void                  clear()                { B::Clear(); } \
+	size_type             size() const           { return B::GetCount(); } \
+	typedef Iterator      iterator; \
+	typedef T&            reference; \
+	bool                  empty() const          { return B::GetCount() == 0; } \
+	iterator              Begin()                { return begin(); } \
+	iterator              End()                  { return end(); } \
+
+#define STL_VECTOR_COMPATIBILITY(C) \
+	typedef T             value_type; \
+	typedef ConstIterator const_iterator; \
+	typedef const T&      const_reference; \
+	typedef int           size_type; \
+	typedef int           difference_type; \
+	const_iterator        Begin() const          { return begin(); } \
+	const_iterator        End() const            { return end(); } \
+	void                  clear()                { Clear(); } \
+	size_type             size() const           { return GetCount(); } \
+	typedef Iterator      iterator; \
+	typedef T&            reference; \
+	iterator              Begin()                { return begin(); } \
+	iterator              End()                  { return end(); } \
+	reference             front()                { return (*this)[0]; } \
+	const_reference       front() const          { return (*this)[0]; } \
+	reference             back()                 { return Top(); } \
+	const_reference       back() const           { return Top(); } \
+	bool                  empty() const          { return IsEmpty(); } \
+	void                  push_back(const T& x)  { Add(x); } \
+	void                  pop_back()             { Drop(); } \
+
+
+template <class Range>
+using ValueTypeOfArray = typename std::remove_reference<decltype((*((Range *)0))[0])>::type;
 
 template <class V>
 class ConstIIterator {
-protected:
+	typedef ValueTypeOfArray<V> T;
+
 	const V       *cont;
 	int            ii;
-	typedef        typename V::ValueType T;
 	struct NP { int dummy; };
 
 public:
@@ -298,14 +364,16 @@ public:
 	ConstIIterator()          {}
 	ConstIIterator(NP *null)  { ASSERT(null == NULL); ii = -1; }
 	ConstIIterator(const V& _cont, int ii) : cont(&_cont), ii(ii) {}
+
+	STL_ITERATOR_COMPATIBILITY
 };
 
 template <class V>
 class IIterator {
-protected:
+	typedef ValueTypeOfArray<V> T;
+
 	V             *cont;
 	int            ii;
-	typedef        typename V::ValueType T;
 	struct NP { int dummy; };
 
 public:
@@ -342,6 +410,8 @@ public:
 	IIterator()          {}
 	IIterator(NP *null)  { ASSERT(null == NULL); ii = -1; }
 	IIterator(V& _cont, int ii) : cont(&_cont), ii(ii) {}
+
+	STL_ITERATOR_COMPATIBILITY
 };
 
 unsigned Pow2Bound(unsigned i);
@@ -360,7 +430,7 @@ struct CombineHash {
 	template <class T> CombineHash& Do(const T& x)                  { Put(GetHashValue(x)); return *this; }
 
 public:
-	CombineHash& Put(unsigned h) { hash = ((hash << 4) + hash) ^ h; return *this; }
+	CombineHash& Put(unsigned h)                                    { hash = ((hash << 4) + hash) ^ h; return *this; }
 
 	operator unsigned() const                                       { return hash; }
 
@@ -403,80 +473,37 @@ inline unsigned GetPtrHashValue(const void *a)                   { return (int)a
 inline unsigned GetPtrHashValue(const void *a)                   { return CombineHash((unsigned)(uintptr_t)a); }
 #endif
 
-/* Is it time to activate this?
 template <class T>
-inline unsigned GetHashValue(T *ptr)                             { return GetPtrHashValue(ptr); }
-*/
+inline unsigned GetHashValue(T *ptr)                             { return GetPtrHashValue(reinterpret_cast<const void *>(ptr)); }
 
-// workaround for broken standard libraries...
+template <int size>
+struct Data_S_ : Moveable< Data_S_<size> >
+{
+	byte filler[size];
+};
 
-template <class T> inline const T& ntl_max(const T& a, const T& b) { return a > b ? a : b; }
+template <class C>
+bool IsEqualMap(const C& a, const C& b)
+{
+	if(a.GetCount() != b.GetCount())
+		return false;
+	for(int i = 0; i < a.GetCount(); i++)
+		if(a.GetKey(i) != b.GetKey(i) || a[i] != b[i])
+			return false;
+	return true;
+}
 
-// STL compatibility hacks
-
-#define STL_INDEX_COMPATIBILITY(C) \
-	typedef T             value_type; \
-	typedef ConstIterator const_iterator; \
-	typedef const T&      const_reference; \
-	typedef int           size_type; \
-	typedef int           difference_type; \
-	const_iterator        begin() const          { return B::Begin(); } \
-	const_iterator        end() const            { return B::End(); } \
-	void                  clear()                { B::Clear(); } \
-	size_type             size()                 { return B::GetCount(); } \
-	bool                  empty() const          { return B::IsEmpty(); } \
-
-#define STL_BI_COMPATIBILITY(C) \
-	typedef T             value_type; \
-	typedef ConstIterator const_iterator; \
-	typedef const T&      const_reference; \
-	typedef int           size_type; \
-	typedef int           difference_type; \
-	const_iterator        begin() const          { return Begin(); } \
-	const_iterator        end() const            { return End(); } \
-	void                  clear()                { Clear(); } \
-	size_type             size()                 { return GetCount(); } \
-	typedef Iterator      iterator; \
-	typedef T&            reference; \
-	bool                  empty() const          { return IsEmpty(); } \
-	iterator              begin()                { return Begin(); } \
-	iterator              end()                  { return End(); } \
-
-#define STL_MAP_COMPATIBILITY(C) \
-	typedef T             value_type; \
-	typedef ConstIterator const_iterator; \
-	typedef const T&      const_reference; \
-	typedef int           size_type; \
-	typedef int           difference_type; \
-	const_iterator        begin() const          { return B::Begin(); } \
-	const_iterator        end() const            { return B::End(); } \
-	void                  clear()                { B::Clear(); } \
-	size_type             size()                 { return B::GetCount(); } \
-	typedef Iterator      iterator; \
-	typedef T&            reference; \
-	bool                  empty() const          { return B::IsEmpty(); } \
-	iterator              begin()                { return B::Begin(); } \
-	iterator              end()                  { return B::End(); } \
-
-#define STL_VECTOR_COMPATIBILITY(C) \
-	typedef T             value_type; \
-	typedef ConstIterator const_iterator; \
-	typedef const T&      const_reference; \
-	typedef int           size_type; \
-	typedef int           difference_type; \
-	const_iterator        begin() const          { return Begin(); } \
-	const_iterator        end() const            { return End(); } \
-	void                  clear()                { Clear(); } \
-	size_type             size()                 { return GetCount(); } \
-	typedef Iterator      iterator; \
-	typedef T&            reference; \
-	iterator              begin()                { return Begin(); } \
-	iterator              end()                  { return End(); } \
-	reference             front()                { return (*this)[0]; } \
-	const_reference       front() const          { return (*this)[0]; } \
-	reference             back()                 { return Top(); } \
-	const_reference       back() const           { return Top(); } \
-	bool                  empty() const          { return IsEmpty(); } \
-	void                  push_back(const T& x)  { Add(x); } \
-	void                  pop_back()             { Drop(); } \
-
+template <class C>
+int CompareMap(const C& a, const C& b)
+{
+	int n = min(a.GetCount(), b.GetCount());
+	for(int i = 0; i < n; i++) {
+		int q = SgnCompare(a.GetKey(i), b.GetKey(i));
+		if(q)
+			return q;
+		q = SgnCompare(a[i], b[i]);
+		if(q)
+			return q;
+	}
+	return SgnCompare(a.GetCount(), b.GetCount());
+}

@@ -149,12 +149,13 @@ void RightTabs::FrameAddSize(Size& sz)
 void Ide::BTabs()
 {
 	btabs.Clear();
-	btabs.Add(IdeImg::close, "Закрыть");
-	btabs.Add(IdeImg::console, "Консоль");
-	btabs.Add(IdeImg::console2, "Найти в файлах");
-	btabs.Add(IdeImg::calc, "Калькулятор");
+	btabs.Add(IdeImg::close, "Close (Esc)");
+	btabs.Add(IdeImg::console, "Console");
+	btabs.Add(IdeImg::errors, "Errors");
+	btabs.Add(IdeImg::console2, "Find in files");
+	btabs.Add(IdeImg::calc, "Calculator");
 	if(bottomctrl)
-		btabs.Add(IdeImg::debug, "Отладка");
+		btabs.Add(IdeImg::debug, "Debug");
 }
 
 void Ide::SyncBottom()
@@ -167,7 +168,8 @@ void Ide::SyncBottom()
 	if(editor_bottom.GetZoom() >= 0)
 		editor_bottom.NoZoom();
 	console.Show(q == BCONSOLE);
-	console2.Show(q == BCONSOLE2);
+	error.Show(q == BERRORS);
+	ffound.Show(q == BFINDINFILES);
 	calc.Show(q == BCALC);
 	if(bottomctrl)
 		bottomctrl->Show(q == BDEBUG);

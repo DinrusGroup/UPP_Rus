@@ -3,10 +3,9 @@
 #ifndef CtrlCore_MenuImp_h
 #define CtrlCore_MenuImp_h
 
-NAMESPACE_UPP
+namespace Upp {
 
-class MenuItemBase : public Ctrl, public Bar::Item
-{
+class MenuItemBase : public Ctrl, public Bar::Item {
 public:
 	virtual Bar::Item& Text(const char *text);
 	virtual Bar::Item& Key(dword key);
@@ -18,10 +17,13 @@ public:
 	virtual Bar::Item& Description(const char *desc);
 	virtual Bar::Item& Check(bool check);
 	virtual Bar::Item& Radio(bool check);
+	virtual Bar::Item& Bold(bool bold);
 
 	virtual String GetDesc() const;
 	virtual dword  GetAccessKeys() const;
 	virtual void   AssignAccessKeys(dword used);
+
+	using   Ctrl::Key;
 
 protected:
 	enum {
@@ -58,7 +60,7 @@ public:
 	MenuItemBase&  SetFont(Font f)                { font = f; return *this; }
 	MenuItemBase&  Style(const MenuBar::Style *s) { style = s; return *this; }
 	Font           GetFont() const                { return font; }
-	MenuItemBase&  MaxIconSize(Size sz)           { maxiconsize = sz; return *this; }
+	MenuItemBase&  MaxIconSize(Size sz)           { maxiconsize = sz; return *this; } // deprecated
 	bool           InOpaqueBar() const;
 	MenuItemBase&  NoDarkAdjust(bool b = true)    { nodarkadjust = b; return *this; }
 
@@ -86,6 +88,7 @@ private:
 
 	void  SendHelpLine();
 	void  ClearHelpLine();
+	using MenuItemBase::Key;
 
 protected:
 	virtual int  GetVisualState();
@@ -97,7 +100,7 @@ public:
 class SubMenuBase {
 protected:
 	MenuBar  menu;
-	Callback1<Bar&> proc;
+	Event<Bar&> proc;
 	MenuBar *parentmenu;
 
 	void     Pull(Ctrl *item, Point p, Size sz);
@@ -106,8 +109,8 @@ public:
 	virtual  void Pull() = 0;
 
 	void SetParent(MenuBar *m)                           { parentmenu = m; menu.MaxIconSize(m->GetMaxIconSize()); }
-	void Set(Callback1<Bar&> _submenu)                   { proc = _submenu; }
-	Callback1<Bar&> Get()                                { return proc; }
+	void Set(Event<Bar&> _submenu)                   { proc = _submenu; }
+	Event<Bar&> Get()                                { return proc; }
 
 	SubMenuBase()                                        { parentmenu = NULL; }
 	virtual ~SubMenuBase() {}
@@ -151,6 +154,7 @@ public:
 
 private:
 	int  GetState();
+	using MenuItemBase::Key;
 
 public:
 	TopSubMenuItem() { NoInitFocus(); }
@@ -173,11 +177,12 @@ public:
 
 private:
 	int  GetState();
+	using MenuItemBase::Key;
 
 public:
 	TopMenuItem() { NoInitFocus(); }
 };
 
-END_UPP_NAMESPACE
+}
 
 #endif

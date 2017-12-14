@@ -369,6 +369,22 @@ otNull](false).&]
 onst]&]
 [s7; [*/ Return value]-|true mean empty Strings are not allowed.&]
 [s3; &]
+[s4;%- &]
+[s5;:Upp`:`:ConvertString`:`:TrimLeft`(bool`):%- [_^Upp`:`:ConvertString^ ConvertString
+][@(0.0.255) `&]_[* TrimLeft]([@(0.0.255) bool]_[*@3 b]_`=_[@(0.0.255) true])&]
+[s5;:Upp`:`:ConvertString`:`:TrimRight`(bool`):%- [_^Upp`:`:ConvertString^ ConvertStrin
+g][@(0.0.255) `&]_[* TrimRight]([@(0.0.255) bool]_[*@3 b]_`=_[@(0.0.255) true])&]
+[s5;:Upp`:`:ConvertString`:`:TrimBoth`(bool`):%- [_^Upp`:`:ConvertString^ ConvertString
+][@(0.0.255) `&]_[* TrimBoth]([@(0.0.255) bool]_[*@3 b]_`=_[@(0.0.255) true])&]
+[s2; Whitechars on the left/right/both side(s) are removed before 
+checking count of characters or nullness.&]
+[s3; &]
+[s4;%- &]
+[s5;:Upp`:`:ConvertString`:`:IsTrimLeft`(`)const:%- [@(0.0.255) bool]_[* IsTrimLeft]()_[@(0.0.255) c
+onst]&]
+[s5;:Upp`:`:ConvertString`:`:IsTrimRight`(`)const:%- [@(0.0.255) bool]_[* IsTrimRight]()_
+[@(0.0.255) const]&]
+[s2; Checks whether TrimLeft or TrimRight (or both) is active.&]
 [s0; &]
 [s0; &]
 [s0;%- &]
@@ -391,7 +407,7 @@ inval]_`=_ToTime(Date`::Low()), [_^Time^ Time]_[*@3 maxval]_`=_ToTime(Date`::Hig
 [s7; [%-*C@3 minval]-|Lower limit. Default means there is no limit.&]
 [s7; [%-*C@3 maxval]-|Upper limit. Default means there is no limit.&]
 [s7; [%-*C@3 notnull]-|true disallows Nulls.&]
-[s3; &]
+[s3;%- &]
 [s4;%- &]
 [s5;:ConvertTime`:`:`~ConvertTime`(`):%- [@(0.0.255) `~][* ConvertTime]()&]
 [s2; Default destructor.&]
@@ -418,6 +434,18 @@ ll]([@(0.0.255) bool]_[*@3 b]_`=_[@(0.0.255) true])&]
 ll]()&]
 [s2; Same as [^topic`:`/`/Core`/src`/Convert`$en`-us`#ConvertTime`:`:NotNull`(bool`)^ N
 otNull](false).&]
+[s3; &]
+[s4;%- &]
+[s5;:ConvertTime`:`:TimeAlways`(bool`):%- [_^ConvertTime^ ConvertTime][@(0.0.255) `&]_[* Ti
+meAlways]([@(0.0.255) bool]_[*@3 b]_`=_[@(0.0.255) true])&]
+[s2; If active, Format always shows time, even if the Value is Date 
+or is at midnight.&]
+[s3; &]
+[s4;%- &]
+[s5;:ConvertTime`:`:DayEnd`(bool`):%- [_^ConvertTime^ ConvertTime][@(0.0.255) `&]_[* DayEnd
+]([@(0.0.255) bool]_[*@3 b]_`=_[@(0.0.255) true])&]
+[s2; If active, when Scan encounters date without time, it sets the 
+time to 23:59:59.&]
 [s3; &]
 [s4;%- &]
 [s5;:ConvertTime`:`:GetMin`(`)const:%- [_^Time^ Time]_[* GetMin]()_[@(0.0.255) const]&]
@@ -585,4 +613,4 @@ ll, Null, true)]&]
 [s2; [C^topic`:`/`/Core`/src`/Convert`$en`-us`#ConvertString`:`:class^1 ConvertString][C1 (
 INT`_MAX, true)]&]
 [s3;%- &]
-[s0; ]
+[s0; ]]

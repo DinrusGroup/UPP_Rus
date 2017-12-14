@@ -18,7 +18,8 @@ topic "ArrayMap";
 [s1;:ArrayMap`:`:class:%- [@(0.0.255) class]_[* ArrayMap]_:_[@(0.0.255) public]_[*@3 MoveableA
 ndDeepCopyOption][@(0.0.255) <]_[* ArrayMap][@(0.0.255) <][*@4 K], [*@4 T], 
 [*@4 HashFn][@(0.0.255) >]_>, [@(0.0.255) public]_[*@3 AMap][@(0.0.255) <]_[*@4 K], 
-[*@4 T], [_^Array^ Array][@(0.0.255) <][*@4 T][@(0.0.255) >], [*@4 HashFn]_>_&]
+[*@4 T], [_^topic`:`/`/Core`/src`/Array`$en`-us`#Array`:`:class^ Array][@(0.0.255) <][*@4 T
+][@(0.0.255) >], [*@4 HashFn]_>_&]
 [s8; [*@4 K]-|Type of keys. K must have deep copy constructor, be [/^dpp`:`/`/SourceDoc`/Containers`/Moveable^ m
 oveable] and must have operator`=`= defined.&]
 [s8; [*@4 T]-|Type or base class of the values stored in ArrayMap. There 
@@ -53,6 +54,20 @@ T, Array<T>, HashFn >]&]
 [s2; Default constructor. Creates empty ArrayMap.&]
 [s3; &]
 [s4;%- &]
+[s5;:Upp`:`:ArrayMap`:`:ArrayMap`(std`:`:initializer`_list`<std`:`:pair`<K`,T`>`>`):%- [* A
+rrayMap]([_^http`:`/`/en`.cppreference`.com`/w`/cpp`/utility`/initializer`_list^ st
+d`::initializer`_list]<[_^http`:`/`/en`.cppreference`.com`/w`/cpp`/utility`/pair^ st
+d`::pair]<[*@4 K], [*@4 T]>>_[*@3 init])&]
+[s2; C`+`+ 11 initialization.&]
+[s3; &]
+[s4;%- &]
+[s5;:Upp`:`:ArrayMap`:`:operator`(`)`(const K`&`,const T`&`):%- [*_^Upp`:`:ArrayMap^ Ar
+rayMap][@(0.0.255) `&]_[* operator()]([@(0.0.255) const]_[*@4 K][@(0.0.255) `&]_[*@3 k], 
+[@(0.0.255) const]_[*@4 T][@(0.0.255) `&]_[*@3 v])&]
+[s2; Same as Add([%-*@3 k], [%-*@3 v]), returns `*this. Syntax sugar 
+for creating map.&]
+[s3; &]
+[s4;%- &]
 [s5;:ArrayMap`:`:ArrayMap`(const ArrayMap`&`,int`):%- [* ArrayMap]([@(0.0.255) const]_[* Ar
 rayMap][@(0.0.255) `&]_[*@3 s], [@(0.0.255) int])&]
 [s2; Optional deep copy constructor.&]
@@ -64,9 +79,9 @@ of type derived from T.&]
 [s3; &]
 [s4;%- &]
 [s5;:ArrayMap`:`:ArrayMap`(pick`_ Index`<K`,HashFn`>`&`,pick`_ Array`<T`>`&`):%- [* Arr
-ayMap]([@(0.128.128) pick`_]_[_^Index^ Index][@(0.0.255) <][*@4 K], [*@4 HashFn][@(0.0.255) >
-`&]_[*@3 ndx], [@(0.128.128) pick`_]_[_^Array^ Array][@(0.0.255) <][*@4 T][@(0.0.255) >`&]_[*@3 v
-al])&]
+ayMap]([@(0.128.128) pick`_]_[_^topic`:`/`/Core`/src`/Indext`$en`-us`#Index`:`:class^ I
+ndex][@(0.0.255) <][*@4 K], [*@4 HashFn][@(0.0.255) >`&]_[*@3 ndx], [@(0.128.128) pick`_]_[_^topic`:`/`/Core`/src`/Array`$en`-us`#Array`:`:class^ A
+rray][@(0.0.255) <][*@4 T][@(0.0.255) >`&]_[*@3 val])&]
 [s2; Pick`-constructs ArrayMap from Index of keys and Array of values. 
 The source containers should have equal number of elements.&]
 [s7; [*C@3 ndx]-|Source Index.&]
@@ -74,8 +89,9 @@ The source containers should have equal number of elements.&]
 [s3; &]
 [s4;%- &]
 [s5;:ArrayMap`:`:ArrayMap`(pick`_ Vector`<K`>`&`,pick`_ Array`<T`>`&`):%- [* ArrayMap](
-[@(0.128.128) pick`_]_[_^Vector^ Vector][@(0.0.255) <][*@4 K][@(0.0.255) >`&]_[*@3 ndx], 
-[@(0.128.128) pick`_]_[_^Array^ Array][@(0.0.255) <][*@4 T][@(0.0.255) >`&]_[*@3 val])&]
+[@(0.128.128) pick`_]_[_^topic`:`/`/Core`/src`/Vector`$en`-us`#Vector`:`:class^ Vecto
+r][@(0.0.255) <][*@4 K][@(0.0.255) >`&]_[*@3 ndx], [@(0.128.128) pick`_]_[_^topic`:`/`/Core`/src`/Array`$en`-us`#Array`:`:class^ A
+rray][@(0.0.255) <][*@4 T][@(0.0.255) >`&]_[*@3 val])&]
 [s2; Pick`-constructs ArrayMap from Vector of keys and Array of values. 
 The source containers should have equal number of elements.&]
 [s7; [*C@3 ndx]-|Source Index.&]
@@ -121,6 +137,14 @@ from T as well. No constructor is applied.&]
 [s7; [%-*@3 newt]-|Value.&]
 [s3; &]
 [s4;%- &]
+[s5;:Upp`:`:ArrayMap`:`:Create`(const K`&`,Args`.`.`.args`):%- [@(0.0.255) template]_<[@(0.0.255) c
+lass]_[*@4 TT], [@(0.0.255) class...]_[*@4 Args]>_[*@4 TT][@(0.0.255) `&]_[* Create]([@(0.0.255) c
+onst]_[*@4 K][@(0.0.255) `&]_[*@3 k], [*@4 Args][@(0.0.255) ...]_args)&]
+[s2;%- [%% Adds a new key ][*@3 k][%%  with value element of type ][*@4 TT][%%  
+(must be derived from ][*@4 T]). Value is constructd in`-place, 
+with args as constructor parameters.&]
+[s3; &]
+[s4;%- &]
 [s5;:ArrayMap`:`:Set`(int`,T`*`):%- [*@4 T][@(0.0.255) `&]_[* Set]([@(0.0.255) int]_[*@3 i], 
 [*@4 T]_`*[*@3 ptr])&]
 [s2; Sets value at specified index. Value is specified by a pointer 
@@ -149,4 +173,4 @@ deletion of the element.&]
 to original element. Client is responsible for deletion of the 
 original element.&]
 [s3; &]
-[s0; ]
+[s0; ]]

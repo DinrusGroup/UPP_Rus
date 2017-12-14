@@ -99,7 +99,7 @@ void Bombs::Paint(Draw& w)
 				}
 			}
 			else
-			if(!(f & HIDDEN))
+			if(!(f & HIDDEN)) {
 				if(f & BOMB)
 					txt = "B";
 				else {
@@ -107,6 +107,7 @@ void Bombs::Paint(Draw& w)
 					txt = String(f + '0', 1);
 					ink = f == 0 ? SLtGreen : f == 1 ? SLtBlue : SBlack;
 				}
+			}
 			Size tsz = GetTextSize(txt, Roman(2 * UNIT / 3));
 			w.DrawText(x * UNIT + (UNIT - tsz.cx) / 2, y * UNIT + (UNIT - tsz.cy) / 2,
 			           txt, Roman(2 * UNIT / 3), ink);
@@ -136,7 +137,7 @@ void Bombs::Uncover(int x, int y)
 			normal_cells--;
 			if(normal_cells == 0) {
 				UncoverAll();
-				PromptOK("[*@4A6 Прекрасно!]&Вы нашли все бомбы!");
+				PromptOK("[*@4A6 Nice!]&You have found all the bombs!");
 			}
 		}
 	}
@@ -165,7 +166,7 @@ void Bombs::RightDown(Point p, dword flags)
 
 void Bombs::ShowStatus()
 {
-	status = Format("%d бомб, %d ячеек осталось", bombs, normal_cells);
+	status = Format("%d bombs, %d cells remaining", bombs, normal_cells);
 }
 
 void Bombs::Level(Size sz)
@@ -175,32 +176,32 @@ void Bombs::Level(Size sz)
 
 void Bombs::About()
 {
-	PromptOK("[*A9/ uBombs]&[A5 Пример Ultimate`+`+]");
+	PromptOK("[*A9/ uBombs]&[A5 Ultimate`+`+ example]");
 }
 
 void Bombs::File(Bar& menu)
 {
-	menu.Add("Выход", Breaker(IDOK));
+	menu.Add("Exit", Breaker(IDOK));
 	menu.Separator();
-	menu.Add("О программе..", THISBACK(About));
+	menu.Add("About..", THISBACK(About));
 }
 
 void Bombs::Game(Bar& menu)
 {
-	menu.Add("Перезапуск", THISBACK(Generate));
+	menu.Add("Restart", THISBACK(Generate));
 	menu.Separator();
-	menu.Add("Легко", THISBACK1(Level, Size(10, 10)))
+	menu.Add("Easy", THISBACK1(Level, Size(10, 10)))
 	    .Check(level.cx == 10);
-	menu.Add("Средне", THISBACK1(Level, Size(15, 15)))
+	menu.Add("Medium", THISBACK1(Level, Size(15, 15)))
 	    .Check(level.cx == 15);
-	menu.Add("Трудно", THISBACK1(Level, Size(25, 20)))
+	menu.Add("Difficult", THISBACK1(Level, Size(25, 20)))
 	    .Check(level.cx == 25);
 }
 
 void Bombs::Menu(Bar& menu)
 {
-	menu.Add("Файл", THISBACK(File));
-	menu.Add("Игра", THISBACK(Game));
+	menu.Add("File", THISBACK(File));
+	menu.Add("Game", THISBACK(Game));
 }
 
 #define IMAGECLASS BombsImg

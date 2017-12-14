@@ -1,6 +1,6 @@
 #include "Draw.h"
 
-NAMESPACE_UPP
+namespace Upp {
 
 enum {
 	DRAWING_BEGIN               = 1,
@@ -22,6 +22,7 @@ enum {
 	DRAWING_DRAWPOLYPOLYPOLYGON = 17,
 	DRAWING_DRAWDATA            = 18,
 	DRAWING_DRAWPAINTING        = 19,
+	DRAWING_ESCAPE              = 20,
 };
 
 
@@ -180,6 +181,12 @@ void DrawingDraw::DrawDataOp(int x, int y, int cx, int cy, const String& data, c
 {
 	String h = id;
 	DrawingOp(DRAWING_DRAWDATA) % x % y % cx % cy % h;
+	val.Add(data);
+}
+
+void DrawingDraw::Escape(const String& data)
+{
+	DrawingOp(DRAWING_ESCAPE);
 	val.Add(data);
 }
 
@@ -452,6 +459,9 @@ void Draw::DrawDrawingOp(const Rect& target, const Drawing& w) {
 				DrawData(ps(x, y, cx, cy), data, id);
 			}
 			break;
+		case DRAWING_ESCAPE:
+			Escape(w.val[vi++]);
+			break;
 		case DRAWING_DRAWDRAWING:
 			if(w.val.GetCount())
 				dw = w.val[vi++];
@@ -632,6 +642,12 @@ void Draw::DrawDrawing(int x, int y, int cx, int cy, const Drawing& w) {
 	DrawDrawing(RectC(x, y, cx, cy), w);
 }
 
+void Draw::DrawDrawing(int x, int y, const Drawing& iw)
+{
+	Size sz = iw.GetSize();
+	DrawDrawing(RectC(x, y, sz.cx, sz.cy), iw);
+}
+
 void  DrawingDraw::Create(int cx, int cy, bool dots_) {
 	Create(Size(cx, cy), dots_);
 }
@@ -669,14 +685,6 @@ void Drawing::Append(Drawing& dw)
 		val.Add(dw.val[i]);
 }
 
-Drawing::Drawing(const Value& src)
-{
-	if(IsNull(src))
-		size = Null;
-	else
-		*this = RichValue<Drawing>::Extract(src);
-}
-
 void Drawing::Serialize(Stream& s)
 {
 	if(val.GetCount())
@@ -689,4 +697,4 @@ void Drawing::Serialize(Stream& s)
 	}
 }
 
-END_UPP_NAMESPACE
+}

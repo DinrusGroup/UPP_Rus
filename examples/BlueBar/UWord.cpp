@@ -61,42 +61,42 @@ public:
 
 void UWord::FileBar(Bar& bar)
 {
-	bar.Add("Новое", CtrlImg::new_doc(), THISBACK(New))
+	bar.Add("New", CtrlImg::new_doc(), THISBACK(New))
 	   .Key(K_CTRL_N)
-	   .Help("Открыть новое окно");
+	   .Help("Open new window");
 	bar.Add("Open..", CtrlImg::open(), THISBACK(Open))
 	   .Key(K_CTRL_O)
-	   .Help("Открыть существующий документ");
-	bar.Add(editor.IsModified(), "Сохранить", CtrlImg::save(), THISBACK(Save))
+	   .Help("Open existing document");
+	bar.Add(editor.IsModified(), "Save", CtrlImg::save(), THISBACK(Save))
 	   .Key(K_CTRL_S)
-	   .Help("Сохранить текущий документ");
-	bar.Add("Сохранить Как", CtrlImg::save_as(), THISBACK(SaveAs))
-	   .Help("Созранить текущий документ под другим именем");
+	   .Help("Save current document");
+	bar.Add("SaveAs", CtrlImg::save_as(), THISBACK(SaveAs))
+	   .Help("Save current document with a new name");
 	bar.ToolGap();
 	bar.MenuSeparator();
-	bar.Add("Печать..", CtrlImg::print(), THISBACK(Print))
+	bar.Add("Print..", CtrlImg::print(), THISBACK(Print))
 	   .Key(K_CTRL_P)
-	   .Help("Печатать документ");
-	bar.Add("Вывести в PDF..", UWordImg::pdf(), THISBACK(Pdf))
-	   .Help("Вывести документ в файл PDF");
+	   .Help("Print document");
+	bar.Add("Export to PDF..", UWordImg::pdf(), THISBACK(Pdf))
+	   .Help("Export document to PDF file");
 	if(bar.IsMenuBar()) {
 		if(lrufile().GetCount())
 			lrufile()(bar, THISBACK(OpenFile));
 		bar.Separator();
-		bar.Add("Выход", THISBACK(Destroy));
+		bar.Add("Exit", THISBACK(Destroy));
 	}
 }
 
 void UWord::AboutMenu(Bar& bar)
 {
-	bar.Add("О программе..", THISBACK(About));
+	bar.Add("About..", THISBACK(About));
 }
 
 void UWord::MainMenu(Bar& bar)
 {
-	bar.Add("Файл", THISBACK(FileBar));
-	bar.Add("Окно", callback(WindowsMenu));
-	bar.Add("Помощь", THISBACK(AboutMenu));
+	bar.Add("File", THISBACK(FileBar));
+	bar.Add("Window", callback(WindowsMenu));
+	bar.Add("Help", THISBACK(AboutMenu));
 }
 
 void UWord::New()
@@ -127,7 +127,7 @@ void UWord::Open()
 	if(fs.ExecuteOpen())
 		OpenFile(fs);
 	else
-		statusbar.Temporary("Загрузка прервана.");
+		statusbar.Temporary("Loading aborted.");
 }
 
 void UWord::DragAndDrop(Point, PasteClip& d)
@@ -152,11 +152,11 @@ void UWord::Save0()
 		SaveAs();
 	else
 		if(SaveFile(filename, editor.GetQTF())) {
-			statusbar.Temporary("Файл " + filename + " сохранён.");
+			statusbar.Temporary("File " + filename + " was saved.");
 			ClearModify();
 		}
 		else
-			Exclamation("Ошибка при сохранении файла [* " + DeQtf(filename) + "]!");
+			Exclamation("Error saving the file [* " + DeQtf(filename) + "]!");
 }
 
 void UWord::Save()
@@ -183,7 +183,7 @@ void UWord::Print()
 void UWord::Pdf()
 {
 	FileSel& fs = PdfFs();
-	if(!fs.ExecuteSaveAs("Выходной файл PDF"))
+	if(!fs.ExecuteSaveAs("Output PDF file"))
 		return;
 	Size page = Size(3968, 6074);
 	PdfDraw pdf;
@@ -199,7 +199,7 @@ void UWord::About()
 void UWord::Destroy()
 {
 	if(editor.IsModified()) {
-		switch(PromptYesNoCancel("Хотите сохранить изменения документа?")) {
+		switch(PromptYesNoCancel("Do you want to save the changes to the document?")) {
 		case 1:
 			Save();
 			break;
@@ -260,10 +260,10 @@ GUI_APP_MAIN
 
 	InstallBlueBar();
 
-	UWordFs().Type("Файлы QTF", "*.qtf")
+	UWordFs().Type("QTF files", "*.qtf")
 	         .AllFilesType()
 	         .DefaultExt("qtf");
-	PdfFs().Type("Файлы PDF", "*.pdf")
+	PdfFs().Type("PDF files", "*.pdf")
 	       .AllFilesType()
 	       .DefaultExt("pdf");
 
