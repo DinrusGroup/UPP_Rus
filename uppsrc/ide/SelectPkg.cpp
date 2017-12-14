@@ -9,23 +9,23 @@
 void SelectPackageDlg::PackageMenu(Bar& menu)
 {
 	bool b = GetCurrentName().GetCount();
-	menu.Add("New package..", THISBACK(OnNew));
+	menu.Add("Новый пакет..", THISBACK(OnNew));
 	menu.Separator();
-	menu.Add(b, "Duplicate package..", [=] { RenamePackage(true); });
-	menu.Add(b, "Rename package..", [=] { RenamePackage(false); });
-	menu.Add(b, "Delete package", THISBACK(DeletePackage));
+	menu.Add(b, "Дублировать пакет..", [=] { RenamePackage(true); });
+	menu.Add(b, "Переименовать пакет..", [=] { RenamePackage(false); });
+	menu.Add(b, "Удалить пакет", THISBACK(DeletePackage));
 }
 
 bool RenamePackageFs(const String& upp, const String& newname, bool duplicate)
 {
 	if(IsNull(newname)) {
-		Exclamation("Wrong name.");
+		Exclamation("Неверное имя.");
 		return false;
 	}
 	String pf = GetFileFolder(upp);
 	String npf = AppendFileName(GetFileFolder(pf), newname);
 	if(DirectoryExists(npf)) {
-		Exclamation("Package [* \1" + newname + "\1] already exists!");
+		Exclamation("Пакет [* \1" + newname + "\1] уже существует!");
 		return false;
 	}
 	if(duplicate) {
@@ -89,7 +89,7 @@ SelectPackageDlg::SelectPackageDlg(const char *title, bool selectvars_, bool mai
 	Icon(IdeImg::MainPackage(), IdeImg::PackageLarge());
 	base.AutoHideSb();
 	base.NoGrid();
-	base.AddColumn("Assembly");
+	base.AddColumn("Сборка");
 	base.WhenCursor = THISBACK(OnBase);
 	base.WhenBar = THISBACK(ToolBase);
 	base.WhenLeftDouble = THISBACK(OnBaseEdit);
@@ -97,9 +97,9 @@ SelectPackageDlg::SelectPackageDlg(const char *title, bool selectvars_, bool mai
 	cancel.WhenAction = WhenClose = THISBACK(OnCancel);
 	clist.Columns(4);
 	clist.WhenEnterItem = clist.WhenKillCursor = THISBACK(ListCursor);
-	alist.AddColumn("Package").Add(3);
-	alist.AddColumn("Nest");
-	alist.AddColumn("Description");
+	alist.AddColumn("Пакет").Add(3);
+	alist.AddColumn("Гнездо");
+	alist.AddColumn("Описание");
 	alist.AddIndex();
 	alist.ColumnWidths("108 79 317");
 	alist.WhenCursor = THISBACK(ListCursor);
@@ -107,23 +107,24 @@ SelectPackageDlg::SelectPackageDlg(const char *title, bool selectvars_, bool mai
 	alist.SetLineCy(max(Zy(16), Draw::GetStdFontCy()));
 	list.Add(clist.SizePos());
 	list.Add(alist.SizePos());
+	Splitter splitter;// = new Splitter();
 	splitter.Horz(base, list);
 	splitter.SetPos(2000);
 	splitter.Zoom(selectvars ? -1 : 1);
 	newu <<= THISBACK(OnNew);
 	filter <<= THISBACK(OnFilter);
-	filter.Add(MAIN|FIRST, "Main packages of first nest");
-	filter.Add(MAIN, "All main packages");
-	filter.Add(FIRST, "All packages of first nest");
-	filter.Add(0, "All packages");
+	filter.Add(MAIN|FIRST, "Главные пакеты первого гнезда");
+	filter.Add(MAIN, "Все главные пакеты");
+	filter.Add(FIRST, "Все пакеты первого гнезда");
+	filter.Add(0, "Все пакеты");
 	filter <<= main ? MAIN|FIRST : 0;
 	progress.Hide();
 	brief <<= THISBACK(SyncBrief);
-	search.NullText("Search (Ctrl+K)", StdFont().Italic(), SColorDisabled());
+	search.NullText("Поиск (Ctrl+K)", StdFont().Italic(), SColorDisabled());
 	search << [=] { SyncList(Null); };
 	search.SetFilter(CharFilterDefaultToUpperAscii);
 	SyncBrief();
-	description.NullText("Package description (Alt+Enter)", StdFont().Italic(), SColorDisabled());
+	description.NullText("Описание пакета (Alt+Enter)", StdFont().Italic(), SColorDisabled());
 	description <<= THISBACK(ChangeDescription);
 	ActiveFocus(brief ? (Ctrl&)clist : (Ctrl&)alist);
 	clist.BackPaintHint();
@@ -180,11 +181,11 @@ void SelectPackageDlg::ChangeDescription()
 	if(ii >= 0 && ii < packages.GetCount()) {
 		PkInfo& p = packages[ii];
 		WithDescriptionLayout<TopWindow> dlg;
-		CtrlLayoutOKCancel(dlg, "Package description");
+		CtrlLayoutOKCancel(dlg, "Описание пакета");
 		String pp = PackagePath(p.package);
 		Package pkg;
 		if(!pkg.Load(pp)) {
-			Exclamation("Package does not exist.");
+			Exclamation("Пакета не существует.");
 			return;
 		}
 		dlg.text <<= pkg.description;

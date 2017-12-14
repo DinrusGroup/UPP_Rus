@@ -1,0 +1,43 @@
+LAYOUT(MathTools, 812, 476)
+	ITEM(ArrayCtrl, examplesList, LeftPosZ(4, 116).VSizePosZ(28, 4))
+	ITEM(Label, dv___1, SetLabel(t_("Choose tool")).LeftPosZ(4, 116).TopPosZ(4, 21))
+END_LAYOUT
+
+LAYOUT(TabCalculator, 700, 516)
+	ITEM(Calculator, code, SetFrame(ThinInsetFrame()).HSizePosZ(0, 140).VSizePosZ(0, 20))
+	ITEM(Label, dv___1, SetLabel(t_("Variables")).RightPosZ(0, 136).TopPosZ(264, 21))
+	ITEM(Label, dv___2, SetLabel(t_("Functions")).RightPosZ(0, 136).TopPosZ(0, 21))
+	ITEM(Label, dv___3, SetLabel(t_("Constants")).RightPosZ(0, 136).TopPosZ(132, 21))
+	ITEM(Option, justEdit, SetLabel(t_("Just edit")).LeftPosZ(4, 68).BottomPosZ(0, 16))
+	ITEM(Option, resultRight, SetLabel(t_("Result to the right")).LeftPosZ(80, 112).BottomPosZ(0, 16))
+	ITEM(Option, refreshAll, SetLabel(t_("Refresh all formulas")).LeftPosZ(200, 124).BottomPosZ(0, 16))
+	ITEM(Label, dv___7, SetLabel(t_("Num. decimals:")).LeftPosZ(332, 84).BottomPosZ(-1, 21))
+	ITEM(EditIntNotNull, numDecimals, Max(20).Min(0).LeftPosZ(416, 20).BottomPosZ(1, 19))
+	ITEM(ArrayCtrl, gridFunctions, RightPosZ(-2, 138).TopPosZ(20, 108))
+	ITEM(ArrayCtrl, gridConstants, RightPosZ(-2, 138).TopPosZ(152, 108))
+	ITEM(ArrayCtrl, gridVariables, RightPosZ(-2, 138).VSizePosZ(284, 0))
+END_LAYOUT
+
+LAYOUT(TabRegression_Up, 472, 332)
+	ITEM(ScatterCtrl, scatter, SetTitle(t_("Trend Line")).SetPlotAreaLeftMargin(60).SetPlotAreaTopMargin(20).SetPlotAreaColor(Color(229, 229, 229)).SetAxisWidth(12).SetTitleFont(SansSerifZ(14).Bold()).SetLegendAnchor(4).HSizePosZ(0, 0).VSizePosZ(0, 0))
+END_LAYOUT
+
+LAYOUT(TabRegression_Down, 816, 184)
+	ITEM(ArrayCtrl, gridTrend, RightPosZ(4, 284).VSizePosZ(24, 36))
+	ITEM(Label, dv___1, SetLabel(t_("Trend Lines Details:")).RightPosZ(180, 104).TopPosZ(4, 21))
+	ITEM(GridCtrl, gridDef, HSizePosZ(192, 376).TopPosZ(4, 60))
+	ITEM(GridCtrl, grid, HSizePosZ(4, 296).VSizePosZ(72, 4))
+	ITEM(Button, butAutoset, SetLabel(t_("Autoset")).LeftPosZ(4, 56).TopPosZ(44, 20))
+	ITEM(Button, butFit, SetLabel(t_("Fit")).RightPosZ(4, 76).TopPosZ(4, 20))
+	ITEM(Switch, switchColsRows, SetLabel(t_("Columns\nRows")).LeftPosZ(108, 64).TopPosZ(8, 32))
+	ITEM(Option, firstCellIsName, SetLabel(t_("1st cell is name")).LeftPosZ(4, 100).TopPosZ(4, 16))
+	ITEM(Option, yBesideX, SetLabel(t_("Y beside X")).LeftPosZ(4, 92).TopPosZ(24, 16))
+	ITEM(Button, butUpdate, SetLabel(t_("Update")).LeftPosZ(124, 56).TopPosZ(44, 20))
+	ITEM(Button, butClear, SetLabel(t_("Clear")).LeftPosZ(64, 56).TopPosZ(44, 20))
+	ITEM(EditDouble, minR2, RightPosZ(88, 44).TopPosZ(4, 19))
+	ITEM(Label, dv___12, SetLabel(t_("Min R2:")).RightPosZ(132, 44).TopPosZ(4, 21))
+	ITEM(Switch, coefficients, SetLabel(t_("Normal\nFull\nText")).RightPosZ(300, 60).TopPosZ(20, 48))
+	ITEM(LabelBox, dv___14, SetLabel(t_("Coefficients")).RightPosZ(296, 72).TopPosZ(4, 68))
+	ITEM(EditString, formula, RightPosZ(8, 280).BottomPosZ(9, 19))
+END_LAYOUT
+
